@@ -1,0 +1,43 @@
+# This is a composite to allow sharing these steps into other workflows.
+# It isn't a shared workflow, because then it isn't convenient to add
+# additional package specific steps.
+name: Shared CI Workflow
+inputs:
+  workspace_path:
+    description: 'Path to the package.'
+    required: true
+  run_tests:
+    description: 'If true, run unit tests, otherwise skip them.'
+    required: false
+    default: 'true'
+  java_version:
+    description: 'The Java version to use.'
+    required: true
+  java_distribution:
+    description: 'The Java distribution to use.'
+    required: false
+    default: 'temurin'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: ${{ inputs.java_distribution }}
+        java-version: ${{ inputs.java_version }}
+        
+    - name: Restore dependencies
+      shell: bash
+      id: restore
+      run: ${{ inputs.workspace_path }}/gradlew dependencies -p ${{ inputs.workspace_path }}
+
+    - name: Build
+      shell: bash
+      id: build
+      run: ${{ inputs.workspace_path }}/gradlew jar -p ${{ inputs.workspace_path }}
+
+    - name: Run Tests
+      if: steps.build.outcome == 'success' && inputs.run_tests == 'true'
+      shell: bash
+      run: ${{ inputs.workspace_path }}/gradlew test -p ${{ inputs.workspace_path }}
