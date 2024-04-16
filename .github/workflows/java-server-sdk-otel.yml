@@ -1,4 +1,4 @@
-name: shared/sdk-client
+name: java-server-sdk-otel
 
 on:
   push:
@@ -11,7 +11,7 @@ on:
       - '**.md'
 
 jobs:
-  build-test-sdk-client:
+  build-test-java-server-sdk-otel:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -19,5 +19,5 @@ jobs:
       - name: Shared CI Steps
         uses: ./.github/actions/ci
         with:
-          workspace_path: 'lib/ldotel'
+          workspace_path: 'lib/java-server-sdk-otel'
           java_version: 8

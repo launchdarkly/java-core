@@ -31,6 +31,11 @@ import static org.junit.Assert.assertNull;
 public class TracingHookTest {
 
   @Test
+  public void testCanUseBuilder() {
+    TracingHook hook = new TracingHook.Builder().withSpans().withVariant().build();
+  }
+
+  @Test
   public void testAddsEventToParentSpanWtihoutVariation() {
     InMemorySpanExporter testExporter = InMemorySpanExporter.create();
     Tracer testTracer = makeTestTracer(testExporter);

@@ -9,7 +9,7 @@ on:
         options:
           - lib/libotel
       prerelease:
-        description: 'Is this a prerelease. If so, then the latest tag will not be updated in npm.'
+        description: 'Is this a prerelease.'
         type: boolean
         required: true
       dry_run:

@@ -1,8 +1,8 @@
 ---
-name: Feature request for the ldotel module
+name: Feature request for the java-server-sdk-otel package
 about: Suggest an idea for this project
 title: ''
-labels: 'ldotel, enhancement'
+labels: 'package: java-server-sdk-otel, enhancement'
 assignees: ''
 
 ---

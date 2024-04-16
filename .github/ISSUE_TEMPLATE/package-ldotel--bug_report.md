@@ -1,8 +1,8 @@
 ---
-name: 'Bug report for the ldotel module'
+name: 'Bug report for the java-server-sdk-otel package'
 about: Create a report to help us improve
 title: ''
-labels: 'package: ldotel, bug'
+labels: 'package: java-server-sdk-otel, bug'
 assignees: ''
 ---
 
