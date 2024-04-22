@@ -1,0 +1,55 @@
+name: Publish Package
+on:
+  workflow_dispatch:
+    inputs:
+      workspace_path:
+        description: 'The workspace to publish'
+        required: true
+        type: choice
+        options:
+          - lib/libotel
+      prerelease:
+        description: 'Is this a prerelease.'
+        type: boolean
+        required: true
+      dry_run:
+        description: 'Is this a dry run. If so no package will be published.'
+        type: boolean
+        required: true
+      run_tests:
+        description: 'If true, run unit tests, otherwise skip them.'
+        type: boolean
+        default: true
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Shared CI Steps
+        uses: ./.github/actions/ci
+        with:
+          workspace_path: ${{ inputs.workspace_path }}
+          java_version: 8
+
+      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.1.0
+        name: Get secrets
+        with:
+          aws_assume_role: ${{ vars.AWS_ROLE_ARN }}
+          ssm_parameter_pairs: '/production/common/releasing/sonatype/username = SONATYPE_USER_NAME,
+          /production/common/releasing/sonatype/password = SONATYPE_PASSWORD,
+          /production/common/releasing/android_code_signing/private_key_id = SIGNING_KEY_ID,
+          /production/common/releasing/android_code_signing/private_key_passphrase = SIGNING_KEY_PASSPHRASE'
+          s3_path_pairs: 'launchdarkly-releaser/android/code-signing-keyring.gpg = code-signing-keyring.gpg'
+
+      - name: Publish
+        uses: ./.github/actions/publish
+        with:
+          workspace_path: ${{ inputs.workspace_path }}
+          dry_run: ${{ inputs.dry_run }}
+          prerelease: ${{ inputs.prerelease }}
+          code_signing_keyring: 'code-signing-keyring.gpg'
