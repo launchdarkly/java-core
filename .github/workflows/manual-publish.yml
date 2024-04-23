@@ -7,7 +7,7 @@ on:
         required: true
         type: choice
         options:
-          - lib/libotel
+          - lib/java-server-sdk-otel
       prerelease:
         description: 'Is this a prerelease.'
         type: boolean
