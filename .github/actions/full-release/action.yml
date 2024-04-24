@@ -41,23 +41,17 @@ runs:
         workspace_path: ${{ inputs.workspace_path }}
         java_version: 8
 
-    - name: Release build
-      uses: ./.github/actions/build-release
-      with:
-        project_file: ${{ inputs.project_file }}
-
     - name: Publish
       uses: ./.github/actions/publish
       with:
         workspace_path: ${{ inputs.workspace_path }}
         dry_run: ${{ inputs.dry_run }}
         prerelease: ${{ inputs.prerelease }}
+        signing_key_id: ${{ env.SIGNING_KEY_ID }}
+        signing_key_passphrase: ${{ env.SIGNING_KEY_PASSPHRASE }}
         code_signing_keyring: 'code-signing-keyring.gpg'
-
-    - name: Build Documentation
-      uses: ./.github/actions/build-docs
-      with:
-        workspace_path: ${{ inputs.workspace_path }}
+        sonatype_username: ${{ env.SONATYPE_USER_NAME }}
+        sonatype_password: ${{ env.SONATYPE_PASSWORD }}
 
     - name: Publish Documentation
       if: ${{ inputs.dry_run == 'false' }}

@@ -42,10 +42,12 @@ jobs:
 
       - uses: ./.github/actions/full-release
         with:
-          workspace_path: ${{ inputs.workspace_path }}
-          dry_run: ${{ inputs.dry_run }}
-          prerelease: ${{ inputs.prerelease }}
+          workspace_path: lib/java-server-sdk-otel
+          dry_run: true #TODO make this false
+          prerelease: true #TODO make this false
           code_signing_keyring: 'code-signing-keyring.gpg'
+          signing_key_id: ${{ env.SIGNING_KEY_ID }}
+          signing_key_passphrase: ${{ env.SIGNING_KEY_PASSPHRASE }}
           sonatype_username: ${{ env.SONATYPE_USER_NAME }}
           sonatype_password: ${{ env.SONATYPE_PASSWORD }}
           aws_role: ${{ vars.AWS_ROLE_ARN }}

@@ -41,3 +41,7 @@ runs:
       if: steps.build.outcome == 'success' && inputs.run_tests == 'true'
       shell: bash
       run: ${{ inputs.workspace_path }}/gradlew test -p ${{ inputs.workspace_path }}
+
+    - name: Build Documentation
+      shell: bash
+      run: ${{ inputs.workspace_path }}/gradlew javadoc -p ${{ inputs.workspace_path }}
