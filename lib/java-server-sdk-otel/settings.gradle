@@ -7,5 +7,5 @@
  * in the user manual at https://docs.gradle.org/8.0.2/userguide/multi_project_builds.html
  */
 
-rootProject.name = 'java-server-sdk-otel'
+rootProject.name = 'launchdarkly-java-server-sdk-otel'
 include('lib')
