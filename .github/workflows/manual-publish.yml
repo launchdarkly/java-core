@@ -29,27 +29,24 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v3
-      
-      - name: Shared CI Steps
-        uses: ./.github/actions/ci
-        with:
-          workspace_path: ${{ inputs.workspace_path }}
-          java_version: 8
 
-      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.1.0
-        name: Get secrets
-        with:
-          aws_assume_role: ${{ vars.AWS_ROLE_ARN }}
-          ssm_parameter_pairs: '/production/common/releasing/sonatype/username = SONATYPE_USER_NAME,
-          /production/common/releasing/sonatype/password = SONATYPE_PASSWORD,
-          /production/common/releasing/android_code_signing/private_key_id = SIGNING_KEY_ID,
-          /production/common/releasing/android_code_signing/private_key_passphrase = SIGNING_KEY_PASSPHRASE'
-          s3_path_pairs: 'launchdarkly-releaser/android/code-signing-keyring.gpg = code-signing-keyring.gpg'
+      # - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.1.0
+      #   name: Get secrets
+      #   with:
+      #     aws_assume_role: ${{ vars.AWS_ROLE_ARN }}
+      #     ssm_parameter_pairs: '/production/common/releasing/sonatype/username = SONATYPE_USER_NAME,
+      #     /production/common/releasing/sonatype/password = SONATYPE_PASSWORD,
+      #     /production/common/releasing/android_code_signing/private_key_id = SIGNING_KEY_ID,
+      #     /production/common/releasing/android_code_signing/private_key_passphrase = SIGNING_KEY_PASSPHRASE'
+      #     s3_path_pairs: 'launchdarkly-releaser/android/code-signing-keyring.gpg = code-signing-keyring.gpg'
 
-      - name: Publish
-        uses: ./.github/actions/publish
+      - uses: ./.github/actions/full-release
         with:
           workspace_path: ${{ inputs.workspace_path }}
           dry_run: ${{ inputs.dry_run }}
           prerelease: ${{ inputs.prerelease }}
           code_signing_keyring: 'code-signing-keyring.gpg'
+          sonatype_username: ${{ env.SONATYPE_USER_NAME }}
+          sonatype_password: ${{ env.SONATYPE_PASSWORD }}
+          aws_role: ${{ vars.AWS_ROLE_ARN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
