@@ -54,8 +54,8 @@ runs:
         sonatype_password: ${{ env.SONATYPE_PASSWORD }}
 
     - name: Publish Documentation
-      if: ${{ inputs.dry_run == 'false' }}
       uses: ./.github/actions/publish-docs
       with:
         workspace_path: ${{ inputs.workspace_path }}
         token: ${{ inputs.token }}
+        dry_run: ${{ inputs.dry_run }}

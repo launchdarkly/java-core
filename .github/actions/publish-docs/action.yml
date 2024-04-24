@@ -20,7 +20,7 @@ runs:
       with:
         docs_path: ${{ workspace_path }}/build/docs/javadoc
         output_path: ${{ workspace_path }}
-        github_token: ${{ inputs.token }} # For the shared action the token should be a GITHUB_TOKEN
+        github_token: ${{ inputs.token }}
 
     - name: Dry Run Publish Docs
       shell: bash
