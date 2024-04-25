@@ -1,0 +1,28 @@
+name: Publish Documentation
+description: 'Publish the documentation to Github pages'
+inputs:
+  workspace_path:
+    description: 'Path to the workspace.'
+    required: true
+  token:
+    description: 'Token to use for publishing.'
+    required: true
+  dry_run:
+    description: 'Is this a dry run. If so no docs will be published.'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: launchdarkly/gh-actions/actions/publish-pages@publish-pages-v1.0.1
+      name: 'Publish to Github pages'
+      if: ${{ inputs.dry_run == 'false' }}
+      with:
+        docs_path: ${{ workspace_path }}/build/docs/javadoc
+        output_path: ${{ workspace_path }}
+        github_token: ${{ inputs.token }}
+
+    - name: Dry Run Publish Docs
+      shell: bash
+      if: ${{ inputs.dry_run == 'true' }}
+      run: echo "Dry run. Not publishing docs."

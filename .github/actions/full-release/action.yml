@@ -1,0 +1,61 @@
+name: Build, Test, and Publish
+description: 'Execute the full release process for a workspace.'
+inputs:
+  workspace_path:
+    description: 'Path to the workspace.'
+    required: true
+  dry_run:
+    description: 'Is this a dry run. If so no package will be published.'
+    required: true
+  prerelease:
+    description: 'Is this a prerelease. If so then it will be published to the staging repository only.'
+    required: true
+  signing_key_id:
+    description: 'Signing key ID'
+    required: true
+  signing_key_passphrase:
+    description: 'Signing key passphrase'
+    required: true
+  code_signing_keyring:
+    description: 'The path of the code signing keyring.'
+    required: true
+  sonatype_username:
+    description: 'Sonatype repo username.'
+    required: true
+  sonatype_password:
+    description: 'Sonatype repo password.'
+    required: true
+  aws_role:
+    description: 'The AWS role to assume, needed to fetch release secrets.'
+    required: true
+  token:
+    description: 'The GitHub token to use for publishing documentation.'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: CI Check
+      uses: ./.github/actions/ci
+      with:
+        workspace_path: ${{ inputs.workspace_path }}
+        java_version: 8
+
+    - name: Publish
+      uses: ./.github/actions/publish
+      with:
+        workspace_path: ${{ inputs.workspace_path }}
+        dry_run: ${{ inputs.dry_run }}
+        prerelease: ${{ inputs.prerelease }}
+        signing_key_id: ${{ env.SIGNING_KEY_ID }}
+        signing_key_passphrase: ${{ env.SIGNING_KEY_PASSPHRASE }}
+        code_signing_keyring: 'code-signing-keyring.gpg'
+        sonatype_username: ${{ env.SONATYPE_USER_NAME }}
+        sonatype_password: ${{ env.SONATYPE_PASSWORD }}
+
+    - name: Publish Documentation
+      uses: ./.github/actions/publish-docs
+      with:
+        workspace_path: ${{ inputs.workspace_path }}
+        token: ${{ inputs.token }}
+        dry_run: ${{ inputs.dry_run }}

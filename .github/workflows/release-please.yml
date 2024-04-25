@@ -1,34 +1,34 @@
-name: Publish Package
+name: Release Please
 on:
   workflow_dispatch:
-    inputs:
-      workspace_path:
-        description: 'The workspace to publish'
-        required: true
-        type: choice
-        options:
-          - lib/java-server-sdk-otel
-      prerelease:
-        description: 'Is this a prerelease.'
-        type: boolean
-        required: true
-      dry_run:
-        description: 'Is this a dry run. If so no package will be published.'
-        type: boolean
-        required: true
-      run_tests:
-        description: 'If true, run unit tests, otherwise skip them.'
-        type: boolean
-        default: true
+  push:
+    branches:
+      - main
 
 jobs:
-  build-and-publish:
+  release-please:
     runs-on: ubuntu-latest
+
+    outputs:
+      package-server-sdk-otel-released: ${{ steps.release.outputs['lib/java-server-sdk-otel--release_created'] }}
+
+    steps:
+      - uses: google-github-actions/release-please-action@v4
+        id: release
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          target-branch: ${{ github.ref_name }}
+
+  release-server-sdk-otel:
+    runs-on: ubuntu-latest
+    needs: release-please
     permissions:
       id-token: write
-      contents: read
+      contents: write
+      pull-requests: write
+    if: ${{ needs.release-please.outputs.package-server-sdk-otel-released == 'true'}}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.1.0
         name: Get secrets
@@ -42,12 +42,12 @@ jobs:
 
       - uses: ./.github/actions/full-release
         with:
-          workspace_path: ${{ inputs.workspace_path }}
-          dry_run: ${{ inputs.dry_run }}
-          prerelease: ${{ inputs.prerelease }}
+          workspace_path: lib/java-server-sdk-otel
+          dry_run: true #TODO make this false
+          prerelease: true #TODO make this false
+          code_signing_keyring: 'code-signing-keyring.gpg'
           signing_key_id: ${{ env.SIGNING_KEY_ID }}
           signing_key_passphrase: ${{ env.SIGNING_KEY_PASSPHRASE }}
-          code_signing_keyring: 'code-signing-keyring.gpg'
           sonatype_username: ${{ env.SONATYPE_USER_NAME }}
           sonatype_password: ${{ env.SONATYPE_PASSWORD }}
           aws_role: ${{ vars.AWS_ROLE_ARN }}

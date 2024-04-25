@@ -17,8 +17,6 @@ inputs:
     description: 'The Java distribution to use.'
     required: false
     default: 'temurin'
-  echo_test:
-    required: false
 
 runs:
   using: composite
@@ -29,10 +27,6 @@ runs:
         distribution: ${{ inputs.java_distribution }}
         java-version: ${{ inputs.java_version }}
 
-    -name: Echo Test
-      shell: bash
-      run: echo ${{ inputs.echo_test }}
-        
     - name: Restore dependencies
       shell: bash
       id: restore
@@ -47,3 +41,7 @@ runs:
       if: steps.build.outcome == 'success' && inputs.run_tests == 'true'
       shell: bash
       run: ${{ inputs.workspace_path }}/gradlew test -p ${{ inputs.workspace_path }}
+
+    - name: Build Documentation
+      shell: bash
+      run: ${{ inputs.workspace_path }}/gradlew javadoc -p ${{ inputs.workspace_path }}

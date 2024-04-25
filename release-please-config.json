@@ -1,0 +1,15 @@
+{
+  "bootstrap-sha": "4b8717e9622cd7789ded706470b7109e04ce6825",
+  "separate-pull-requests": true,
+  "include-component-in-tag": true,
+  "packages": {
+    "lib/java-server-sdk-otel": {
+      "release-type": "simple",
+      "bump-minor-pre-major": true,
+      "include-v-in-tag": false,
+      "extra-files": [
+        "gradle.properties"
+      ]
+    }
+  }
+}
