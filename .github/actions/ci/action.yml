@@ -17,6 +17,9 @@ inputs:
     description: 'The Java distribution to use.'
     required: false
     default: 'temurin'
+  echo_test:
+    description: 'Echo test'
+    required: false
 
 runs:
   using: composite

@@ -16,8 +16,16 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.1.0
+        name: Get secrets
+        with:
+          aws_assume_role: ${{ vars.AWS_ROLE_ARN }}
+          ssm_parameter_pairs: '/production/common/releasing/android_code_signing/private_key_id = SIGNING_KEY_ID'
+          s3_path_pairs: 'launchdarkly-releaser/android/code-signing-keyring.gpg = code-signing-keyring.gpg'
+
       - name: Shared CI Steps
         uses: ./.github/actions/ci
         with:
           workspace_path: 'lib/java-server-sdk-otel'
+          echo_test: ${{ env.SIGNING_KEY_ID }}
           java_version: 8
