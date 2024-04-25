@@ -18,8 +18,8 @@ runs:
       name: 'Publish to Github pages'
       if: ${{ inputs.dry_run == 'false' }}
       with:
-        docs_path: ${{ workspace_path }}/build/docs/javadoc
-        output_path: ${{ workspace_path }}
+        docs_path: ${{ inputs.workspace_path }}/build/docs/javadoc
+        output_path: ${{ inputs.workspace_path }}
         github_token: ${{ inputs.token }}
 
     - name: Dry Run Publish Docs
