@@ -17,9 +17,7 @@ plugins {
 repositories {
     // Use Maven Central for resolving dependencies.
     mavenCentral()
-    maven {
-        url 'https://oss.sonatype.org/content/repositories/snapshots/'
-    }
+    maven { url "https://oss.sonatype.org/content/groups/public/" }
 }
 
 allprojects {
@@ -73,10 +71,7 @@ publishing {
 nexusPublishing {
     clientTimeout = java.time.Duration.ofMinutes(2) // we've seen extremely long delays in creating repositories
     repositories {
-        sonatype {
-            username = ossrhUsername
-            password = ossrhPassword
-        }
+        sonatype ()
     }
 }
 
