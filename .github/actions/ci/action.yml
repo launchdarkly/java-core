@@ -17,6 +17,8 @@ inputs:
     description: 'The Java distribution to use.'
     required: false
     default: 'temurin'
+  echo_test:
+    required: false
 
 runs:
   using: composite
@@ -26,6 +28,10 @@ runs:
       with:
         distribution: ${{ inputs.java_distribution }}
         java-version: ${{ inputs.java_version }}
+
+    -name: Echo Test
+      shell: bash
+      run: echo ${{ inputs.echo_test }}
         
     - name: Restore dependencies
       shell: bash
