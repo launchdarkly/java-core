@@ -39,7 +39,7 @@ runs:
 
     - name: Build Jar
       shell: bash
-      id: build
+      id: buildjar
       run: ${{ inputs.workspace_path }}/gradlew jar -p ${{ inputs.workspace_path }}
 
     - name: Run Tests
