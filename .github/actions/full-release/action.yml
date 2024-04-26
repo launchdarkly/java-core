@@ -49,7 +49,7 @@ runs:
         prerelease: ${{ inputs.prerelease }}
         signing_key_id: ${{ env.SIGNING_KEY_ID }}
         signing_key_passphrase: ${{ env.SIGNING_KEY_PASSPHRASE }}
-        code_signing_keyring: 'code-signing-keyring.gpg'
+        code_signing_keyring: ${{ inputs.code_signing_keyring }}
         sonatype_username: ${{ env.SONATYPE_USER_NAME }}
         sonatype_password: ${{ env.SONATYPE_PASSWORD }}
 
