@@ -38,14 +38,9 @@ dependencies {
     implementation "io.opentelemetry:opentelemetry-api:1.2.0"
 }
 
-task sourcesJar(type: Jar) {
-    from sourceSets.main.allJava
-    classifier = 'sources'
-}
-
-task javadocJar(type: Jar) {
-    from javadoc
-    classifier = 'javadoc'
+java {
+    withJavadocJar()
+    withSourcesJar()
 }
 
 publishing {
