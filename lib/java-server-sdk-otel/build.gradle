@@ -38,13 +38,26 @@ dependencies {
     implementation "io.opentelemetry:opentelemetry-api:1.2.0"
 }
 
+task sourcesJar(type: Jar) {
+    from sourceSets.main.allJava
+    classifier = 'sources'
+}
+
+task javadocJar(type: Jar) {
+    from javadoc
+    classifier = 'javadoc'
+}
+
 publishing {
     publications {
         mavenJava(MavenPublication) {
             from(components["java"])
+            artifact sourcesJar
+            artifact javadocJar
 
             pom {
                 name.set("LaunchDarkly Java Server Otel Integration")
+                description.set("This package can be used to integrate OpenTelemetry with the LaunchDarkly Java Server SDK.")
                 url.set("https://github.com/launchdarkly/java-core")
                 licenses {
                     license {
