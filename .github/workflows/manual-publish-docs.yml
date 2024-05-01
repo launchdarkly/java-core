@@ -1,0 +1,44 @@
+on:
+  workflow_dispatch:
+    inputs:
+      workspace_path:
+        description: 'The workspace to publish'
+        required: true
+        type: choice
+        options:
+          - lib/java-server-sdk-otel
+      dry_run:
+        description: 'Is this a dry run. If so no docs will be published.'
+        type: boolean
+        required: true
+      token:
+        description: 'Token to use for publishing.'
+        required: true
+
+name: Publish Docs
+jobs:
+  build-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.0.1
+        name: Assume aws role
+        with:
+          aws_assume_role: ${{ vars.AWS_ROLE_ARN }}
+
+      - name: CI Check
+        uses: ./.github/actions/ci
+        with:
+          workspace_path: ${{ inputs.workspace_path }}
+          java_version: 8
+
+      - name: Publish Documentation
+        uses: ./.github/actions/publish-docs
+        with:
+          workspace_path: ${{ inputs.workspace_path }}
+          token: ${{ inputs.token }}
+          dry_run: ${{ inputs.dry_run }}
