@@ -34,7 +34,7 @@ dependencies {
     // All Otel testing common packages are alpha variants, usage of alpha is intentional here
     testImplementation 'io.opentelemetry.javaagent:opentelemetry-testing-common:1.33.1-alpha'
 
-    implementation "com.launchdarkly:launchdarkly-java-server-sdk:7.4.0-SNAPSHOT"
+    implementation "com.launchdarkly:launchdarkly-java-server-sdk:7.4.0"
     implementation "io.opentelemetry:opentelemetry-api:1.2.0"
 }
 
