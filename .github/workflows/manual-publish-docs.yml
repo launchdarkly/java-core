@@ -11,9 +11,6 @@ on:
         description: 'Is this a dry run. If so no docs will be published.'
         type: boolean
         required: true
-      token:
-        description: 'Token to use for publishing.'
-        required: true
 
 name: Publish Docs
 jobs:
@@ -40,5 +37,5 @@ jobs:
         uses: ./.github/actions/publish-docs
         with:
           workspace_path: ${{ inputs.workspace_path }}
-          token: ${{ inputs.token }}
           dry_run: ${{ inputs.dry_run }}
+          token: ${{secrets.GITHUB_TOKEN}}
