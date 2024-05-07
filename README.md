@@ -5,9 +5,9 @@ This includes shared libraries, used by SDKs and other tools, as well as SDKs.
 
 ## Packages
 
-| Telemetry Packages                                                                          | maven                                                       | issues                                | tests                                                         |
-| ------------------------------------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------- |
-| [@launchdarkly/java-server-sdk-otel](lib/java-server-sdk-otel/README.md)     | [![maven][server-otel-maven-badge]][server-otel-maven-link]         | [Issues][java-otel-issues]         | [![Actions Status][server-otel-ci-badge]][server-otel-ci-link]         |
+| Telemetry Packages                                                           | API Docs                                                     | maven                                                      | issues                                | tests                                                         |
+| ---------------------------------------------------------------------------- |--------------------------------------------------------------| ---------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------- |
+| [@launchdarkly/java-server-sdk-otel](lib/java-server-sdk-otel/README.md)     | [![Documentation][api-docs-badge]][server-otel-docs-link]    | [![maven][server-otel-maven-badge]][server-otel-maven-link]         | [Issues][java-otel-issues]         | [![Actions Status][server-otel-ci-badge]][server-otel-ci-link]         |
 
 ## Organization
 
@@ -48,3 +48,6 @@ We encourage pull requests and other contributions from the community. Check out
 [server-otel-maven-link]: https://central.sonatype.com/artifact/com.launchdarkly/launchdarkly-java-server-sdk-otel
 [server-otel-ci-badge]: https://github.com/launchdarkly/java-core/actions/workflows/java-server-sdk-otel.yml/badge.svg
 [server-otel-ci-link]: https://github.com/launchdarkly/java-core/actions/workflows/java-server-sdk-otel.yml
+[server-otel-docs-link]: https://launchdarkly.github.io/java-core/lib/java-server-sdk-otel/
+
+[api-docs-badge]: https://img.shields.io/static/v1?label=GitHub+Pages&message=API+reference&color=00add8
