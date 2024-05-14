@@ -1,0 +1,24 @@
+version: 2
+
+repo:
+  public: java-sdk-common
+  private: java-sdk-common-private
+
+publications:
+  - url: https://oss.sonatype.org/content/groups/public/com/launchdarkly/launchdarkly-java-sdk-common/
+    description: Sonatype
+  - url: https://javadoc.io/doc/com.launchdarkly/launchdarkly-java-sdk-common
+    description: documentation (javadoc.io)
+
+jobs:
+  - docker:
+      image: gradle:7.6-jdk11
+    template:
+      name: gradle
+
+branches:
+  - name: main
+  - name: 1.x
+
+documentation:
+  gitHubPages: true

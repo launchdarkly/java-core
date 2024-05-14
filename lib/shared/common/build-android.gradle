@@ -1,0 +1,75 @@
+apply plugin: 'com.android.library'
+//apply plugin: 'com.github.dcendents.android-maven'
+
+buildscript {
+    repositories {
+        mavenCentral()
+        mavenLocal()
+        google()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:4.2.0'
+    }
+}
+// This Gradle script is used only when we are running tests in an Android environment to verify
+// that the project is Android-compatible. We do not publish an Android build - that is done in
+// the android-client-sdk project.
+
+repositories {
+    mavenLocal()
+    // Before LaunchDarkly release artifacts get synced to Maven Central they are here along with snapshots:
+    maven { url "https://oss.sonatype.org/content/groups/public/" }
+    mavenCentral()
+    google()
+}
+
+allprojects {
+    group = ProjectValues.groupId
+    version = "${version}"  // from gradle.properties
+    archivesBaseName = ProjectValues.artifactId
+}
+
+android {
+    compileSdkVersion 26
+    buildToolsVersion '28.0.3'
+
+    defaultConfig {
+        minSdkVersion 16
+        targetSdkVersion 26
+        versionCode 1
+        versionName version
+        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles 'consumer-proguard-rules.pro'
+
+        // The following argument makes the Android Test Orchestrator run its
+        // "pm clear" command after each test invocation. This command ensures
+        // that the app's state is completely cleared between tests.
+        testInstrumentationRunnerArguments clearPackageData: 'true'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_7
+        targetCompatibility JavaVersion.VERSION_1_7
+    }
+
+    packagingOptions {
+        exclude 'META-INF/**'
+        exclude 'META-INF/**'
+    }
+
+    dexOptions {
+        javaMaxHeapSize "4g"
+    }
+}
+
+dependencies {  // see Dependencies.kt in buildSrc
+    // See note in Dependencies.kt in buildSrc on the purpose of "privateImplementation".
+    // The Android Gradle plugin doesn't seem to have a good way to customize the classpath
+    // of the compile and test tasks, but since we're not actually publishing any Android
+    // artifacts from this project (we use this build only for CI testing), we can simply
+    // copy the dependencies from "privateImplementation" into the standard "implementation"
+    // for the Android build.
+    Libs.privateImplementation.each { implementation(it) }
+    Libs.javaTestImplementation.each { testImplementation(it) }
+    Libs.androidTestImplementation.each { androidTestImplementation(it) }
+}
