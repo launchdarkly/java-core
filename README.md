@@ -5,13 +5,19 @@ This includes shared libraries, used by SDKs and other tools, as well as SDKs.
 
 ## Packages
 
+| Shared Packages                                                  | API Docs                                                           | maven                                                      | issues                                | tests                                                         |
+| ---------------------------------------------------------------- |--------------------------------------------------------------------| ---------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------- |
+| [@launchdarkly/java-sdk-common](lib/shared/common/README.md)     | [![Documentation][sdk-common-docs-badge]][sdk-common-docs-link]    | [![maven][sdk-common-maven-badge]][sdk-common-maven-link]  | [Issues][sdk-common-issues]           | [![Actions Status][sdk-common-ci-badge]][sdk-common-ci-link]  |
+
 | Telemetry Packages                                                           | API Docs                                                     | maven                                                      | issues                                | tests                                                         |
 | ---------------------------------------------------------------------------- |--------------------------------------------------------------| ---------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------- |
-| [@launchdarkly/java-server-sdk-otel](lib/java-server-sdk-otel/README.md)     | [![Documentation][api-docs-badge]][server-otel-docs-link]    | [![maven][server-otel-maven-badge]][server-otel-maven-link]         | [Issues][java-otel-issues]         | [![Actions Status][server-otel-ci-badge]][server-otel-ci-link]         |
+| [@launchdarkly/java-server-sdk-otel](lib/java-server-sdk-otel/README.md)     | [![Documentation][server-otel-docs-badge]][server-otel-docs-link]    | [![maven][server-otel-maven-badge]][server-otel-maven-link]         | [Issues][server-otel-issues]         | [![Actions Status][server-otel-ci-badge]][server-otel-ci-link]         |
 
 ## Organization
 
 `lib` Top level directory containing package implementations.
+
+`lib/shared` Packages which are primarily intended for consumption by LaunchDarkly and are used in other packages types.
 
 ## LaunchDarkly overview
 
@@ -43,11 +49,19 @@ We encourage pull requests and other contributions from the community. Check out
   - [blog.launchdarkly.com](https://blog.launchdarkly.com/ 'LaunchDarkly Blog Documentation') for the latest product updates
 
 [//]: # 'java-server-sdk-otel'
-[java-otel-issues]: https://github.com/launchdarkly/java-core/issues?q=is%3Aissue+is%3Aopen+label%3A%22package%3A+java-server-sdk-otel%22+
+[server-otel-issues]: https://github.com/launchdarkly/java-core/issues?q=is%3Aissue+is%3Aopen+label%3A%22package%3A+java-server-sdk-otel%22+
 [server-otel-maven-badge]: https://img.shields.io/maven-central/v/com.launchdarkly/launchdarkly-java-server-sdk-otel
 [server-otel-maven-link]: https://central.sonatype.com/artifact/com.launchdarkly/launchdarkly-java-server-sdk-otel
 [server-otel-ci-badge]: https://github.com/launchdarkly/java-core/actions/workflows/java-server-sdk-otel.yml/badge.svg
 [server-otel-ci-link]: https://github.com/launchdarkly/java-core/actions/workflows/java-server-sdk-otel.yml
+[server-otel-docs-badge]: https://img.shields.io/static/v1?label=GitHub+Pages&message=API+reference&color=00add8
 [server-otel-docs-link]: https://launchdarkly.github.io/java-core/lib/java-server-sdk-otel/
 
-[api-docs-badge]: https://img.shields.io/static/v1?label=GitHub+Pages&message=API+reference&color=00add8
+[//]: # 'java-sdk-common'
+[sdk-common-issues]: https://github.com/launchdarkly/java-core/issues?q=is%3Aissue+is%3Aopen+label%3A%22package%3A+java-sdk-common%22+
+[sdk-common-maven-badge]: https://img.shields.io/maven-central/v/com.launchdarkly/launchdarkly-java-sdk-common
+[sdk-common-maven-link]: https://central.sonatype.com/artifact/com.launchdarkly/launchdarkly-java-sdk-common
+[sdk-common-ci-badge]: https://github.com/launchdarkly/java-core/actions/workflows/java-sdk-common.yml/badge.svg
+[sdk-common-ci-link]: https://github.com/launchdarkly/java-core/actions/workflows/java-sdk-common.yml
+[sdk-common-docs-badge]: https://img.shields.io/static/v1?label=GitHub+Pages&message=API+reference&color=00add8
+[sdk-common-docs-link]: https://launchdarkly.github.io/java-core/lib/shared/common/
