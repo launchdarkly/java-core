@@ -36,7 +36,7 @@ jobs:
         with:
           aws_assume_role: ${{ vars.AWS_ROLE_ARN }}
           ssm_parameter_pairs: '/production/common/releasing/sonatype/username = SONATYPE_USER_NAME,
-          /production/common/releasing/sonatype/password = SONATYPE_PASSWORD,
+          /production/common/releasing/sonatype/password = SONATYPE_PASSWORD'
           s3_path_pairs: 'launchdarkly-releaser/java/code-signing-keyring.gpg = code-signing-keyring.gpg'
 
       - uses: ./.github/actions/full-release
@@ -68,7 +68,7 @@ jobs:
         with:
           aws_assume_role: ${{ vars.AWS_ROLE_ARN }}
           ssm_parameter_pairs: '/production/common/releasing/sonatype/username = SONATYPE_USER_NAME,
-          /production/common/releasing/sonatype/password = SONATYPE_PASSWORD,
+          /production/common/releasing/sonatype/password = SONATYPE_PASSWORD'
           s3_path_pairs: 'launchdarkly-releaser/java/code-signing-keyring.gpg = code-signing-keyring.gpg'
 
       - uses: ./.github/actions/full-release
