@@ -8,6 +8,7 @@ on:
         type: choice
         options:
           - lib/java-server-sdk-otel
+          - lib/shared/common
       prerelease:
         description: 'Is this a prerelease.'
         type: boolean
