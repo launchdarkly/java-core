@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.launchdarkly.sdk">
+
+<!-- This minimal manifest only exists so that we can run unit tests in Android. -->
+
+</manifest>

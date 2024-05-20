@@ -1,0 +1,79 @@
+apply plugin: "com.android.library"  // for some reason Gradle complains if this is in the plugins section
+//apply plugin: "com.getkeepsafe.dexcount"
+
+buildscript {
+    repositories {
+        mavenCentral()
+        mavenLocal()
+        google()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:4.2.0'
+    }
+}
+// This Gradle script is used only when we are running tests in an Android environment to verify
+// that the project is Android-compatible. We do not publish an Android build - that is done in
+// the android-client-sdk project.
+
+repositories {
+    mavenLocal()
+    // Before LaunchDarkly release artifacts get synced to Maven Central they are here along with snapshots:
+    maven { url "https://oss.sonatype.org/content/groups/public/" }
+    mavenCentral()
+    google()
+}
+
+allprojects {
+    group = ProjectValues.groupId
+    version = "${version}"  // from gradle.properties
+    archivesBaseName = ProjectValues.artifactId
+}
+
+android {
+    compileSdkVersion(30)
+    buildToolsVersion "30.0.3"
+
+    defaultConfig {
+        minSdkVersion(21)
+        targetSdkVersion(30)
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        consumerProguardFiles 'consumer-proguard-rules.pro'
+
+        // The following argument makes the Android Test Orchestrator run its
+        // "pm clear" command after each test invocation. This command ensures
+        // that the app's state is completely cleared between tests.
+        testInstrumentationRunnerArguments clearPackageData: 'true'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    testOptions {
+        execution = "ANDROIDX_TEST_ORCHESTRATOR"
+    }
+
+    packagingOptions {
+        exclude 'META-INF/**'
+    }
+
+    useLibrary("android.test.runner")
+    useLibrary("android.test.base")
+    useLibrary("android.test.mock")
+}
+
+dependencies {  // see Dependencies.kt in buildSrc
+    Libs.implementation.each { implementation(it) }
+    Libs.javaTestImplementation.forEach { androidTestImplementation(it) }
+    Libs.androidTestImplementation.each { androidTestImplementation(it) }
+
+    androidTestImplementation("com.launchdarkly:test-helpers:${Versions.testHelpers}") {
+        exclude group: "org.eclipse.jetty" // we don't use the HTTP helpers and they don't work in Android
+        exclude group: "com.squareup.okhttp3" // also unused, causes dex limit to be exceeded
+    }
+
+    androidTestUtil("androidx.test:orchestrator:1.4.1")
+}
