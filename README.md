@@ -5,9 +5,10 @@ This includes shared libraries, used by SDKs and other tools, as well as SDKs.
 
 ## Packages
 
-| Shared Packages                                                  | API Docs                                                           | maven                                                      | issues                                | tests                                                         |
-| ---------------------------------------------------------------- |--------------------------------------------------------------------| ---------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------- |
-| [@launchdarkly/java-sdk-common](lib/shared/common/README.md)     | [![Documentation][sdk-common-docs-badge]][sdk-common-docs-link]    | [![maven][sdk-common-maven-badge]][sdk-common-maven-link]  | [Issues][sdk-common-issues]           | [![Actions Status][sdk-common-ci-badge]][sdk-common-ci-link]  |
+| Shared Packages                                                    | API Docs                                                            | maven                                                         | issues                                | tests                                                             |
+| ------------------------------------------------------------------ |---------------------------------------------------------------------| ------------------------------------------------------------- | ------------------------------------- | ----------------------------------------------------------------- |
+| [@launchdarkly/java-sdk-internal](lib/shared/internal/README.md)   | [![Documentation][sdk-internal-docs-badge]][sdk-internal-docs-link] | [![maven][sdk-internal-maven-badge]][sdk-internal-maven-link] | [Issues][sdk-internal-issues]         | [![Actions Status][sdk-internal-ci-badge]][sdk-internal-ci-link]  |
+| [@launchdarkly/java-sdk-common](lib/shared/common/README.md)       | [![Documentation][sdk-common-docs-badge]][sdk-common-docs-link]     | [![maven][sdk-common-maven-badge]][sdk-common-maven-link]     | [Issues][sdk-common-issues]           | [![Actions Status][sdk-common-ci-badge]][sdk-common-ci-link]      |
 
 | Telemetry Packages                                                           | API Docs                                                     | maven                                                      | issues                                | tests                                                         |
 | ---------------------------------------------------------------------------- |--------------------------------------------------------------| ---------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------- |
@@ -56,6 +57,15 @@ We encourage pull requests and other contributions from the community. Check out
 [server-otel-ci-link]: https://github.com/launchdarkly/java-core/actions/workflows/java-server-sdk-otel.yml
 [server-otel-docs-badge]: https://img.shields.io/static/v1?label=GitHub+Pages&message=API+reference&color=00add8
 [server-otel-docs-link]: https://launchdarkly.github.io/java-core/lib/java-server-sdk-otel/
+
+[//]: # 'java-sdk-internal'
+[sdk-internal-issues]: https://github.com/launchdarkly/java-core/issues?q=is%3Aissue+is%3Aopen+label%3A%22package%3A+java-sdk-internal%22+
+[sdk-internal-maven-badge]: https://img.shields.io/maven-central/v/com.launchdarkly/launchdarkly-java-sdk-internal
+[sdk-internal-maven-link]: https://central.sonatype.com/artifact/com.launchdarkly/launchdarkly-java-sdk-internal
+[sdk-internal-ci-badge]: https://github.com/launchdarkly/java-core/actions/workflows/java-sdk-internal.yml/badge.svg
+[sdk-internal-ci-link]: https://github.com/launchdarkly/java-core/actions/workflows/java-sdk-internal.yml
+[sdk-internal-docs-badge]: https://img.shields.io/static/v1?label=GitHub+Pages&message=API+reference&color=00add8
+[sdk-internal-docs-link]: https://launchdarkly.github.io/java-core/lib/shared/internal/
 
 [//]: # 'java-sdk-common'
 [sdk-common-issues]: https://github.com/launchdarkly/java-core/issues?q=is%3Aissue+is%3Aopen+label%3A%22package%3A+java-sdk-common%22+
