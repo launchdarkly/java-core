@@ -1,8 +1,8 @@
 ---
-name: 'Bug report for the java-sdk-common package'
+name: 'Bug report for the java-sdk-internal package'
 about: Create a report to help us improve
 title: ''
-labels: 'package: java-sdk-common, bug'
+labels: 'package: java-sdk-internal, bug'
 assignees: ''
 ---
 
