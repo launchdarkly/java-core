@@ -4,6 +4,7 @@
     "java-server-sdk": {
       "name": "Java Server SDK",
       "type": "server-side",
+      "path": "lib/sdk/server",
       "languages": [
         "Java"
       ]
