@@ -10,10 +10,30 @@ on:
     paths-ignore:
       - '**.md'
 
-
-#TODO: Add variations of Java version that are used today in java-server-sdk repo
 jobs:
-  build-test-java-server-sdk:
+  test-platforms-and-versions:
+    strategy:
+        matrix:
+          os: [windows-2019, ubuntu-20.04]
+          javaversion: [8, 11, 17, 19]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Shared CI Steps
+        uses: ./.github/actions/ci
+        with:
+          workspace_path: 'lib/sdk/server'
+          java_version: ${{ matrix.javaversion }}
+
+      - name: Contract Tests
+      - uses: ./.github/actions/contract-tests
+        with:
+          service_project_file: pkgs/sdk/server/contract-tests/TestService.csproj
+          service_dll_file: pkgs/sdk/server/contract-tests/bin/debug/net6.0/ContractTestService.dll
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  test-contract-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -23,3 +43,28 @@ jobs:
         with:
           workspace_path: 'lib/sdk/server'
           java_version: 8
+
+      - name: Contract Tests
+        uses: ./.github/actions/contract-tests
+        with:
+          workspace_path: 'lib/sdk/server'
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  test-packaging:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Shared CI Steps
+        uses: ./.github/actions/ci
+        with:
+          workspace_path: 'lib/sdk/server'
+          java_version: 8
+
+      - name: Publish Maven Local
+        shell: bash
+        run: lib/sdk/server/gradlew publishToMavenLocal -p lib/sdk/server -P LD_SKIP_SIGNING=1
+
+      - name: Run Packaging Test
+        shell: bash
+        run: make all -C lib/sdk/server/packaging-test

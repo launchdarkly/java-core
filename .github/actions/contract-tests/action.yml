@@ -1,0 +1,17 @@
+name: Contract Tests
+description: Runs Contract Tests
+inputs:
+  workspace_path:
+    description: 'Path to the package.'
+    required: true
+  token:
+    description: 'Github token, used for contract tests'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Run contract tests
+      shell: bash
+      run: make contract-tests -C ${{ inputs.workspace_path }}
