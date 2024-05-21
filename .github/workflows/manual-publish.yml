@@ -10,6 +10,7 @@ on:
           - lib/java-server-sdk-otel
           - lib/shared/common
           - lib/shared/internal
+          - lib/sdk/server
       prerelease:
         description: 'Is this a prerelease.'
         type: boolean

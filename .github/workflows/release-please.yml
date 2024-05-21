@@ -20,6 +20,38 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           target-branch: ${{ github.ref_name }}
 
+  release-server-sdk:
+    runs-on: ubuntu-latest
+    needs: release-please
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+    if: ${{ needs.release-please.outputs.package-server-sdk-released == 'true'}}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.1.0
+        name: Get secrets
+        with:
+          aws_assume_role: ${{ vars.AWS_ROLE_ARN }}
+          ssm_parameter_pairs: '/production/common/releasing/sonatype/username = SONATYPE_USER_NAME,
+          /production/common/releasing/sonatype/password = SONATYPE_PASSWORD'
+          s3_path_pairs: 'launchdarkly-releaser/java/code-signing-keyring.gpg = code-signing-keyring.gpg'
+
+      - uses: ./.github/actions/full-release
+        with:
+          workspace_path: lib/sdk/server
+          dry_run: false
+          prerelease: false
+          code_signing_keyring: 'code-signing-keyring.gpg'
+          signing_key_id: ${{ env.SIGNING_KEY_ID }}
+          signing_key_passphrase: ${{ env.SIGNING_KEY_PASSPHRASE }}
+          sonatype_username: ${{ env.SONATYPE_USER_NAME }}
+          sonatype_password: ${{ env.SONATYPE_PASSWORD }}
+          aws_role: ${{ vars.AWS_ROLE_ARN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
   release-server-sdk-otel:
     runs-on: ubuntu-latest
     needs: release-please

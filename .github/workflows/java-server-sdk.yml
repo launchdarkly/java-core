@@ -1,0 +1,25 @@
+name: java-server-sdk
+
+on:
+  push:
+    branches: [main, 'feat/**']
+    paths-ignore:
+      - '**.md' #Do not need to run CI for markdown changes.
+  pull_request:
+    branches: [main, 'feat/**']
+    paths-ignore:
+      - '**.md'
+
+
+#TODO: Add variations of Java version that are used today in java-server-sdk repo
+jobs:
+  build-test-java-server-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Shared CI Steps
+        uses: ./.github/actions/ci
+        with:
+          workspace_path: 'lib/sdk/server'
+          java_version: 8
