@@ -31,7 +31,9 @@ import static org.junit.Assume.assumeTrue;
 /**
  * Similar to FeatureStoreTestBase, but exercises only the underlying database implementation of a persistent
  * data store. The caching behavior, which is entirely implemented by CachingStoreWrapper, is covered by
- * CachingStoreWrapperTest. 
+ * CachingStoreWrapperTest.
+ *
+ * @param <T> the type of the store this base test will use
  */
 @SuppressWarnings("javadoc")
 public abstract class PersistentDataStoreTestBase<T extends PersistentDataStore> extends BaseTest {
