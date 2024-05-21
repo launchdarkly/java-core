@@ -26,6 +26,15 @@
       "extra-files": [
         "gradle.properties"
       ]
+    },
+    "lib/sdk/server": {
+      "release-type": "simple",
+      "bump-minor-pre-major": true,
+      "include-v-in-tag": false,
+      "extra-files": [
+        "gradle.properties",
+        "src/main/java/com/launchdarkly/sdk/server/Version.java"
+      ]
     }
   }
 }

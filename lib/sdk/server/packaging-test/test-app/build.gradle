@@ -1,0 +1,70 @@
+
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+}
+
+plugins {
+    id "java"
+    id "java-library"
+    id "biz.aQute.bnd.builder" version "5.0.1"
+    id "com.athaydes.osgi-run" version "1.6.0"
+}
+
+repositories {
+    mavenCentral()
+}
+
+allprojects {
+    group = "com.launchdarkly"
+    version = "1.0.0"
+    archivesBaseName = 'test-app-bundle'
+    sourceCompatibility = 1.8
+    targetCompatibility = 1.8
+}
+
+ext.versions = [
+    "gson": "2.8.9",
+    "jackson": "2.10.0"
+]
+
+dependencies {
+    // Note, the SDK build must have already been run before this, since we're using its product as a dependency
+    implementation fileTree(dir: "../../build/libs", include: "launchdarkly-java-server-sdk-*-thin.jar")
+    implementation "com.fasterxml.jackson.core:jackson-core:${versions.jackson}"
+    implementation "com.fasterxml.jackson.core:jackson-databind:${versions.jackson}"
+    implementation "com.google.code.gson:gson:${versions.gson}"
+    implementation "org.slf4j:slf4j-api:1.7.22"
+    implementation "org.osgi:osgi_R4_core:1.0"
+    osgiRuntime "org.slf4j:slf4j-simple:1.7.22"
+}
+
+task exportDependencies(type: Copy, dependsOn: compileJava) {
+    into "../temp/dependencies-app"
+    from configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.collect { it.file }
+}
+
+jar {
+    bnd(
+        // This consumer-policy directive completely turns off version checking for the test app's
+        // OSGi imports, so for instance if the app uses version 2.x of package P, the import will
+        // just be for p rather than p;version="[2.x,3)". One wouldn't normally do this, but we
+        // need to be able to run the CI tests for snapshot/beta versions, and bnd does not handle
+        // those correctly (5.0.0-beta1 will become "[5.0.0,6)" which will not work because the
+        // beta is semantically *before* 5.0.0).
+        '-consumer-policy': '',
+        'Bundle-Activator': 'testapp.TestAppOsgiEntryPoint',
+        'Import-Package': 'com.launchdarkly.sdk,com.launchdarkly.sdk.json' +
+            ',com.launchdarkly.sdk.server,org.slf4j' +
+            ',org.osgi.framework' +
+            ',com.google.gson;resolution:=optional' +
+            ',com.fasterxml.jackson.*;resolution:=optional'
+    )
+
+    finalizedBy(exportDependencies)
+}
+
+runOsgi {
+    bundles = [ ]  // we don't need a CLI or anything like that - just the SLF4j dependency shown above
+}

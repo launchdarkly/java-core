@@ -1,0 +1,21 @@
+# Eclipse project files
+.classpath
+.project
+.settings
+
+# Intellij project files
+*.iml
+*.ipr
+*.iws
+.idea/
+ 
+#Gradle
+.gradletasknamecache
+.gradle/
+build/
+bin/
+out/
+classes/
+
+packaging-test/temp/
+benchmarks/lib/
