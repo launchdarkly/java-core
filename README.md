@@ -5,6 +5,10 @@ This includes shared libraries, used by SDKs and other tools, as well as SDKs.
 
 ## Packages
 
+| SDK Packages                                                    | API Docs                                                            | maven                                                         | issues                                | tests                                                             |
+| ------------------------------------------------------------------ |---------------------------------------------------------------------| ------------------------------------------------------------- | ------------------------------------- | ----------------------------------------------------------------- |
+| [@launchdarkly/java-server-sdk](lib/sdk/server/README.md)   | [![Documentation][server-sdk-docs-badge]][server-sdk-docs-link] | [![maven][server-sdk-maven-badge]][server-sdk-maven-link] | [Issues][server-sdk-issues]         | [![Actions Status][server-sdk-ci-badge]][server-sdk-ci-link]  |
+
 | Shared Packages                                                    | API Docs                                                            | maven                                                         | issues                                | tests                                                             |
 | ------------------------------------------------------------------ |---------------------------------------------------------------------| ------------------------------------------------------------- | ------------------------------------- | ----------------------------------------------------------------- |
 | [@launchdarkly/java-sdk-internal](lib/shared/internal/README.md)   | [![Documentation][sdk-internal-docs-badge]][sdk-internal-docs-link] | [![maven][sdk-internal-maven-badge]][sdk-internal-maven-link] | [Issues][sdk-internal-issues]         | [![Actions Status][sdk-internal-ci-badge]][sdk-internal-ci-link]  |
@@ -48,6 +52,15 @@ We encourage pull requests and other contributions from the community. Check out
   - [docs.launchdarkly.com](https://docs.launchdarkly.com/ 'LaunchDarkly Documentation') for our documentation and SDK reference guides
   - [apidocs.launchdarkly.com](https://apidocs.launchdarkly.com/ 'LaunchDarkly API Documentation') for our API documentation
   - [blog.launchdarkly.com](https://blog.launchdarkly.com/ 'LaunchDarkly Blog Documentation') for the latest product updates
+
+[//]: # 'java-server-sdk'
+[server-sdk-issues]: https://github.com/launchdarkly/java-core/issues?q=is%3Aissue+is%3Aopen+label%3A%22package%3A+java-server-sdk%22+
+[server-sdk-maven-badge]: https://img.shields.io/maven-central/v/com.launchdarkly/launchdarkly-java-server-sdk
+[server-sdk-maven-link]: https://central.sonatype.com/artifact/com.launchdarkly/launchdarkly-java-server-sdk
+[server-sdk-ci-badge]: https://github.com/launchdarkly/java-core/actions/workflows/java-server-sdk.yml/badge.svg
+[server-sdk-ci-link]: https://github.com/launchdarkly/java-core/actions/workflows/java-server-sdk.yml
+[server-sdk-docs-badge]: https://img.shields.io/static/v1?label=GitHub+Pages&message=API+reference&color=00add8
+[server-sdk-docs-link]: https://launchdarkly.github.io/java-core/lib/sdk/server/
 
 [//]: # 'java-server-sdk-otel'
 [server-otel-issues]: https://github.com/launchdarkly/java-core/issues?q=is%3Aissue+is%3Aopen+label%3A%22package%3A+java-server-sdk-otel%22+

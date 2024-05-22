@@ -26,13 +26,6 @@ jobs:
           workspace_path: 'lib/sdk/server'
           java_version: ${{ matrix.javaversion }}
 
-      - name: Contract Tests
-      - uses: ./.github/actions/contract-tests
-        with:
-          service_project_file: pkgs/sdk/server/contract-tests/TestService.csproj
-          service_dll_file: pkgs/sdk/server/contract-tests/bin/debug/net6.0/ContractTestService.dll
-          token: ${{ secrets.GITHUB_TOKEN }}
-
   test-contract-tests:
     runs-on: ubuntu-latest
     steps:

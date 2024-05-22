@@ -12,6 +12,8 @@ jobs:
     outputs:
       package-server-sdk-otel-released: ${{ steps.release.outputs['lib/java-server-sdk-otel--release_created'] }}
       package-sdk-common-released: ${{ steps.release.outputs['lib/java-sdk-common--release_created'] }}
+      package-sdk-internal-released: ${{ steps.release.outputs['lib/java-sdk-internal--release_created'] }}
+      package-server-sdk-released: ${{ steps.release.outputs['lib/java-server-sdk--release_created'] }}
 
     steps:
       - uses: google-github-actions/release-please-action@v4
