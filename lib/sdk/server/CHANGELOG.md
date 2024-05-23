@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.5.0](https://github.com/launchdarkly/java-core/compare/v7.4.1...7.5.0) (2024-05-23)
+
+
+### Features
+
+* Introduce TestData#delete to simplify testing of flag deletion. ([#21](https://github.com/launchdarkly/java-core/issues/21)) ([388dd04](https://github.com/launchdarkly/java-core/commit/388dd04ea7698fc2d697e9794dc75e5e0d9e9b55))
+
 ## [7.4.1] - 2024-05-13
 ### Added:
 - Adds warning log if excessive start wait time is used.

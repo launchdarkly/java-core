@@ -2,5 +2,5 @@
   "lib/java-server-sdk-otel": "0.1.0",
   "lib/shared/common": "2.1.1",
   "lib/shared/internal": "1.3.0",
-  "lib/sdk/server": "7.4.1"
+  "lib/sdk/server": "7.5.0"
 }
