@@ -1,9 +1,5 @@
 import java.time.Duration
 
-// These values come from gradle.properties
-val ossrhUsername: String by project
-val ossrhPassword: String by project
-
 buildscript {
     repositories {
         mavenCentral()
@@ -92,10 +88,7 @@ nexusStaging {
 nexusPublishing {
     clientTimeout.set(Duration.ofMinutes(2)) // we've seen extremely long delays in creating repositories
     repositories {
-        sonatype {
-            username.set(ossrhUsername)
-            password.set(ossrhPassword)
-        }
+        sonatype {}
     }
 }
 

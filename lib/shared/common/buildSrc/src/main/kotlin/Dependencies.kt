@@ -9,7 +9,7 @@ object Versions {
 }
 
 object PluginVersions {
-    const val nexusPublish = "0.3.0"
+    const val nexusPublish = "1.3.0"
     const val nexusStaging = "0.30.0"
 }
 
@@ -61,7 +61,7 @@ object Libs {
     )
 
     val javaExtGradlePlugins = mapOf(
-        "de.marcphilipp.nexus-publish" to PluginVersions.nexusPublish,
+        "io.github.gradle-nexus.publish-plugin" to PluginVersions.nexusPublish,
         "io.codearte.nexus-staging" to PluginVersions.nexusStaging
     )
 }
