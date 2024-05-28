@@ -4,5 +4,5 @@ githubPassword = YOUR_GITHUB_PASSWORD
 signing.keyId = 5669D902
 signing.password = SIGNING_PASSWORD
 signing.secretKeyRingFile = SECRET_RING_FILE
-ossrhUsername = launchdarkly
-ossrhPassword = OSSHR_PASSWORD
+sonatypeUsername = launchdarkly
+sonatypePassword = OSSHR_PASSWORD

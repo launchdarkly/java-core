@@ -56,7 +56,7 @@ jobs:
 
       - name: Publish Maven Local
         shell: bash
-        run: lib/sdk/server/gradlew publishToMavenLocal -p lib/sdk/server -P LD_SKIP_SIGNING=1
+        run: lib/sdk/server/gradlew publishToMavenLocal -p lib/sdk/server -P skipSigning=true
 
       - name: Run Packaging Test
         shell: bash
