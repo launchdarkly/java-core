@@ -607,16 +607,8 @@ nexusPublishing {
 }
 
 signing {
+    required { findProperty("skipSigning") != "true" }
     sign publishing.publications.shadow
-}
-
-tasks.withType(Sign) { t ->
-    onlyIf { !shouldSkipSigning() } // so we can build jars for testing in CI
-}
-
-def shouldSkipSigning() {
-    return "1".equals(project.findProperty("LD_SKIP_SIGNING")) ||
-        "1".equals(System.getenv("LD_SKIP_SIGNING"))
 }
 
 // This task is used by the logic in ./packaging-test to get copies of all the direct and transitive
