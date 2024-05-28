@@ -115,7 +115,7 @@ test-pom: $(POM_XML)
 	@! grep '<dependency>' $< || (echo "    FAILED" && exit 1)
 
 $(SDK_DEFAULT_JAR) $(SDK_ALL_JAR) $(SDK_THIN_JAR) $(POM_XML):
-	cd .. && ./gradlew publishToMavenLocal -P version=$(LOCAL_VERSION) -P LD_SKIP_SIGNING=1
+	cd .. && ./gradlew publishToMavenLocal -P version=$(LOCAL_VERSION) -P skipSigning=true
 	@# publishToMavenLocal creates not only the jars but also the pom
 
 $(TEST_APP_JAR): $(SDK_THIN_JAR) $(TEST_APP_SOURCES) | $(TEMP_DIR)
