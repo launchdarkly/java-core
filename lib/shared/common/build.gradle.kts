@@ -80,11 +80,6 @@ publishing {
     }
 }
 
-nexusStaging {
-    packageGroup = ProjectValues.groupId
-    numberOfRetries = 40 // we've seen extremely long delays in closing repositories
-}
-
 nexusPublishing {
     clientTimeout.set(Duration.ofMinutes(2)) // we've seen extremely long delays in creating repositories
     repositories {
