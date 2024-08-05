@@ -13,7 +13,7 @@
 
 This version of the LaunchDarkly SDK works with Java 8 and above.
 
-## Distributions
+## Distributionss
 
 Two variants of the SDK jar are published to Maven:
 
