@@ -1,5 +1,6 @@
 package com.launchdarkly.sdk.server;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.logging.Logs;
@@ -31,6 +32,7 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 import com.launchdarkly.sdk.server.subsystems.EventProcessor;
 import com.launchdarkly.sdk.server.subsystems.HttpConfiguration;
+import com.launchdarkly.sdk.server.subsystems.Snapshot;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -313,6 +315,16 @@ public class TestComponents {
     public CacheStats getCacheStats() {
       return null;
     }
+
+    @Override
+    public boolean update(ImmutableList<Update> updates) {
+      return false;
+    }
+
+    @Override
+    public Snapshot getSnapshot() {
+      return null;
+    }
   }
   
   public static class DelegatingDataStore implements DataStore {
@@ -368,6 +380,16 @@ public class TestComponents {
     @Override
     public CacheStats getCacheStats() {
       return store.getCacheStats();
+    }
+
+    @Override
+    public boolean update(ImmutableList<Update> updates) {
+      return store.update(updates);
+    }
+
+    @Override
+    public Snapshot getSnapshot() {
+      return store.getSnapshot();
     }
   }
   

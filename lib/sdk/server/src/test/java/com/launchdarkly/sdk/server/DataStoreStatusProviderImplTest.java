@@ -1,5 +1,6 @@
 package com.launchdarkly.sdk.server;
 
+import com.google.common.collect.ImmutableList;
 import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider;
 import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider.CacheStats;
 import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider.Status;
@@ -9,6 +10,7 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 
+import com.launchdarkly.sdk.server.subsystems.Snapshot;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -119,6 +121,16 @@ public class DataStoreStatusProviderImplTest extends BaseTest {
     @Override
     public CacheStats getCacheStats() {
       return cacheStats;
+    }
+
+    @Override
+    public boolean update(ImmutableList<Update> updates) {
+      return false;
+    }
+
+    @Override
+    public Snapshot getSnapshot() {
+      return null;
     }
   }
 }

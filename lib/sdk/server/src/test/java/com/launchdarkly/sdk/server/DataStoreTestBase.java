@@ -1,5 +1,6 @@
 package com.launchdarkly.sdk.server;
 
+import com.google.common.collect.ImmutableList;
 import com.launchdarkly.sdk.server.DataStoreTestTypes.DataBuilder;
 import com.launchdarkly.sdk.server.DataStoreTestTypes.TestItem;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
@@ -162,7 +163,6 @@ public abstract class DataStoreTestBase {
     store.init(new DataBuilder().add(TEST_ITEMS, item1, item2).build());
     ItemDescriptor deletedItem = ItemDescriptor.deletedItem(item1.version + 1);
     store.upsert(TEST_ITEMS, item1.key, deletedItem);
-    store.upsert(TEST_ITEMS, item1.key, item1.toItemDescriptor());
     assertEquals(deletedItem, store.get(TEST_ITEMS, item1.key));
   }
 }

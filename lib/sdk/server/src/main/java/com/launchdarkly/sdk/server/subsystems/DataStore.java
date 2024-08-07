@@ -1,5 +1,6 @@
 package com.launchdarkly.sdk.server.subsystems;
 
+import com.google.common.collect.ImmutableList;
 import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider;
 import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider.CacheStats;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
@@ -20,7 +21,31 @@ import java.io.Closeable;
  *
  * @since 5.0.0
  */
-public interface DataStore extends Closeable {
+public interface DataStore extends Closeable, Snapshot {
+  public static class Update {
+    private DataKind kind;
+    private String key;
+    private ItemDescriptor item;
+
+    public Update(DataKind kind, String key, ItemDescriptor item) {
+      this.kind = kind;
+      this.key = key;
+      this.item = item;
+    }
+
+    public String getKey() {
+        return key;
+    }
+
+    public DataKind getKind() {
+        return kind;
+    }
+
+    public ItemDescriptor getItem() {
+        return item;
+    }
+  }
+
   /**
    * Overwrites the store's contents with a set of items for each collection.
    * <p>
@@ -104,4 +129,8 @@ public interface DataStore extends Closeable {
    * @return a cache statistics object, or null if not applicable
    */
   CacheStats getCacheStats();
+
+  boolean update(ImmutableList<Update> updates);
+
+  Snapshot getSnapshot();
 }

@@ -20,6 +20,7 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.SerializedItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreUpdateSink;
 import com.launchdarkly.sdk.server.subsystems.PersistentDataStore;
+import com.launchdarkly.sdk.server.subsystems.Snapshot;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -331,6 +332,16 @@ final class PersistentDataStoreWrapper implements DataStore {
         itemStats.loadExceptionCount() + allStats.loadExceptionCount(),
         itemStats.totalLoadTime() + allStats.totalLoadTime(),
         itemStats.evictionCount() + allStats.evictionCount());
+  }
+
+  @Override
+  public boolean update(ImmutableList<Update> updates) {
+    return false;
+  }
+
+  @Override
+  public Snapshot getSnapshot() {
+    return null;
   }
 
   private ItemDescriptor getAndDeserializeItem(DataKind kind, String key) {
