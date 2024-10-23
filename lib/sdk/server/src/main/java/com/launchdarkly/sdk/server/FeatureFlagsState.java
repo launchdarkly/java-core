@@ -211,7 +211,8 @@ public final class FeatureFlagsState implements JsonSerializable {
      * @param reason the evaluation reason
      * @param flagVersion the current flag version 
      * @param trackEvents true if full event tracking is turned on for this flag
-     * @param debugEventsUntilDate if set, event debugging is turned until this time (millisecond timestamp) 
+     * @param debugEventsUntilDate if set, event debugging is turned until this time (millisecond timestamp)
+     * @param prerequisites list of flag keys of the top level prerequisite flags evaluated as part of this evaluation
      * @return the builder
      */
     public Builder add(
@@ -243,9 +244,9 @@ public final class FeatureFlagsState implements JsonSerializable {
      * @param trackEvents true if full event tracking is turned on for this flag
      * @param trackReason true if evaluation reasons must be included due to experimentation
      * @param debugEventsUntilDate if set, event debugging is turned until this time (millisecond timestamp)
+     * @param prerequisites list of flag keys of the top level prerequisite flags evaluated as part of this evaluation
      * @return the builder
      */
-    // TODO: add param to docs
     public Builder add(
         String flagKey,
         LDValue value,
