@@ -676,14 +676,32 @@ public class LDClientEvaluationTest extends BaseTest {
     DataModel.FeatureFlag flag3 = flagBuilder("flagABC")
         .version(3)
         .on(true)
-        .variations(LDValue.of("x"), LDValue.of("value3"))
+        .variations(LDValue.of("off"), LDValue.of("value3"))
         .fallthrough(fallthroughVariation(0))
         .prerequisites(prerequisite("flagAB", 0))
+        .trackEvents(false)
+        .build();
+    DataModel.FeatureFlag flag4 = flagBuilder("flagAD")
+        .version(4)
+        .on(true)
+        .variations(LDValue.of("off"), LDValue.of("value4"))
+        .fallthrough(fallthroughVariation(0))
+        .prerequisites(prerequisite("flagA", 0))
+        .trackEvents(false)
+        .build();
+    DataModel.FeatureFlag flagTwoPrereqs = flagBuilder("flagTwoPrereqs")
+        .version(4)
+        .on(true)
+        .variations(LDValue.of("off"), LDValue.of("value5"))
+        .fallthrough(fallthroughVariation(0))
+        .prerequisites(prerequisite("flagA", 0), prerequisite("flagAB", 0))
         .trackEvents(false)
         .build();
     upsertFlag(dataStore, flag1);
     upsertFlag(dataStore, flag2);
     upsertFlag(dataStore, flag3);
+    upsertFlag(dataStore, flag4);
+    upsertFlag(dataStore, flagTwoPrereqs);
 
     FeatureFlagsState state = client.allFlagsState(context);
     assertTrue(state.isValid());
@@ -692,8 +710,12 @@ public class LDClientEvaluationTest extends BaseTest {
     String expectedPart1 = "{\"$flagsState\":{\"flagA\":{}}}";
     String expectedPart2 = "{\"$flagsState\":{\"flagAB\":{\"prerequisites\":[\"flagA\"]}}}";
     String expectedPart3 = "{\"$flagsState\":{\"flagABC\":{\"prerequisites\":[\"flagAB\"]}}}";
+    String expectedPart4 = "{\"$flagsState\":{\"flagAD\":{\"prerequisites\":[\"flagA\"]}}}";
+    String expectedPart5 = "{\"$flagsState\":{\"flagTwoPrereqs\":{\"prerequisites\":[\"flagA\",\"flagAB\"]}}}";
     assertJsonIncludes(expectedPart1, outputJson);
     assertJsonIncludes(expectedPart2, outputJson);
     assertJsonIncludes(expectedPart3, outputJson);
+    assertJsonIncludes(expectedPart4, outputJson);
+    assertJsonIncludes(expectedPart5, outputJson);
   }
 }

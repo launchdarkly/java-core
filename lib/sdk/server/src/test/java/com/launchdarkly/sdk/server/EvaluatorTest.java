@@ -9,8 +9,6 @@ import com.launchdarkly.sdk.server.DataModel.Rollout;
 import com.launchdarkly.sdk.server.DataModel.RolloutKind;
 import com.launchdarkly.sdk.server.DataModel.VariationOrRollout;
 import com.launchdarkly.sdk.server.DataModel.WeightedVariation;
-import com.launchdarkly.sdk.server.EvaluatorTestUtil.PrereqEval;
-import com.launchdarkly.sdk.server.EvaluatorTestUtil.PrereqRecorder;
 
 import org.junit.Test;
 
@@ -298,14 +296,13 @@ public class EvaluatorTest extends EvaluatorTestBase {
         // note that even though it returns the desired variation, it is still off and therefore not a match
         .build();
     Evaluator e = evaluatorBuilder().withStoredFlags(f1).build();
-    PrereqRecorder recordPrereqs = new PrereqRecorder();
-    EvalResult result = e.evaluate(f0, BASE_USER, recordPrereqs);
+    EvalResult result = e.evaluate(f0, BASE_USER, new EvaluationRecorder(){});
     
     EvaluationReason expectedReason = EvaluationReason.prerequisiteFailed("feature1");
     assertEquals(EvalResult.of(OFF_VALUE, OFF_VARIATION, expectedReason), result);
     
-    assertEquals(1, Iterables.size(recordPrereqs.evals));
-    PrereqEval eval = recordPrereqs.evals.get(0);
+    assertEquals(1, Iterables.size(result.getPrerequisiteEvalRecords()));
+    PrerequisiteEvalRecord eval = result.getPrerequisiteEvalRecords().get(0);
     assertEquals(f1, eval.flag);
     assertEquals(f0, eval.prereqOfFlag);
     assertEquals(GREEN_VARIATION, eval.result.getVariationIndex());
@@ -323,14 +320,13 @@ public class EvaluatorTest extends EvaluatorTestBase {
         .fallthroughVariation(RED_VARIATION)
         .build();
     Evaluator e = evaluatorBuilder().withStoredFlags(f1).build();
-    PrereqRecorder recordPrereqs = new PrereqRecorder();
-    EvalResult result = e.evaluate(f0, BASE_USER, recordPrereqs);
+    EvalResult result = e.evaluate(f0, BASE_USER,  new EvaluationRecorder(){});
     
     EvaluationReason expectedReason = EvaluationReason.prerequisiteFailed("feature1");
     assertEquals(EvalResult.of(OFF_VALUE, OFF_VARIATION, expectedReason), result);
     
-    assertEquals(1, Iterables.size(recordPrereqs.evals));
-    PrereqEval eval = recordPrereqs.evals.get(0);
+    assertEquals(1, Iterables.size(result.getPrerequisiteEvalRecords()));
+    PrerequisiteEvalRecord eval = result.getPrerequisiteEvalRecords().get(0);
     assertEquals(f1, eval.flag);
     assertEquals(f0, eval.prereqOfFlag);
     assertEquals(RED_VARIATION, eval.result.getVariationIndex());
@@ -385,13 +381,12 @@ public class EvaluatorTest extends EvaluatorTestBase {
         .version(2)
         .build();
     Evaluator e = evaluatorBuilder().withStoredFlags(f1).build();
-    PrereqRecorder recordPrereqs = new PrereqRecorder();
-    EvalResult result = e.evaluate(f0, BASE_USER, recordPrereqs);
+    EvalResult result = e.evaluate(f0, BASE_USER, new EvaluationRecorder(){});
     
     assertEquals(EvalResult.of(FALLTHROUGH_VALUE, FALLTHROUGH_VARIATION, EvaluationReason.fallthrough()), result);
 
-    assertEquals(1, Iterables.size(recordPrereqs.evals));
-    PrereqEval eval = recordPrereqs.evals.get(0);
+    assertEquals(1, Iterables.size(result.getPrerequisiteEvalRecords()));
+    PrerequisiteEvalRecord eval = result.getPrerequisiteEvalRecords().get(0);
     assertEquals(f1, eval.flag);
     assertEquals(f0, eval.prereqOfFlag);
     assertEquals(GREEN_VARIATION, eval.result.getVariationIndex());
@@ -414,20 +409,19 @@ public class EvaluatorTest extends EvaluatorTestBase {
         .fallthroughVariation(GREEN_VARIATION)
         .build();
     Evaluator e = evaluatorBuilder().withStoredFlags(f1, f2).build();
-    PrereqRecorder recordPrereqs = new PrereqRecorder();
-    EvalResult result = e.evaluate(f0, BASE_USER, recordPrereqs);
+    EvalResult result = e.evaluate(f0, BASE_USER, new EvaluationRecorder(){});
     
     assertEquals(EvalResult.of(FALLTHROUGH_VALUE, FALLTHROUGH_VARIATION, EvaluationReason.fallthrough()), result);
 
-    assertEquals(2, Iterables.size(recordPrereqs.evals));
+    assertEquals(2, Iterables.size(result.getPrerequisiteEvalRecords()));
     
-    PrereqEval eval0 = recordPrereqs.evals.get(0);
+    PrerequisiteEvalRecord eval0 = result.getPrerequisiteEvalRecords().get(0);
     assertEquals(f2, eval0.flag);
     assertEquals(f1, eval0.prereqOfFlag);
     assertEquals(GREEN_VARIATION, eval0.result.getVariationIndex());
     assertEquals(GREEN_VALUE, eval0.result.getValue());
 
-    PrereqEval eval1 = recordPrereqs.evals.get(1);
+    PrerequisiteEvalRecord eval1 = result.getPrerequisiteEvalRecords().get(1);
     assertEquals(f1, eval1.flag);
     assertEquals(f0, eval1.prereqOfFlag);
     assertEquals(GREEN_VARIATION, eval1.result.getVariationIndex());

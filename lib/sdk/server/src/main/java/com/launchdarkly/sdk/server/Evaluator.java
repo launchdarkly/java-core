@@ -122,7 +122,7 @@ class Evaluator {
     private EvaluationReason.BigSegmentsStatus bigSegmentsStatus = null;
     private FeatureFlag originalFlag = null;
     private List<String> prerequisiteStack = null;
-    private List<PrerequisiteEvalRecord> prerequisiteEvalRecords =  null;
+    private List<PrerequisiteEvalRecord> prerequisiteEvalRecords =  new ArrayList<>(0); // 0 initial capacity uses a static instance for performance
     private List<String> segmentStack = null;
   }
 
@@ -146,8 +146,6 @@ class Evaluator {
 
     EvaluatorState state = new EvaluatorState();
     state.originalFlag = flag;
-    // allocate list capacity to avoid size increase during evaluation
-    state.prerequisiteEvalRecords = new ArrayList<>(); // TODO: optimize when this is used, shouldn't allocate for flag with no prereqs
 
     try {
       EvalResult result = evaluateInternal(flag, context, recorder, state);
@@ -158,8 +156,6 @@ class Evaluator {
         );
       }
 
-      // TODO: these changes have reduced throughput, can we optimize this a bit.  Perhaps by calling constructor
-      // with all parameters instead of using multiple calls in this immutable style
       if (state.prerequisiteEvalRecords != null && !state.prerequisiteEvalRecords.isEmpty()) {
         result = result.withPrerequisiteEvalRecords(state.prerequisiteEvalRecords);
       }

@@ -177,8 +177,9 @@ public class FeatureFlagsStateTest {
   
   @Test
   public void canConvertFromJson() throws SerializationException {
+    FeatureFlagsState expectedState = makeInstanceForSerialization();
     FeatureFlagsState state = JsonSerialization.deserialize(makeExpectedJsonSerialization(), FeatureFlagsState.class);
-    assertEquals(makeInstanceForSerialization(), state);
+    assertEquals(expectedState, state);
   }
   
   private static FeatureFlagsState makeInstanceForSerialization() {

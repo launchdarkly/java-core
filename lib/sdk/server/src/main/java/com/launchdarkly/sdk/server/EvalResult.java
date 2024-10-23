@@ -6,6 +6,7 @@ import com.launchdarkly.sdk.EvaluationReason.ErrorKind;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.LDValueType;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -34,7 +35,7 @@ final class EvalResult {
   private final boolean forceReasonTracking;
 
   // A list of prerequisites evaluation records evaluated as part of obtaining this result.
-  private List<PrerequisiteEvalRecord> prerequisiteEvalRecords;
+  private List<PrerequisiteEvalRecord> prerequisiteEvalRecords = new ArrayList<>(0); // 0 initial capacity uses a static instance for performance
 
   /**
    * Constructs an instance that wraps the specified EvaluationDetail and also precomputes

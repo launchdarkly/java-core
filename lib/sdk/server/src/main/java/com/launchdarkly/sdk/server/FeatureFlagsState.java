@@ -12,6 +12,7 @@ import com.launchdarkly.sdk.json.JsonSerializable;
 import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -284,7 +285,7 @@ public final class FeatureFlagsState implements JsonSerializable {
           flag.isTrackEvents() || eval.isForceReasonTracking(),
           eval.isForceReasonTracking(),
           flag.getDebugEventsUntilDate(),
-          eval.getPrerequisiteEvalRecords() == null ? null : eval.getPrerequisiteEvalRecords().stream()
+          eval.getPrerequisiteEvalRecords().stream()
               .filter(record -> record.prereqOfFlag.getKey() == flag.getKey())  // only include top level prereqs
               .map(record -> record.flag.getKey()) // map from prereq record to prereq key
               .collect(Collectors.toList())
@@ -399,7 +400,7 @@ public final class FeatureFlagsState implements JsonSerializable {
               m0.trackEvents,
               m0.trackReason,
               m0.debugEventsUntilDate,
-              m0.prerequisites);
+              m0.prerequisites != null ? m0.prerequisites : new ArrayList<>(0));
           allFlagMetadata.put(e.getKey(), m1);
         }
       }
