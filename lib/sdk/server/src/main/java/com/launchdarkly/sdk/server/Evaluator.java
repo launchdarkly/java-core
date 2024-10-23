@@ -122,6 +122,7 @@ class Evaluator {
     private EvaluationReason.BigSegmentsStatus bigSegmentsStatus = null;
     private FeatureFlag originalFlag = null;
     private List<String> prerequisiteStack = null;
+    private List<PrerequisiteEvalRecord> prerequisiteEvalRecords =  null;
     private List<String> segmentStack = null;
   }
 
@@ -145,15 +146,24 @@ class Evaluator {
 
     EvaluatorState state = new EvaluatorState();
     state.originalFlag = flag;
+    // allocate list capacity to avoid size increase during evaluation
+    state.prerequisiteEvalRecords = new ArrayList<>(); // TODO: optimize when this is used, shouldn't allocate for flag with no prereqs
 
     try {
       EvalResult result = evaluateInternal(flag, context, recorder, state);
 
       if (state.bigSegmentsStatus != null) {
-        return result.withReason(
+        result = result.withReason(
             result.getReason().withBigSegmentsStatus(state.bigSegmentsStatus)
         );
       }
+
+      // TODO: these changes have reduced throughput, can we optimize this a bit.  Perhaps by calling constructor
+      // with all parameters instead of using multiple calls in this immutable style
+      if (state.prerequisiteEvalRecords != null && !state.prerequisiteEvalRecords.isEmpty()) {
+        result = result.withPrerequisiteEvalRecords(state.prerequisiteEvalRecords);
+      }
+
       return result;
     } catch (EvaluationException e) {
       logger.error("Could not evaluate flag \"{}\": {}", flag.getKey(), e.getMessage());
@@ -161,6 +171,15 @@ class Evaluator {
     }
   }
 
+  /**
+   * Internal evaluation function that may be called multiple times during a flag evaluation.
+   *
+   * @param flag that to evaluate
+   * @param context to use for evaluation
+   * @param recorder that will be used to record evaluation events
+   * @param state for mutable values needed during evaluation
+   * @return the evaluation result
+   */
   private EvalResult evaluateInternal(FeatureFlag flag, LDContext context, @Nonnull EvaluationRecorder recorder, EvaluatorState state) {
     if (!flag.isOn()) {
       return EvaluatorHelpers.offResult(flag);
@@ -237,6 +256,7 @@ class Evaluator {
           if (!prereqFeatureFlag.isOn() || prereqEvalResult.getVariationIndex() != prereq.getVariation()) {
             prereqOk = false;
           }
+          state.prerequisiteEvalRecords.add(new PrerequisiteEvalRecord(prereqFeatureFlag, flag, prereqEvalResult));
           recorder.recordPrerequisiteEvaluation(prereqFeatureFlag, flag, context, prereqEvalResult);
         }
         if (!prereqOk) {

@@ -6,6 +6,9 @@ import com.launchdarkly.sdk.EvaluationReason.ErrorKind;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.LDValueType;
 
+import java.util.Collections;
+import java.util.List;
+
 import static com.launchdarkly.sdk.EvaluationDetail.NO_VARIATION;
 
 /**
@@ -29,6 +32,9 @@ final class EvalResult {
   private final EvaluationDetail<Double> asDouble;
   private final EvaluationDetail<String> asString;
   private final boolean forceReasonTracking;
+
+  // A list of prerequisites evaluation records evaluated as part of obtaining this result.
+  private List<PrerequisiteEvalRecord> prerequisiteEvalRecords;
 
   /**
    * Constructs an instance that wraps the specified EvaluationDetail and also precomputes
@@ -100,6 +106,7 @@ final class EvalResult {
     this.asDouble = transformReason(from.asDouble, newReason);
     this.asString = transformReason(from.asString, newReason);
     this.forceReasonTracking = from.forceReasonTracking;
+    this.prerequisiteEvalRecords = from.prerequisiteEvalRecords;
   }
   
   private EvalResult(EvalResult from, boolean newForceTracking) {
@@ -109,6 +116,17 @@ final class EvalResult {
     this.asDouble = from.asDouble;
     this.asString = from.asString;
     this.forceReasonTracking = newForceTracking;
+    this.prerequisiteEvalRecords = from.prerequisiteEvalRecords;
+  }
+
+  private EvalResult(EvalResult from, List<PrerequisiteEvalRecord> prerequisiteEvalRecords) {
+    this.anyType = from.anyType;
+    this.asBoolean = from.asBoolean;
+    this.asInteger = from.asInteger;
+    this.asDouble = from.asDouble;
+    this.asString = from.asString;
+    this.forceReasonTracking = from.forceReasonTracking;
+    this.prerequisiteEvalRecords = prerequisiteEvalRecords;
   }
   
   /**
@@ -208,6 +226,8 @@ final class EvalResult {
    * @return true if reason tracking is required for this result
    */
   public boolean isForceReasonTracking() { return forceReasonTracking; }
+
+  public List<PrerequisiteEvalRecord> getPrerequisiteEvalRecords() { return prerequisiteEvalRecords; }
   
   /**
    * Returns a transformed copy of this EvalResult with a different evaluation reason.
@@ -225,6 +245,10 @@ final class EvalResult {
    */
   public EvalResult withForceReasonTracking(boolean newValue) {
     return this.forceReasonTracking == newValue ? this : new EvalResult(this, newValue);
+  }
+
+  public EvalResult withPrerequisiteEvalRecords(List<PrerequisiteEvalRecord> newValue) {
+    return this.prerequisiteEvalRecords == newValue ? this : new EvalResult(this, newValue);
   }
   
   @Override
