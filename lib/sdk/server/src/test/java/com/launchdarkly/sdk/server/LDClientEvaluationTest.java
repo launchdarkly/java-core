@@ -26,6 +26,7 @@ import static com.launchdarkly.sdk.server.ModelBuilders.clauseMatchingSegment;
 import static com.launchdarkly.sdk.server.ModelBuilders.fallthroughVariation;
 import static com.launchdarkly.sdk.server.ModelBuilders.flagBuilder;
 import static com.launchdarkly.sdk.server.ModelBuilders.flagWithValue;
+import static com.launchdarkly.sdk.server.ModelBuilders.prerequisite;
 import static com.launchdarkly.sdk.server.ModelBuilders.segmentBuilder;
 import static com.launchdarkly.sdk.server.TestComponents.dataStoreThatThrowsException;
 import static com.launchdarkly.sdk.server.TestComponents.failedDataSource;
@@ -34,6 +35,7 @@ import static com.launchdarkly.sdk.server.TestComponents.specificComponent;
 import static com.launchdarkly.sdk.server.TestUtil.upsertFlag;
 import static com.launchdarkly.sdk.server.TestUtil.upsertSegment;
 import static com.launchdarkly.testhelpers.JsonAssertions.assertJsonEquals;
+import static com.launchdarkly.testhelpers.JsonAssertions.assertJsonIncludes;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -652,5 +654,68 @@ public class LDClientEvaluationTest extends BaseTest {
       FeatureFlagsState state = client.allFlagsState(context);
       assertFalse(state.isValid());
     }
+  }
+
+  @Test
+  public void allFlagStateIncludesPrerequisites() throws Exception {
+    DataModel.FeatureFlag flag1 = flagBuilder("flagA")
+        .version(1)
+        .on(true)
+        .variations(LDValue.of("off"), LDValue.of("value1"))
+        .fallthrough(fallthroughVariation(0))
+        .trackEvents(false)
+        .build();
+    DataModel.FeatureFlag flag2 = flagBuilder("flagAB")
+        .version(2)
+        .on(true)
+        .variations(LDValue.of("off"), LDValue.of("value2"))
+        .fallthrough(fallthroughVariation(0))
+        .prerequisites(prerequisite("flagA", 0))
+        .trackEvents(false)
+        .build();
+    DataModel.FeatureFlag flag3 = flagBuilder("flagABC")
+        .version(3)
+        .on(true)
+        .variations(LDValue.of("off"), LDValue.of("value3"))
+        .fallthrough(fallthroughVariation(0))
+        .prerequisites(prerequisite("flagAB", 0))
+        .trackEvents(false)
+        .build();
+    DataModel.FeatureFlag flag4 = flagBuilder("flagAD")
+        .version(4)
+        .on(true)
+        .variations(LDValue.of("off"), LDValue.of("value4"))
+        .fallthrough(fallthroughVariation(0))
+        .prerequisites(prerequisite("flagA", 0))
+        .trackEvents(false)
+        .build();
+    DataModel.FeatureFlag flagTwoPrereqs = flagBuilder("flagTwoPrereqs")
+        .version(4)
+        .on(true)
+        .variations(LDValue.of("off"), LDValue.of("value5"))
+        .fallthrough(fallthroughVariation(0))
+        .prerequisites(prerequisite("flagA", 0), prerequisite("flagAB", 0))
+        .trackEvents(false)
+        .build();
+    upsertFlag(dataStore, flag1);
+    upsertFlag(dataStore, flag2);
+    upsertFlag(dataStore, flag3);
+    upsertFlag(dataStore, flag4);
+    upsertFlag(dataStore, flagTwoPrereqs);
+
+    FeatureFlagsState state = client.allFlagsState(context);
+    assertTrue(state.isValid());
+
+    String outputJson = gson.toJson(state);
+    String expectedPart1 = "{\"$flagsState\":{\"flagA\":{}}}";
+    String expectedPart2 = "{\"$flagsState\":{\"flagAB\":{\"prerequisites\":[\"flagA\"]}}}";
+    String expectedPart3 = "{\"$flagsState\":{\"flagABC\":{\"prerequisites\":[\"flagAB\"]}}}";
+    String expectedPart4 = "{\"$flagsState\":{\"flagAD\":{\"prerequisites\":[\"flagA\"]}}}";
+    String expectedPart5 = "{\"$flagsState\":{\"flagTwoPrereqs\":{\"prerequisites\":[\"flagA\",\"flagAB\"]}}}";
+    assertJsonIncludes(expectedPart1, outputJson);
+    assertJsonIncludes(expectedPart2, outputJson);
+    assertJsonIncludes(expectedPart3, outputJson);
+    assertJsonIncludes(expectedPart4, outputJson);
+    assertJsonIncludes(expectedPart5, outputJson);
   }
 }

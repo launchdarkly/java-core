@@ -12,9 +12,12 @@ import com.launchdarkly.sdk.json.JsonSerializable;
 import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 import static com.launchdarkly.sdk.server.JsonHelpers.gsonInstanceWithNullsAllowed;
 
@@ -48,9 +51,10 @@ public final class FeatureFlagsState implements JsonSerializable {
     final boolean trackEvents;
     final boolean trackReason;
     final Long debugEventsUntilDate;
+    final List<String> prerequisites;
     
     FlagMetadata(LDValue value, Integer variation, EvaluationReason reason, Integer version,
-        boolean trackEvents, boolean trackReason, Long debugEventsUntilDate) {
+                 boolean trackEvents, boolean trackReason, Long debugEventsUntilDate, List<String> prerequisites) {
       this.value = LDValue.normalize(value);
       this.variation = variation;
       this.reason = reason;
@@ -58,8 +62,9 @@ public final class FeatureFlagsState implements JsonSerializable {
       this.trackEvents = trackEvents;
       this.trackReason = trackReason;
       this.debugEventsUntilDate = debugEventsUntilDate;
+      this.prerequisites = prerequisites;
     }
-    
+
     @Override
     public boolean equals(Object other) {
       if (other instanceof FlagMetadata) {
@@ -70,14 +75,15 @@ public final class FeatureFlagsState implements JsonSerializable {
             Objects.equals(version, o.version) &&
             trackEvents == o.trackEvents &&
             trackReason == o.trackReason &&
-            Objects.equals(debugEventsUntilDate, o.debugEventsUntilDate);
+            Objects.equals(debugEventsUntilDate, o.debugEventsUntilDate) &&
+            Objects.equals(prerequisites, o.prerequisites);
       }
       return false;
     }
-    
+
     @Override
     public int hashCode() {
-      return Objects.hash(variation, version, trackEvents, trackReason, debugEventsUntilDate);
+      return Objects.hash(value, variation, reason, version, trackEvents, trackReason, debugEventsUntilDate, prerequisites);
     }
   }
   
@@ -206,7 +212,8 @@ public final class FeatureFlagsState implements JsonSerializable {
      * @param reason the evaluation reason
      * @param flagVersion the current flag version 
      * @param trackEvents true if full event tracking is turned on for this flag
-     * @param debugEventsUntilDate if set, event debugging is turned until this time (millisecond timestamp) 
+     * @param debugEventsUntilDate if set, event debugging is turned until this time (millisecond timestamp)
+     * @param prerequisites list of flag keys of the top level prerequisite flags evaluated as part of this evaluation
      * @return the builder
      */
     public Builder add(
@@ -216,9 +223,10 @@ public final class FeatureFlagsState implements JsonSerializable {
         EvaluationReason reason,
         int flagVersion,
         boolean trackEvents,
-        Long debugEventsUntilDate
+        Long debugEventsUntilDate,
+        List<String> prerequisites
         ) {
-      return add(flagKey, value, variationIndex, reason, flagVersion, trackEvents, false, debugEventsUntilDate);
+      return add(flagKey, value, variationIndex, reason, flagVersion, trackEvents, false, debugEventsUntilDate, prerequisites);
     }
     
     /**
@@ -236,7 +244,8 @@ public final class FeatureFlagsState implements JsonSerializable {
      * @param flagVersion the current flag version
      * @param trackEvents true if full event tracking is turned on for this flag
      * @param trackReason true if evaluation reasons must be included due to experimentation
-     * @param debugEventsUntilDate if set, event debugging is turned until this time (millisecond timestamp) 
+     * @param debugEventsUntilDate if set, event debugging is turned until this time (millisecond timestamp)
+     * @param prerequisites list of flag keys of the top level prerequisite flags evaluated as part of this evaluation
      * @return the builder
      */
     public Builder add(
@@ -247,7 +256,8 @@ public final class FeatureFlagsState implements JsonSerializable {
         int flagVersion,
         boolean trackEvents,
         boolean trackReason,
-        Long debugEventsUntilDate
+        Long debugEventsUntilDate,
+        List<String> prerequisites
         ) {
       final boolean flagIsTracked = trackEvents ||
           (debugEventsUntilDate != null && debugEventsUntilDate > System.currentTimeMillis());
@@ -259,8 +269,8 @@ public final class FeatureFlagsState implements JsonSerializable {
           wantDetails ? Integer.valueOf(flagVersion) : null,
           trackEvents,
           trackReason,
-          debugEventsUntilDate
-          );
+          debugEventsUntilDate,
+          prerequisites);
       flagMetadata.put(flagKey, data);
       return this;
     }
@@ -274,7 +284,11 @@ public final class FeatureFlagsState implements JsonSerializable {
           flag.getVersion(),
           flag.isTrackEvents() || eval.isForceReasonTracking(),
           eval.isForceReasonTracking(),
-          flag.getDebugEventsUntilDate()
+          flag.getDebugEventsUntilDate(),
+          eval.getPrerequisiteEvalRecords().stream()
+              .filter(record -> record.prereqOfFlag.getKey() == flag.getKey())  // only include top level prereqs
+              .map(record -> record.flag.getKey()) // map from prereq record to prereq key
+              .collect(Collectors.toList())
           );
     }
     
@@ -331,6 +345,14 @@ public final class FeatureFlagsState implements JsonSerializable {
           out.name("debugEventsUntilDate");
           out.value(meta.debugEventsUntilDate.longValue());
         }
+        if (meta.prerequisites != null && !meta.prerequisites.isEmpty()) {
+          out.name("prerequisites");
+          out.beginArray();
+          for (String s: meta.prerequisites) {
+            out.value(s);
+          }
+          out.endArray();
+        }
         out.endObject();
       }
       out.endObject();
@@ -377,8 +399,8 @@ public final class FeatureFlagsState implements JsonSerializable {
               m0.version,
               m0.trackEvents,
               m0.trackReason,
-              m0.debugEventsUntilDate
-              );
+              m0.debugEventsUntilDate,
+              m0.prerequisites != null ? m0.prerequisites : new ArrayList<>(0));
           allFlagMetadata.put(e.getKey(), m1);
         }
       }

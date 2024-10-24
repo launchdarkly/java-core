@@ -122,6 +122,7 @@ class Evaluator {
     private EvaluationReason.BigSegmentsStatus bigSegmentsStatus = null;
     private FeatureFlag originalFlag = null;
     private List<String> prerequisiteStack = null;
+    private List<PrerequisiteEvalRecord> prerequisiteEvalRecords =  new ArrayList<>(0); // 0 initial capacity uses a static instance for performance
     private List<String> segmentStack = null;
   }
 
@@ -150,10 +151,15 @@ class Evaluator {
       EvalResult result = evaluateInternal(flag, context, recorder, state);
 
       if (state.bigSegmentsStatus != null) {
-        return result.withReason(
+        result = result.withReason(
             result.getReason().withBigSegmentsStatus(state.bigSegmentsStatus)
         );
       }
+
+      if (state.prerequisiteEvalRecords != null && !state.prerequisiteEvalRecords.isEmpty()) {
+        result = result.withPrerequisiteEvalRecords(state.prerequisiteEvalRecords);
+      }
+
       return result;
     } catch (EvaluationException e) {
       logger.error("Could not evaluate flag \"{}\": {}", flag.getKey(), e.getMessage());
@@ -161,6 +167,15 @@ class Evaluator {
     }
   }
 
+  /**
+   * Internal evaluation function that may be called multiple times during a flag evaluation.
+   *
+   * @param flag that to evaluate
+   * @param context to use for evaluation
+   * @param recorder that will be used to record evaluation events
+   * @param state for mutable values needed during evaluation
+   * @return the evaluation result
+   */
   private EvalResult evaluateInternal(FeatureFlag flag, LDContext context, @Nonnull EvaluationRecorder recorder, EvaluatorState state) {
     if (!flag.isOn()) {
       return EvaluatorHelpers.offResult(flag);
@@ -237,6 +252,7 @@ class Evaluator {
           if (!prereqFeatureFlag.isOn() || prereqEvalResult.getVariationIndex() != prereq.getVariation()) {
             prereqOk = false;
           }
+          state.prerequisiteEvalRecords.add(new PrerequisiteEvalRecord(prereqFeatureFlag, flag, prereqEvalResult));
           recorder.recordPrerequisiteEvaluation(prereqFeatureFlag, flag, context, prereqEvalResult);
         }
         if (!prereqOk) {

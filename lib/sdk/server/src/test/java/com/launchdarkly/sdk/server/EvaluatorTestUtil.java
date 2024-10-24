@@ -137,28 +137,4 @@ public abstract class EvaluatorTestUtil {
       }
     };
   }
-  
-  public static final class PrereqEval {
-    public final FeatureFlag flag;
-    public final FeatureFlag prereqOfFlag;
-    public final LDContext context;
-    public final EvalResult result;
-    
-    public PrereqEval(FeatureFlag flag, FeatureFlag prereqOfFlag, LDContext context, EvalResult result) {
-      this.flag = flag;
-      this.prereqOfFlag = prereqOfFlag;
-      this.context = context;
-      this.result = result;
-    }
-  }
-  
-  public static final class PrereqRecorder implements EvaluationRecorder {
-    public final List<PrereqEval> evals = new ArrayList<>();
-
-    @Override
-    public void recordPrerequisiteEvaluation(FeatureFlag flag, FeatureFlag prereqOfFlag, LDContext context,
-        EvalResult result) {
-      evals.add(new PrereqEval(flag, prereqOfFlag, context, result));
-    }
-  }
 }
