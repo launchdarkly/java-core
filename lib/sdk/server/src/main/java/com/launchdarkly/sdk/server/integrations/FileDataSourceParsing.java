@@ -73,17 +73,23 @@ abstract class FileDataSourceParsing {
 
   static abstract class FlagFileParser {
     static class JsonParserHolder {
-      static final FlagFileParser INSTANCE = new JsonFlagFileParser();
+      private static final JsonFlagFileParser INSTANCE = new JsonFlagFileParser();
+      static JsonFlagFileParser getInstance() {
+        return INSTANCE;
+      }
     }
     static class YamlParserHolder {
-      static final FlagFileParser INSTANCE = new YamlFlagFileParser();
+      private static final YamlFlagFileParser INSTANCE = new YamlFlagFileParser();
+      static YamlFlagFileParser getInstance() {
+        return INSTANCE;
+      }
     }
   
     public abstract FlagFileRep parse(InputStream input) throws FileDataException, IOException;
     
     public static FlagFileParser selectForContent(byte[] data) {
       Reader r = new InputStreamReader(new ByteArrayInputStream(data));
-      return detectJson(r) ? JsonParserHolder.INSTANCE : YamlParserHolder.INSTANCE;
+      return detectJson(r) ? JsonParserHolder.getInstance() : YamlParserHolder.getInstance();
     }
     
     private static boolean detectJson(Reader r) {
