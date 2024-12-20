@@ -22,8 +22,6 @@ plugins {
     id "com.github.johnrengelman.shadow" version "7.1.2"
     id "maven-publish"
     id "io.github.gradle-nexus.publish-plugin" version "1.3.0" apply false
-    id "io.codearte.nexus-staging" version "0.21.2"
-    id "org.ajoberstar.git-publish" version "2.1.3"
     id "idea"
 }
 
@@ -546,11 +544,6 @@ idea {
     }
 }
 
-nexusStaging {
-    packageGroup = "com.launchdarkly"
-    numberOfRetries = 40 // we've seen extremely long delays in closing repositories
-}
-
 def pomConfig = {
     name 'LaunchDarkly SDK for Java'
     packaging 'jar'
@@ -622,19 +615,4 @@ signing {
 task exportDependencies(type: Copy, dependsOn: compileJava) {
     into "packaging-test/temp/dependencies-all"
     from (configurations.internal.resolvedConfiguration.resolvedArtifacts.collect { it.file })
-}
-
-gitPublish {
-    repoUri = 'git@github.com:launchdarkly/java-server-sdk.git'
-    branch = 'gh-pages'
-    contents {
-        from javadoc
-    }
-    preserve {
-        // There's a dummy .circleci/config.yml file on the gh-pages branch so CircleCI won't
-        // complain when it sees a commit there. The git-publish plugin would delete that file if
-        // we didn't protect it here.
-        include '.circleci/config.yml'
-    }
-    commitMessage = 'publishing javadocs'
 }

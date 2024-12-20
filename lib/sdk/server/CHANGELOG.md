@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.6.0](https://github.com/launchdarkly/java-core/compare/7.5.0...7.6.0) (2024-10-24)
+
+
+### Features
+
+* Adds support for client side prerequisite events. ([#39](https://github.com/launchdarkly/java-core/issues/39)) ([e9ea4df](https://github.com/launchdarkly/java-core/commit/e9ea4df35df710da6ed38219d3c14350cfea2f94))
+
 ## [7.5.0](https://github.com/launchdarkly/java-core/compare/v7.4.1...7.5.0) (2024-05-23)
 
 

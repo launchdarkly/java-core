@@ -12,6 +12,7 @@ import com.launchdarkly.testhelpers.TypeBehavior;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import static com.launchdarkly.sdk.EvaluationDetail.NO_VARIATION;
@@ -30,7 +31,7 @@ public class FeatureFlagsStateTest {
   @Test
   public void canGetFlagValue() {
     FeatureFlagsState state = FeatureFlagsState.builder()
-        .add("key", LDValue.of("value"), 1, null, 10, false, null)
+        .add("key", LDValue.of("value"), 1, null, 10, false, null, null)
         .build();
     
     assertEquals(LDValue.of("value"), state.getFlagValue("key"));
@@ -46,7 +47,7 @@ public class FeatureFlagsStateTest {
   @Test
   public void canGetFlagReason() {
     FeatureFlagsState state = FeatureFlagsState.builder(WITH_REASONS)
-        .add("key", LDValue.of("value"), 1, EvaluationReason.off(), 10, false, null)
+        .add("key", LDValue.of("value"), 1, EvaluationReason.off(), 10, false, null, null)
         .build();
     
     assertEquals(EvaluationReason.off(), state.getFlagReason("key"));
@@ -62,7 +63,7 @@ public class FeatureFlagsStateTest {
   @Test
   public void reasonIsNullIfReasonsWereNotRecorded() {
     FeatureFlagsState state = FeatureFlagsState.builder()
-        .add("key", LDValue.of("value"), 1, EvaluationReason.off(), 10, false, null)
+        .add("key", LDValue.of("value"), 1, EvaluationReason.off(), 10, false, null, null)
         .build();
     
     assertNull(state.getFlagReason("key"));
@@ -71,7 +72,7 @@ public class FeatureFlagsStateTest {
   @Test
   public void flagIsTreatedAsTrackedIfDebugEventsUntilDateIsInFuture() {
     FeatureFlagsState state = FeatureFlagsState.builder(WITH_REASONS, DETAILS_ONLY_FOR_TRACKED_FLAGS)
-        .add("key", LDValue.of("value"), 1, EvaluationReason.off(), 10, false, System.currentTimeMillis() + 1000000)
+        .add("key", LDValue.of("value"), 1, EvaluationReason.off(), 10, false, System.currentTimeMillis() + 1000000, null)
         .build();
     
     assertNotNull(state.getFlagReason("key"));
@@ -80,7 +81,7 @@ public class FeatureFlagsStateTest {
   @Test
   public void flagIsNotTreatedAsTrackedIfDebugEventsUntilDateIsInPast() {
     FeatureFlagsState state = FeatureFlagsState.builder(WITH_REASONS, DETAILS_ONLY_FOR_TRACKED_FLAGS)
-        .add("key", LDValue.of("value"), 1, EvaluationReason.off(), 10, false, System.currentTimeMillis() - 1000000)
+        .add("key", LDValue.of("value"), 1, EvaluationReason.off(), 10, false, System.currentTimeMillis() - 1000000, null)
         .build();
     
     assertNull(state.getFlagReason("key"));
@@ -89,7 +90,7 @@ public class FeatureFlagsStateTest {
   @Test
   public void flagCanHaveNullValue() {
     FeatureFlagsState state = FeatureFlagsState.builder()
-        .add("key", LDValue.ofNull(), 1, null, 10, false, null)
+        .add("key", LDValue.ofNull(), 1, null, 10, false, null, null)
         .build();
     
     assertEquals(LDValue.ofNull(), state.getFlagValue("key"));
@@ -98,8 +99,8 @@ public class FeatureFlagsStateTest {
   @Test
   public void canConvertToValuesMap() {
     FeatureFlagsState state = FeatureFlagsState.builder()
-        .add("key1", LDValue.of("value1"), 0, null, 10, false, null)
-        .add("key2", LDValue.of("value2"), 1, null, 10, false, null)
+        .add("key1", LDValue.of("value1"), 0, null, 10, false, null, null)
+        .add("key2", LDValue.of("value2"), 1, null, 10, false, null, null)
         .build();
     
     ImmutableMap<String, LDValue> expected = ImmutableMap.<String, LDValue>of("key1", LDValue.of("value1"), "key2", LDValue.of("value2"));
@@ -109,19 +110,19 @@ public class FeatureFlagsStateTest {
   @Test
   public void equalInstancesAreEqual() {
     FeatureFlagsState justOneFlag = FeatureFlagsState.builder(WITH_REASONS)
-        .add("key1", LDValue.of("value1"), 0, EvaluationReason.off(), 10, false, null)
+        .add("key1", LDValue.of("value1"), 0, EvaluationReason.off(), 10, false, null, null)
         .build();
     FeatureFlagsState sameFlagsDifferentInstances1 = FeatureFlagsState.builder(WITH_REASONS)
-        .add("key1", LDValue.of("value1"), 0, EvaluationReason.off(), 10, false, null)
-        .add("key2", LDValue.of("value2"), 1, EvaluationReason.fallthrough(), 10, false, null)
+        .add("key1", LDValue.of("value1"), 0, EvaluationReason.off(), 10, false, null, null)
+        .add("key2", LDValue.of("value2"), 1, EvaluationReason.fallthrough(), 10, false, null, null)
         .build();
     FeatureFlagsState sameFlagsDifferentInstances2 = FeatureFlagsState.builder(WITH_REASONS)
-        .add("key1", LDValue.of("value1"), 0, EvaluationReason.off(), 10, false, null)
-        .add("key2", LDValue.of("value2"), 1, EvaluationReason.fallthrough(), 10, false, null)
+        .add("key1", LDValue.of("value1"), 0, EvaluationReason.off(), 10, false, null, null)
+        .add("key2", LDValue.of("value2"), 1, EvaluationReason.fallthrough(), 10, false, null, null)
         .build();
     FeatureFlagsState sameFlagsDifferentMetadata = FeatureFlagsState.builder(WITH_REASONS)
-        .add("key1", LDValue.of("value1"), 1, EvaluationReason.off(), 10, false, null)
-        .add("key2", LDValue.of("value2"), 1, EvaluationReason.fallthrough(), 10, false, null)
+        .add("key1", LDValue.of("value1"), 1, EvaluationReason.off(), 10, false, null, null)
+        .add("key2", LDValue.of("value2"), 1, EvaluationReason.fallthrough(), 10, false, null, null)
         .build();
     FeatureFlagsState noFlagsButValid = FeatureFlagsState.builder(WITH_REASONS).build();
     FeatureFlagsState noFlagsAndNotValid = FeatureFlagsState.builder(WITH_REASONS).valid(false).build();
@@ -147,8 +148,10 @@ public class FeatureFlagsStateTest {
             for (boolean trackEvents: new boolean[] { false, true }) {
               for (boolean trackReason: new boolean[] { false, true }) {
                 for (Long debugEventsUntilDate: new Long[] { null, 1000L, 1001L }) {
-                  allPermutations.add(() -> new FeatureFlagsState.FlagMetadata(
-                      value, variation, reason, version, trackEvents, trackReason, debugEventsUntilDate));
+                  for (List<String> prerequisites: Arrays.asList(null, Arrays.asList("prereq1"), Arrays.asList("prereq2", "prereq3"))) {
+                    allPermutations.add(() -> new FeatureFlagsState.FlagMetadata(
+                        value, variation, reason, version, trackEvents, trackReason, debugEventsUntilDate, prerequisites));
+                  }
                 }
               }
             }
@@ -174,8 +177,9 @@ public class FeatureFlagsStateTest {
   
   @Test
   public void canConvertFromJson() throws SerializationException {
+    FeatureFlagsState expectedState = makeInstanceForSerialization();
     FeatureFlagsState state = JsonSerialization.deserialize(makeExpectedJsonSerialization(), FeatureFlagsState.class);
-    assertEquals(makeInstanceForSerialization(), state);
+    assertEquals(expectedState, state);
   }
   
   private static FeatureFlagsState makeInstanceForSerialization() {
@@ -220,6 +224,7 @@ public class FeatureFlagsStateTest {
     assertJsonEquals(makeExpectedJsonSerialization(), actualJsonString);
     
     FeatureFlagsState state = jacksonMapper.readValue(makeExpectedJsonSerialization(), FeatureFlagsState.class);
-    assertEquals(makeInstanceForSerialization(), state);
+    FeatureFlagsState expected = makeInstanceForSerialization();
+    assertEquals(expected, state);
   }
 }
