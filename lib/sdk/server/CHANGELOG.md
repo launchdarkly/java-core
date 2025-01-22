@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.7.0](https://github.com/launchdarkly/java-core/compare/7.6.0...7.7.0) (2025-01-22)
+
+
+### Features
+
+* lazy load jsonParser and yamlParser FlagFileParser ([#35](https://github.com/launchdarkly/java-core/issues/35)) ([a500c81](https://github.com/launchdarkly/java-core/commit/a500c813b23f2b24733a300e1662ea352cad0fe2))
+
 ## [7.6.0](https://github.com/launchdarkly/java-core/compare/7.5.0...7.6.0) (2024-10-24)
 
 
