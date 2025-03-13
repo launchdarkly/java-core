@@ -11,6 +11,14 @@
         "gradle.properties"
       ]
     },
+    "lib/java-server-sdk-redis": {
+      "release-type": "simple",
+      "bump-minor-pre-major": true,
+      "include-v-in-tag": false,
+      "extra-files": [
+        "gradle.properties"
+      ]
+    },
     "lib/shared/internal": {
       "release-type": "simple",
       "bump-minor-pre-major": true,
