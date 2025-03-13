@@ -11,30 +11,30 @@ on:
       - '**.md'
 
 jobs:
-  # build-test-java-server-sdk-redis:
-  #   strategy:
-  #     matrix:
-  #       jedis-version: [2.9.0, 3.0.0]
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v3
+  build-test-java-server-sdk-redis:
+    strategy:
+      matrix:
+        jedis-version: [2.9.0, 3.0.0]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
 
-  #     - run: |
-  #         sudo apt-get update -y
-  #         sudo apt-get install redis-server -y
-  #         sudo service redis-server start
+      - run: |
+          sudo apt-get update -y
+          sudo apt-get install redis-server -y
+          sudo service redis-server start
 
-  #     - name: Edit build.gradle to change Jedis version
-  #       shell: bash
-  #       run: |
-  #           cd lib/java-server-sdk-redis
-  #           sed -i.bak 's#"jedis":.*"[0-9.]*"#"jedis":"${{ matrix.jedis-version }}"#' build.gradle
+      - name: Edit build.gradle to change Jedis version
+        shell: bash
+        run: |
+            cd lib/java-server-sdk-redis
+            sed -i.bak 's#"jedis":.*"[0-9.]*"#"jedis":"${{ matrix.jedis-version }}"#' build.gradle
 
-  #     - name: Shared CI Steps
-  #       uses: ./.github/actions/ci
-  #       with:
-  #         workspace_path: 'lib/java-server-sdk-redis'
-  #         java_version: 8
+      - name: Shared CI Steps
+        uses: ./.github/actions/ci
+        with:
+          workspace_path: 'lib/java-server-sdk-redis'
+          java_version: 8
 
   build-test-java-server-sdk-windows:
     strategy:
