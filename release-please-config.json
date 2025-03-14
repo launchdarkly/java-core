@@ -4,7 +4,7 @@
   "include-component-in-tag": true,
   "packages": {
     "lib/java-server-sdk-otel": {
-      "release-type": "simple",
+      "package-name": "lib/java-server-sdk-otel",
       "bump-minor-pre-major": true,
       "include-v-in-tag": false,
       "extra-files": [
@@ -12,7 +12,7 @@
       ]
     },
     "lib/java-server-sdk-redis-store": {
-      "release-type": "simple",
+      "package-name": "launchdarkly-java-server-sdk-redis-store",
       "bump-minor-pre-major": true,
       "include-v-in-tag": false,
       "extra-files": [
@@ -20,7 +20,7 @@
       ]
     },
     "lib/shared/internal": {
-      "release-type": "simple",
+      "package-name": "launchdarkly-java-sdk-internal",
       "bump-minor-pre-major": true,
       "include-v-in-tag": false,
       "extra-files": [
@@ -28,7 +28,7 @@
       ]
     },
     "lib/shared/common": {
-      "release-type": "simple",
+      "package-name": "launchdarkly-java-sdk-common",
       "bump-minor-pre-major": true,
       "include-v-in-tag": false,
       "extra-files": [
@@ -36,7 +36,7 @@
       ]
     },
     "lib/sdk/server": {
-      "release-type": "simple",
+      "package-name": "launchdarkly-java-server-sdk",
       "bump-minor-pre-major": true,
       "include-v-in-tag": false,
       "extra-files": [
