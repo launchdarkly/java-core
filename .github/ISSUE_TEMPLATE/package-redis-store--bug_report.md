@@ -1,8 +1,8 @@
 ---
-name: 'Bug report for the java-server-sdk-otel package'
+name: 'Bug report for the java-server-sdk-redis-store package'
 about: Create a report to help us improve
 title: ''
-labels: 'package: java-server-sdk-otel, bug'
+labels: 'package: java-server-sdk-redis-store, bug'
 assignees: ''
 ---
 
