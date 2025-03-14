@@ -27,6 +27,14 @@ runs:
         distribution: ${{ inputs.java_distribution }}
         java-version: ${{ inputs.java_version }}
 
+    - name: Setup Redis Service
+      shell: bash
+      if: ${{ inputs.workspace_path == 'lib/java-server-sdk-redis-store' }}
+      run: |
+          sudo apt-get update -y
+          sudo apt-get install redis-server -y
+          sudo service redis-server start
+
     - name: Restore dependencies
       shell: bash
       id: restore

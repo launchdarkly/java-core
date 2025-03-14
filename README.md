@@ -14,9 +14,10 @@ This includes shared libraries, used by SDKs and other tools, as well as SDKs.
 | [@launchdarkly/java-sdk-internal](lib/shared/internal/README.md)   | [![Documentation][sdk-internal-docs-badge]][sdk-internal-docs-link] | [![maven][sdk-internal-maven-badge]][sdk-internal-maven-link] | [Issues][sdk-internal-issues]         | [![Actions Status][sdk-internal-ci-badge]][sdk-internal-ci-link]  |
 | [@launchdarkly/java-sdk-common](lib/shared/common/README.md)       | [![Documentation][sdk-common-docs-badge]][sdk-common-docs-link]     | [![maven][sdk-common-maven-badge]][sdk-common-maven-link]     | [Issues][sdk-common-issues]           | [![Actions Status][sdk-common-ci-badge]][sdk-common-ci-link]      |
 
-| Telemetry Packages                                                           | API Docs                                                     | maven                                                      | issues                                | tests                                                         |
+| Other Packages                                                           | API Docs                                                     | maven                                                      | issues                                | tests                                                         |
 | ---------------------------------------------------------------------------- |--------------------------------------------------------------| ---------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------- |
 | [@launchdarkly/java-server-sdk-otel](lib/java-server-sdk-otel/README.md)     | [![Documentation][server-otel-docs-badge]][server-otel-docs-link]    | [![maven][server-otel-maven-badge]][server-otel-maven-link]         | [Issues][server-otel-issues]         | [![Actions Status][server-otel-ci-badge]][server-otel-ci-link]         |
+| [@launchdarkly/java-server-sdk-redis-store](lib/java-server-sdk-redis-store/README.md)     | [![Documentation][server-redis-docs-badge]][server-redis-docs-link]    | [![maven][server-redis-maven-badge]][server-redis-maven-link]         | [Issues][server-redis-issues]         | [![Actions Status][server-redis-ci-badge]][server-redis-ci-link]         |
 
 ## Organization
 
@@ -70,6 +71,15 @@ We encourage pull requests and other contributions from the community. Check out
 [server-otel-ci-link]: https://github.com/launchdarkly/java-core/actions/workflows/java-server-sdk-otel.yml
 [server-otel-docs-badge]: https://img.shields.io/static/v1?label=GitHub+Pages&message=API+reference&color=00add8
 [server-otel-docs-link]: https://launchdarkly.github.io/java-core/lib/java-server-sdk-otel/
+
+[//]: # 'java-server-sdk-redis-store'
+[server-redis-issues]: https://github.com/launchdarkly/java-core/issues?q=is%3Aissue+is%3Aopen+label%3A%22package%3A+java-server-sdk-redis-store%22+
+[server-redis-maven-badge]: https://img.shields.io/maven-central/v/com.launchdarkly/launchdarkly-java-server-sdk-redis-store
+[server-redis-maven-link]: https://central.sonatype.com/artifact/com.launchdarkly/launchdarkly-java-server-sdk-redis-store
+[server-redis-ci-badge]: https://github.com/launchdarkly/java-core/actions/workflows/java-server-sdk-redis-store.yml/badge.svg
+[server-redis-ci-link]: https://github.com/launchdarkly/java-core/actions/workflows/java-server-sdk-redis-store.yml
+[server-redis-docs-badge]: https://img.shields.io/static/v1?label=GitHub+Pages&message=API+reference&color=00add8
+[server-redis-docs-link]: https://launchdarkly.github.io/java-core/lib/java-server-sdk-redis-store/
 
 [//]: # 'java-sdk-internal'
 [sdk-internal-issues]: https://github.com/launchdarkly/java-core/issues?q=is%3Aissue+is%3Aopen+label%3A%22package%3A+java-sdk-internal%22+
