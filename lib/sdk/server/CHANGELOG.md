@@ -2,6 +2,15 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.8.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-v7.7.0...launchdarkly-java-server-sdk-7.8.0) (2025-03-14)
+
+
+### Features
+
+* Adds support for client side prerequisite events. ([#39](https://github.com/launchdarkly/java-core/issues/39)) ([e9ea4df](https://github.com/launchdarkly/java-core/commit/e9ea4df35df710da6ed38219d3c14350cfea2f94))
+* Introduce TestData#delete to simplify testing of flag deletion. ([#21](https://github.com/launchdarkly/java-core/issues/21)) ([388dd04](https://github.com/launchdarkly/java-core/commit/388dd04ea7698fc2d697e9794dc75e5e0d9e9b55))
+* lazy load jsonParser and yamlParser FlagFileParser ([#35](https://github.com/launchdarkly/java-core/issues/35)) ([a500c81](https://github.com/launchdarkly/java-core/commit/a500c813b23f2b24733a300e1662ea352cad0fe2))
+
 ## [7.7.0](https://github.com/launchdarkly/java-core/compare/7.6.0...7.7.0) (2025-01-22)
 
 
