@@ -12,8 +12,7 @@ plugins {
     id "checkstyle"
     id "signing"
     id "maven-publish"
-    id "de.marcphilipp.nexus-publish" version "0.3.0"
-    id "io.codearte.nexus-staging" version "0.30.0"
+    id "io.github.gradle-nexus.publish-plugin" version "1.3.0"
     id "idea"
 }
 
@@ -92,12 +91,6 @@ idea {
     }
 }
 
-
-nexusStaging {
-    packageGroup = "com.launchdarkly"
-    numberOfRetries = 40 // we've seen extremely long delays in closing repositories
-}
-
 publishing {
     publications {
         mavenJava(MavenPublication) {
@@ -141,10 +134,7 @@ publishing {
 nexusPublishing {
     clientTimeout = java.time.Duration.ofMinutes(2) // we've seen extremely long delays in creating repositories
     repositories {
-        sonatype {
-            username = ossrhUsername
-            password = ossrhPassword            
-        }
+        sonatype()
     }
 }
 
