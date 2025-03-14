@@ -1,0 +1,87 @@
+name: java-server-sdk-redis-store
+
+on:
+  push:
+    branches: [main, 'feat/**']
+    paths-ignore:
+      - '**.md' #Do not need to run CI for markdown changes.
+  pull_request:
+    branches: [main, 'feat/**']
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  build-test-java-server-sdk-redis-store:
+    strategy:
+      matrix:
+        jedis-version: [2.9.0, 3.0.0]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Edit build.gradle to change Jedis version
+        shell: bash
+        run: |
+            cd lib/java-server-sdk-redis-store
+            sed -i.bak 's#"jedis":.*"[0-9.]*"#"jedis":"${{ matrix.jedis-version }}"#' build.gradle
+
+      - name: Shared CI Steps
+        uses: ./.github/actions/ci
+        with:
+          workspace_path: 'lib/java-server-sdk-redis-store'
+          java_version: 8
+
+  build-test-java-server-sdk-windows:
+    strategy:
+      matrix:
+        jedis-version: [2.9.0, 3.0.0]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - run: |
+          $ProgressPreference = "SilentlyContinue"
+          iwr -outf redis.zip https://github.com/MicrosoftArchive/redis/releases/download/win-3.0.504/Redis-x64-3.0.504.zip
+          mkdir redis
+          Expand-Archive -Path redis.zip -DestinationPath redis
+          cd redis
+          .\redis-server --service-install
+          .\redis-server --service-start
+          Start-Sleep -s 5
+          .\redis-cli ping
+
+      - name: Edit build.gradle to change Jedis version
+        shell: bash
+        run: |
+            cd lib/java-server-sdk-redis-store
+            sed -i.bak 's#"jedis":.*"[0-9.]*"#"jedis":"${{ matrix.jedis-version }}"#' build.gradle
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 8
+
+      - name: Restore dependencies
+        shell: bash
+        id: restore
+        run: lib/java-server-sdk-redis-store/gradlew dependencies -p lib/java-server-sdk-redis-store
+
+      - name: Build
+        shell: bash
+        id: build
+        run: lib/java-server-sdk-redis-store/gradlew build -p lib/java-server-sdk-redis-store
+
+      - name: Build Jar
+        shell: bash
+        id: buildjar
+        run: lib/java-server-sdk-redis-store/gradlew jar -p lib/java-server-sdk-redis-store
+
+      - name: Run Tests
+        if: steps.build.outcome == 'success' && inputs.run_tests == 'true'
+        shell: bash
+        run: lib/java-server-sdk-redis-store/gradlew test -p lib/java-server-sdk-redis-store
+
+      - name: Build Documentation
+        shell: bash
+        run: lib/java-server-sdk-redis-store/gradlew javadoc -p lib/java-server-sdk-redis-store
