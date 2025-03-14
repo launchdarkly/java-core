@@ -15,7 +15,7 @@ This package can be used to integrate OpenTelemetry with the LaunchDarkly Java S
 ```
 dependencies {
     implementation "com.launchdarkly:launchdarkly-java-server-sdk:7+"
-    implementation "com.launchdarkly:launchdarkly-java-server-sdk-otel:1+"
+    implementation "com.launchdarkly:launchdarkly-java-server-sdk-otel:0.1.0"
 }
 ```
 
@@ -29,7 +29,7 @@ import com.launchdarkly.integrations.TracingHook;
 LDConfig config = new LDConfig.Builder()
   .hooks(
     Components.hooks()
-      .addHooks(new TracingHook.Builder().withSpans().build())
+      .setHooks(new TracingHook.Builder().withSpans().build())
   )
   .build()
 
