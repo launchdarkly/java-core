@@ -56,8 +56,32 @@ jobs:
             cd lib/java-server-sdk-redis-store
             sed -i.bak 's#"jedis":.*"[0-9.]*"#"jedis":"${{ matrix.jedis-version }}"#' build.gradle
 
-      - name: Shared CI Steps
-        uses: ./.github/actions/ci
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
-          workspace_path: 'lib/java-server-sdk-redis-store'
-          java_version: 8
+          distribution: 'temurin'
+          java-version: 8
+
+      - name: Restore dependencies
+        shell: bash
+        id: restore
+        run: lib/java-server-sdk-redis-store/gradlew dependencies -p lib/java-server-sdk-redis-store
+
+      - name: Build
+        shell: bash
+        id: build
+        run: lib/java-server-sdk-redis-store/gradlew build -p lib/java-server-sdk-redis-store
+
+      - name: Build Jar
+        shell: bash
+        id: buildjar
+        run: lib/java-server-sdk-redis-store/gradlew jar -p lib/java-server-sdk-redis-store
+
+      - name: Run Tests
+        if: steps.build.outcome == 'success' && inputs.run_tests == 'true'
+        shell: bash
+        run: lib/java-server-sdk-redis-store/gradlew test -p lib/java-server-sdk-redis-store
+
+      - name: Build Documentation
+        shell: bash
+        run: lib/java-server-sdk-redis-store/gradlew javadoc -p lib/java-server-sdk-redis-store
