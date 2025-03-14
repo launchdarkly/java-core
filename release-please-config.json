@@ -11,7 +11,7 @@
         "gradle.properties"
       ]
     },
-    "lib/java-server-sdk-redis": {
+    "lib/java-server-sdk-redis-store": {
       "release-type": "simple",
       "bump-minor-pre-major": true,
       "include-v-in-tag": false,

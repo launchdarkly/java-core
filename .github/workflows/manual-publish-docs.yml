@@ -6,10 +6,11 @@ on:
         required: true
         type: choice
         options:
-          - lib/java-server-sdk-otel
           - lib/shared/common
           - lib/shared/internal
           - lib/sdk/server
+          - lib/java-server-sdk-otel
+          - lib/java-server-sdk-redis-store
       dry_run:
         description: 'Is this a dry run. If so no docs will be published.'
         type: boolean

@@ -1,8 +1,5 @@
 # LaunchDarkly SDK for Java - Redis integration
 
-[![Circle CI](https://circleci.com/gh/launchdarkly/java-server-sdk-redis.svg?style=shield)](https://circleci.com/gh/launchdarkly/java-server-sdk-redis)
-[![Javadocs](http://javadoc.io/badge/com.launchdarkly/launchdarkly-java-server-sdk-redis-store.svg)](http://javadoc.io/doc/com.launchdarkly/launchdarkly-java-server-sdk-redis-store)
-
 This library provides a Redis-backed persistence mechanism (feature store) for the [LaunchDarkly Java SDK](https://github.com/launchdarkly/java-server-sdk), replacing the default in-memory feature store. The Redis API implementation it uses is [Jedis](https://github.com/xetorthio/jedis).
 
 This version of the library requires at least version 6.0.0 of the LaunchDarkly Java SDK; for versions of the library to use with earlier SDK versions, see the changelog. The minimum Java version is 8.

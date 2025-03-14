@@ -3,7 +3,7 @@
 All notable changes to the LaunchDarkly Java SDK Redis integration will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
 ## [3.0.0] - 2022-12-07
-This release corresponds to the 6.0.0 release of the LaunchDarkly Java SDK. Any application code that is being updated to use the 6.0.0 SDK, and was using a 2.x version of `launchdarkly-java-server-sdk-redis`, should now use a 3.x version instead.
+This release corresponds to the 6.0.0 release of the LaunchDarkly Java SDK. Any application code that is being updated to use the 6.0.0 SDK, and was using a 2.x version of `launchdarkly-java-server-sdk-redis-store`, should now use a 3.x version instead.
 
 There are no functional differences in the behavior of the Redis integration; the differences are only related to changes in the usage of interface types for configuration in the SDK.
 
