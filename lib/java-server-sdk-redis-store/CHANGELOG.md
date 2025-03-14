@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK Redis integration will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [3.0.1](https://github.com/launchdarkly/java-core/compare/v3.0.0...3.0.1) (2025-03-14)
+
+
+### Bug Fixes
+
+* bumping underlying launchdarkly-java-server-sdk API version to r… ([#46](https://github.com/launchdarkly/java-core/issues/46)) ([3eb9930](https://github.com/launchdarkly/java-core/commit/3eb9930276aa100edfc773708d565f79e889465b))
+
 ## [3.0.0] - 2022-12-07
 This release corresponds to the 6.0.0 release of the LaunchDarkly Java SDK. Any application code that is being updated to use the 6.0.0 SDK, and was using a 2.x version of `launchdarkly-java-server-sdk-redis-store`, should now use a 3.x version instead.
 
@@ -30,4 +37,3 @@ This version of the package will not work with SDK versions earlier than 5.10.0;
 Initial release, corresponding to the 5.0.0 release of [`launchdarkly-java-server-sdk`](https://github.com/launchdarkly/java-server-sdk).
 
 Prior to that release, the Redis integration was built into the main SDK library. For more information about changes in the SDK database integrations, see the [4.x to 5.0 migration guide](https://docs-stg.launchdarkly.com/252/sdk/server-side/java/migration-4-to-5/).
-
