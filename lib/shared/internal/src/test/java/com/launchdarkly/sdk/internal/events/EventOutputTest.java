@@ -265,7 +265,7 @@ public class EventOutputTest extends BaseEventTest {
   @Test
   public void customEventIsSerialized() throws IOException {
     LDContext context = LDContext.builder("userkey").name("me").build();
-    LDValue contextKeysJson = LDValue.buildObject().put("user", context.getKey()).build();
+    LDValue contextJson = LDValue.buildObject().put("kind", "user").put("key", "userkey").put("name", "me").build();
     EventOutputFormatter f = new EventOutputFormatter(defaultEventsConfig());
 
     Event.Custom ceWithoutData = customEvent(context, "customkey").build();
@@ -273,7 +273,7 @@ public class EventOutputTest extends BaseEventTest {
         "\"kind\":\"custom\"," +
         "\"creationDate\":100000," +
         "\"key\":\"customkey\"," +
-        "\"contextKeys\":" + contextKeysJson +
+        "\"context\":" + contextJson +
         "}");
     assertJsonEquals(ceJson1, getSingleOutputEvent(f, ceWithoutData));
 
@@ -282,7 +282,7 @@ public class EventOutputTest extends BaseEventTest {
         "\"kind\":\"custom\"," +
         "\"creationDate\":100000," +
         "\"key\":\"customkey\"," +
-        "\"contextKeys\":" + contextKeysJson + "," +
+        "\"context\":" + contextJson + "," +
         "\"data\":\"thing\"" +
         "}");
     assertJsonEquals(ceJson2, getSingleOutputEvent(f, ceWithData));
@@ -292,7 +292,7 @@ public class EventOutputTest extends BaseEventTest {
         "\"kind\":\"custom\"," +
         "\"creationDate\":100000," +
         "\"key\":\"customkey\"," +
-        "\"contextKeys\":" + contextKeysJson + "," +
+        "\"context\":" + contextJson + "," +
         "\"metricValue\":2.5" +
         "}");
     assertJsonEquals(ceJson3, getSingleOutputEvent(f, ceWithMetric));
@@ -303,7 +303,7 @@ public class EventOutputTest extends BaseEventTest {
         "\"kind\":\"custom\"," +
         "\"creationDate\":100000," +
         "\"key\":\"customkey\"," +
-        "\"contextKeys\":" + contextKeysJson + "," +
+        "\"context\":" + contextJson + "," +
         "\"data\":\"thing\"," +
         "\"metricValue\":2.5" +
         "}");
@@ -408,8 +408,10 @@ public class EventOutputTest extends BaseEventTest {
             .put("reason", LDValue.buildObject()
                 .put("kind", "FALLTHROUGH")
                 .build()).build())
-        .put("contextKeys", LDValue.buildObject()
-            .put("user", "user-key")
+        .put("context", LDValue.buildObject()
+            .put("kind", "user")
+            .put("key", "user-key")
+            .put("name", "me")
             .build())
         .put("samplingRatio", 2)
         .put("measurements", LDValue.buildArray()
@@ -495,8 +497,10 @@ public class EventOutputTest extends BaseEventTest {
             .put("reason", LDValue.buildObject()
                 .put("kind", "FALLTHROUGH")
                 .build()).build())
-        .put("contextKeys", LDValue.buildObject()
-            .put("user", "user-key")
+        .put("context", LDValue.buildObject()
+            .put("kind", "user")
+            .put("key", "user-key")
+            .put("name", "me")
             .build())
         .put("measurements", LDValue.buildArray()
             .add(LDValue.buildObject()

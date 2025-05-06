@@ -35,7 +35,7 @@ public class TestService {
     "filtering",
     "migrations",
     "event-sampling",
-    "inline-context",
+    "inline-context-all",
     "anonymous-redaction",
     "evaluation-hooks",
     "client-prereq-events"

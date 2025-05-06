@@ -89,7 +89,7 @@ final class EventOutputFormatter {
       jw.beginObject();
       writeKindAndCreationDate(jw, "custom", event.getCreationDate());
       jw.name("key").value(ce.getKey());
-      writeContextKeys(ce.getContext(), jw);
+      writeContext(ce.getContext(), jw, false);
       writeLDValue("data", ce.getData(), jw);
       if (ce.getMetricValue() != null) {
         jw.name("metricValue");
@@ -104,7 +104,7 @@ final class EventOutputFormatter {
     } else if (event instanceof Event.MigrationOp) {
       jw.beginObject();
       writeKindAndCreationDate(jw, "migration_op", event.getCreationDate());
-      writeContextKeys(event.getContext(), jw);
+      writeContext(event.getContext(), jw, false);
 
       Event.MigrationOp me = (Event.MigrationOp)event;
       jw.name("operation").value(me.getOperation());
@@ -294,17 +294,6 @@ final class EventOutputFormatter {
   private void writeContext(LDContext context, JsonWriter jw, boolean redactAnonymous) throws IOException {
     jw.name("context");
     contextFormatter.write(context, jw, redactAnonymous);
-  }
-
-  private void writeContextKeys(LDContext context, JsonWriter jw) throws IOException {
-    jw.name("contextKeys").beginObject();
-    for (int i = 0; i < context.getIndividualContextCount(); i++) {
-      LDContext c = context.getIndividualContext(i);
-      if (c != null) {
-        jw.name(c.getKind().toString()).value(c.getKey());
-      }
-    }
-    jw.endObject();
   }
 
   private void writeLDValue(String key, LDValue value, JsonWriter jw) throws IOException {
