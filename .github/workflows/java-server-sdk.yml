@@ -14,7 +14,7 @@ jobs:
   test-platforms-and-versions:
     strategy:
         matrix:
-          os: [ubuntu-20.04]
+          os: [ubuntu-latest]
           javaversion: [8, 11, 17, 19]
     runs-on: ${{ matrix.os }}
     steps:
