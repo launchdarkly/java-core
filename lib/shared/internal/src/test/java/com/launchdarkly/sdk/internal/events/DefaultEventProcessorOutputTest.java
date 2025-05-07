@@ -399,7 +399,7 @@ public class DefaultEventProcessorOutputTest extends BaseEventTest {
     }
 
     assertThat(es.getEventsFromLastRequest(), contains(
-        isCustomEvent(ce)
+        isCustomEvent(ce, userJson)
     ));
   }
 
@@ -419,7 +419,7 @@ public class DefaultEventProcessorOutputTest extends BaseEventTest {
     }
 
     assertThat(es.getEventsFromLastRequest(), contains(
-        isCustomEvent(event3)
+        isCustomEvent(event3, userJson)
     ));
   }
 

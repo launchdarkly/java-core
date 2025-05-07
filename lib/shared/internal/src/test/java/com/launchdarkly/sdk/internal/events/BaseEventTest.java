@@ -203,12 +203,12 @@ public abstract class BaseEventTest extends BaseTest {
     );
   }
 
-  public static Matcher<JsonTestValue> isMigrationEvent(Event sourceEvent, LDValue context) {
+  public static Matcher<JsonTestValue> isMigrationEvent(Event sourceEvent, LDValue inlineContext) {
     // Doesn't fully test an event, but makes sure it is a specific event.
     return allOf(
         jsonProperty("kind", "migration_op"),
         jsonProperty("creationDate", (double)sourceEvent.getCreationDate()),
-        hasContextKeys(sourceEvent)
+        hasInlineContext(inlineContext)
     );
   }
 
@@ -248,26 +248,16 @@ public abstract class BaseEventTest extends BaseTest {
     );
   }
 
-  public static Matcher<JsonTestValue> isCustomEvent(Event.Custom sourceEvent) {
+  public static Matcher<JsonTestValue> isCustomEvent(Event.Custom sourceEvent, LDValue inlineContext) {
     boolean hasData = sourceEvent.getData() != null && !sourceEvent.getData().isNull();
     return allOf(
         jsonProperty("kind", "custom"),
         jsonProperty("creationDate", (double)sourceEvent.getCreationDate()),
         jsonProperty("key", sourceEvent.getKey()),
-        hasContextKeys(sourceEvent),
+        hasInlineContext(inlineContext),
         jsonProperty("data", hasData ? jsonEqualsValue(sourceEvent.getData()) : jsonUndefined()),
         jsonProperty("metricValue", sourceEvent.getMetricValue() == null ? jsonUndefined() : jsonEqualsValue(sourceEvent.getMetricValue()))
     );
-  }
-
-  public static Matcher<JsonTestValue> hasContextKeys(Event sourceEvent) {
-    ObjectBuilder b = LDValue.buildObject();
-    LDContext c = sourceEvent.getContext();
-    for (int i = 0; i < c.getIndividualContextCount(); i++) {
-      LDContext c1 = c.getIndividualContext(i);
-      b.put(c1.getKind().toString(), c1.getKey());
-    }
-    return jsonProperty("contextKeys", jsonEqualsValue(b.build()));
   }
 
   public static Matcher<JsonTestValue> hasInlineContext(LDValue inlineContext) {
