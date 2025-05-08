@@ -44,15 +44,15 @@ public class DefaultEventProcessorTest extends BaseEventTest {
       // sendEvent calls, they might be in two
       List<JsonTestValue> payload1 = es.getEventsFromLastRequest();
       if (payload1.size() == 1) {
-        assertThat(payload1, contains(isCustomEvent(event1)));
-        assertThat(es.getEventsFromLastRequest(), contains(isCustomEvent(event2)));
+        assertThat(payload1, contains(isCustomEvent(event1, userJson)));
+        assertThat(es.getEventsFromLastRequest(), contains(isCustomEvent(event2, userJson)));
       } else {
-        assertThat(payload1, contains(isCustomEvent(event1), isCustomEvent(event2)));
+        assertThat(payload1, contains(isCustomEvent(event1, userJson), isCustomEvent(event2, userJson)));
       }
       
       Event.Custom event3 = customEvent(user, "event3").build();
       ep.sendEvent(event3);
-      assertThat(es.getEventsFromLastRequest(), contains(isCustomEvent(event3)));
+      assertThat(es.getEventsFromLastRequest(), contains(isCustomEvent(event3, userJson)));
     }
     
     Event.Custom ce = customEvent(user, "eventkey").build();
@@ -62,7 +62,7 @@ public class DefaultEventProcessorTest extends BaseEventTest {
     }
     
     assertThat(es.getEventsFromLastRequest(), contains(
-        isCustomEvent(ce)
+        isCustomEvent(ce, userJson)
     ));
   }
   
@@ -85,7 +85,7 @@ public class DefaultEventProcessorTest extends BaseEventTest {
       ep.setOffline(false);
       
       List<JsonTestValue> payload1 = es.getEventsFromLastRequest();
-      assertThat(payload1, contains(isCustomEvent(event1), isCustomEvent(event2)));
+      assertThat(payload1, contains(isCustomEvent(event1, userJson), isCustomEvent(event2, userJson)));
     }
   }
 

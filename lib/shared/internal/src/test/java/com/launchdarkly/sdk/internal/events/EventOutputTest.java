@@ -46,26 +46,6 @@ public class EventOutputTest extends BaseEventTest {
   }
 
   @Test
-  public void contextKeysAreSetInsteadOfContextWhenNotInlined() throws Exception {
-    testContextKeysSerialization(
-        LDContext.create("userkey"),
-        LDValue.buildObject().put("user", "userkey").build()
-        );
-
-    testContextKeysSerialization(
-        LDContext.create(ContextKind.of("kind1"), "key1"),
-        LDValue.buildObject().put("kind1", "key1").build()
-        );
-
-    testContextKeysSerialization(
-        LDContext.createMulti(
-            LDContext.create(ContextKind.of("kind1"), "key1"),
-            LDContext.create(ContextKind.of("kind2"), "key2")),
-        LDValue.buildObject().put("kind1", "key1").put("kind2", "key2").build()
-        );
-  }
-
-  @Test
   public void allAttributesPrivateMakesAttributesPrivate() throws Exception {
     // We test this behavior in more detail in EventContextFormatterTest, but here we're verifying that the
     // EventOutputFormatter is actually using EventContextFormatter and configuring it correctly.
@@ -265,7 +245,7 @@ public class EventOutputTest extends BaseEventTest {
   @Test
   public void customEventIsSerialized() throws IOException {
     LDContext context = LDContext.builder("userkey").name("me").build();
-    LDValue contextKeysJson = LDValue.buildObject().put("user", context.getKey()).build();
+    LDValue contextJson = LDValue.buildObject().put("kind", "user").put("key", "userkey").put("name", "me").build();
     EventOutputFormatter f = new EventOutputFormatter(defaultEventsConfig());
 
     Event.Custom ceWithoutData = customEvent(context, "customkey").build();
@@ -273,7 +253,7 @@ public class EventOutputTest extends BaseEventTest {
         "\"kind\":\"custom\"," +
         "\"creationDate\":100000," +
         "\"key\":\"customkey\"," +
-        "\"contextKeys\":" + contextKeysJson +
+        "\"context\":" + contextJson +
         "}");
     assertJsonEquals(ceJson1, getSingleOutputEvent(f, ceWithoutData));
 
@@ -282,7 +262,7 @@ public class EventOutputTest extends BaseEventTest {
         "\"kind\":\"custom\"," +
         "\"creationDate\":100000," +
         "\"key\":\"customkey\"," +
-        "\"contextKeys\":" + contextKeysJson + "," +
+        "\"context\":" + contextJson + "," +
         "\"data\":\"thing\"" +
         "}");
     assertJsonEquals(ceJson2, getSingleOutputEvent(f, ceWithData));
@@ -292,7 +272,7 @@ public class EventOutputTest extends BaseEventTest {
         "\"kind\":\"custom\"," +
         "\"creationDate\":100000," +
         "\"key\":\"customkey\"," +
-        "\"contextKeys\":" + contextKeysJson + "," +
+        "\"context\":" + contextJson + "," +
         "\"metricValue\":2.5" +
         "}");
     assertJsonEquals(ceJson3, getSingleOutputEvent(f, ceWithMetric));
@@ -303,7 +283,7 @@ public class EventOutputTest extends BaseEventTest {
         "\"kind\":\"custom\"," +
         "\"creationDate\":100000," +
         "\"key\":\"customkey\"," +
-        "\"contextKeys\":" + contextKeysJson + "," +
+        "\"context\":" + contextJson + "," +
         "\"data\":\"thing\"," +
         "\"metricValue\":2.5" +
         "}");
@@ -408,8 +388,10 @@ public class EventOutputTest extends BaseEventTest {
             .put("reason", LDValue.buildObject()
                 .put("kind", "FALLTHROUGH")
                 .build()).build())
-        .put("contextKeys", LDValue.buildObject()
-            .put("user", "user-key")
+        .put("context", LDValue.buildObject()
+            .put("kind", "user")
+            .put("key", "user-key")
+            .put("name", "me")
             .build())
         .put("samplingRatio", 2)
         .put("measurements", LDValue.buildArray()
@@ -495,8 +477,10 @@ public class EventOutputTest extends BaseEventTest {
             .put("reason", LDValue.buildObject()
                 .put("kind", "FALLTHROUGH")
                 .build()).build())
-        .put("contextKeys", LDValue.buildObject()
-            .put("user", "user-key")
+        .put("context", LDValue.buildObject()
+            .put("kind", "user")
+            .put("key", "user-key")
+            .put("name", "me")
             .build())
         .put("measurements", LDValue.buildArray()
             .add(LDValue.buildObject()
@@ -705,25 +689,19 @@ public class EventOutputTest extends BaseEventTest {
     return parseValue(w.toString()).get(0);
   }
 
-  private void testContextKeysSerialization(LDContext context, LDValue expectedJsonValue) throws IOException {
-    EventsConfiguration config = makeEventsConfig(false, null);
-    EventOutputFormatter f = new EventOutputFormatter(config);
-
-    Event.Custom customEvent = customEvent(context, "eventkey").build();
-    LDValue outputEvent = getSingleOutputEvent(f, customEvent);
-    assertJsonEquals(expectedJsonValue, outputEvent.get("contextKeys"));
-    assertJsonEquals(LDValue.ofNull(), outputEvent.get("context"));
-  }
-
   private void testInlineContextSerialization(LDContext context, LDValue expectedJsonValue, EventsConfiguration baseConfig) throws IOException {
     EventsConfiguration config = makeEventsConfig(baseConfig.allAttributesPrivate, baseConfig.privateAttributes);
     EventOutputFormatter f = new EventOutputFormatter(config);
 
-    Event.FeatureRequest featureEvent = featureEvent(context, FLAG_KEY).build();
-    LDValue outputEvent = getSingleOutputEvent(f, featureEvent);
+    Event.Custom customEvent = customEvent(context, FLAG_KEY).build();
+    LDValue outputEvent = getSingleOutputEvent(f, customEvent);
     assertJsonEquals(LDValue.ofNull(), outputEvent.get("contextKeys"));
     assertJsonEquals(expectedJsonValue, outputEvent.get("context"));
 
+    Event.FeatureRequest featureEvent = featureEvent(context, FLAG_KEY).build();
+    outputEvent = getSingleOutputEvent(f, featureEvent);
+    assertJsonEquals(LDValue.ofNull(), outputEvent.get("contextKeys"));
+    assertJsonEquals(expectedJsonValue, outputEvent.get("context"));
 
     Event.Identify identifyEvent = identifyEvent(context);
     outputEvent = getSingleOutputEvent(f, identifyEvent);

@@ -45,9 +45,9 @@ If you wish to clean your working directory between builds, you can clean it by 
 ./gradlew clean
 ```
 
-If you wish to use your generated SDK artifact by another Maven/Gradle project such as [java-server-sdk](https://github.com/launchdarkly/java-server-sdk), you will likely want to publish the artifact to your local Maven repository so that your other project can access it.
+If you wish to use your generated SDK artifact by another Maven/Gradle project such as [java-server-sdk](https://github.com/launchdarkly/java-server-sdk), you will likely want to publish the artifact to your local Maven repository so that your other project can access it. You can append `-SNAPSHOT` to the version in [gradle.properties](gradle.properties) and update any dependancies to test the snapshot version.
 ```
-./gradlew publishToMavenLocal
+./gradlew publishToMavenLocal -PskipSigning=true
 ```
 
 ### Testing
