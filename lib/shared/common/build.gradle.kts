@@ -88,5 +88,6 @@ nexusPublishing {
 }
 
 signing {
+    setRequired({ findProperty("skipSigning") != "true" })
     sign(publishing.publications["mavenJava"])
 }
