@@ -2,6 +2,13 @@
 
 All notable changes to the project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [2.2.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-common-v2.1.1...launchdarkly-java-sdk-common-2.2.0) (2025-05-08)
+
+
+### Features
+
+* Support inline context for custom and migration events ([#55](https://github.com/launchdarkly/java-core/issues/55)) ([7a6a1db](https://github.com/launchdarkly/java-core/commit/7a6a1db5bf1c0643dc19e0998137e9b16f16f7d8))
+
 ## [2.1.1] - 2023-11-13
 ### Fixed:
 - Fixes NPE when interacting with Context created by use of `copyFrom`.  (Thanks, [
