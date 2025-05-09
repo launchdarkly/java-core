@@ -47,7 +47,7 @@ jobs:
           workspace_path: lib/sdk/server
           dry_run: false
           prerelease: false
-          code_signing_keyring: 'code-signing-keyring.gpg'
+          code_signing_keyring: ${{ github.workspace }}/code-signing-keyring.gpg
           signing_key_id: ${{ env.SIGNING_KEY_ID }}
           signing_key_passphrase: ${{ env.SIGNING_KEY_PASSPHRASE }}
           sonatype_username: ${{ env.SONATYPE_USER_NAME }}
@@ -79,7 +79,7 @@ jobs:
           workspace_path: lib/java-server-sdk-otel
           dry_run: false
           prerelease: false
-          code_signing_keyring: 'code-signing-keyring.gpg'
+          code_signing_keyring: ${{ github.workspace }}/code-signing-keyring.gpg
           signing_key_id: ${{ env.SIGNING_KEY_ID }}
           signing_key_passphrase: ${{ env.SIGNING_KEY_PASSPHRASE }}
           sonatype_username: ${{ env.SONATYPE_USER_NAME }}
@@ -111,7 +111,7 @@ jobs:
           workspace_path: lib/java-server-sdk-redis-store
           dry_run: false
           prerelease: false
-          code_signing_keyring: 'code-signing-keyring.gpg'
+          code_signing_keyring: ${{ github.workspace }}/code-signing-keyring.gpg
           signing_key_id: ${{ env.SIGNING_KEY_ID }}
           signing_key_passphrase: ${{ env.SIGNING_KEY_PASSPHRASE }}
           sonatype_username: ${{ env.SONATYPE_USER_NAME }}
@@ -143,7 +143,7 @@ jobs:
           workspace_path: lib/shared/internal
           dry_run: false
           prerelease: false
-          code_signing_keyring: 'code-signing-keyring.gpg'
+          code_signing_keyring: ${{ github.workspace }}/code-signing-keyring.gpg
           signing_key_id: ${{ env.SIGNING_KEY_ID }}
           signing_key_passphrase: ${{ env.SIGNING_KEY_PASSPHRASE }}
           sonatype_username: ${{ env.SONATYPE_USER_NAME }}
@@ -176,7 +176,7 @@ jobs:
           workspace_path: lib/shared/common
           dry_run: false
           prerelease: false
-          code_signing_keyring: 'code-signing-keyring.gpg'
+          code_signing_keyring: ${{ github.workspace }}/code-signing-keyring.gpg
           signing_key_id: ${{ env.SIGNING_KEY_ID }}
           signing_key_passphrase: ${{ env.SIGNING_KEY_PASSPHRASE }}
           sonatype_username: ${{ env.SONATYPE_USER_NAME }}
