@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.8.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.7.0...launchdarkly-java-server-sdk-7.8.0) (2025-05-09)
+
+
+### Features
+
+* Inline context for custom and migration events ([#63](https://github.com/launchdarkly/java-core/issues/63)) ([fb76712](https://github.com/launchdarkly/java-core/commit/fb767121ec048ecae85ac542c4cdca38db736e4d))
+
 ## [7.7.0](https://github.com/launchdarkly/java-core/compare/7.6.0...7.7.0) (2025-01-22)
 
 
