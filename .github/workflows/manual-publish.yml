@@ -48,6 +48,7 @@ jobs:
         with:
           workspace_path: ${{ inputs.workspace_path }}
           dry_run: ${{ inputs.dry_run }}
+          run_tests: ${{ inputs.run_tests }}
           prerelease: ${{ inputs.prerelease }}
           signing_key_id: ${{ env.SIGNING_KEY_ID }}
           signing_key_passphrase: ${{ env.SIGNING_KEY_PASSPHRASE }}
