@@ -10,6 +10,11 @@ inputs:
   prerelease:
     description: 'Is this a prerelease. If so then it will be published to the staging repository only.'
     required: true
+  run_tests:
+    description: 'If true, run unit tests, otherwise skip them.'
+    required: false
+    type: boolean
+    default: true
   signing_key_id:
     description: 'Signing key ID'
     required: true
@@ -40,6 +45,7 @@ runs:
       with:
         workspace_path: ${{ inputs.workspace_path }}
         java_version: 8
+        run_tests: ${{ inputs.run_tests }}
 
     - name: Publish
       uses: ./.github/actions/publish

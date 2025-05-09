@@ -10,14 +10,14 @@ jobs:
     runs-on: ubuntu-latest
 
     outputs:
-      package-sdk-common-released: ${{ steps.release.outputs['lib/java-sdk-common--release_created'] }}
-      package-sdk-internal-released: ${{ steps.release.outputs['lib/java-sdk-internal--release_created'] }}
-      package-server-sdk-released: ${{ steps.release.outputs['lib/java-server-sdk--release_created'] }}
+      package-sdk-common-released: ${{ steps.release.outputs['lib/shared/common--release_created'] }}
+      package-sdk-internal-released: ${{ steps.release.outputs['lib/shared/internal--release_created'] }}
+      package-server-sdk-released: ${{ steps.release.outputs['lib/sdk/server--release_created'] }}
       package-server-sdk-otel-released: ${{ steps.release.outputs['lib/java-server-sdk-otel--release_created'] }}
       package-server-sdk-redis-store-released: ${{ steps.release.outputs['lib/java-server-sdk-redis-store--release_created'] }}
 
     steps:
-      - uses: google-github-actions/release-please-action@v4
+      - uses: googleapis/release-please-action@v4
         id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -141,8 +141,8 @@ jobs:
       - uses: ./.github/actions/full-release
         with:
           workspace_path: lib/shared/internal
-          dry_run: true #TODO make this false after testing
-          prerelease: true #TODO make this false after testing
+          dry_run: false
+          prerelease: false
           code_signing_keyring: 'code-signing-keyring.gpg'
           signing_key_id: ${{ env.SIGNING_KEY_ID }}
           signing_key_passphrase: ${{ env.SIGNING_KEY_PASSPHRASE }}
@@ -174,8 +174,8 @@ jobs:
       - uses: ./.github/actions/full-release
         with:
           workspace_path: lib/shared/common
-          dry_run: true #TODO make this false after testing
-          prerelease: true #TODO make this false after testing
+          dry_run: false
+          prerelease: false
           code_signing_keyring: 'code-signing-keyring.gpg'
           signing_key_id: ${{ env.SIGNING_KEY_ID }}
           signing_key_passphrase: ${{ env.SIGNING_KEY_PASSPHRASE }}
