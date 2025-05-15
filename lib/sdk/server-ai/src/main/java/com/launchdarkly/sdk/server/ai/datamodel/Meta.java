@@ -2,7 +2,7 @@ package com.launchdarkly.sdk.server.ai.datamodel;
 
 import java.util.Optional;
 
-public class Meta {
+public final class Meta {
     /**
      * The variation key.
      */

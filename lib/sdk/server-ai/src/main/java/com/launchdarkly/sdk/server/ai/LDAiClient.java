@@ -23,7 +23,7 @@ import com.launchdarkly.sdk.server.ai.interfaces.LDAiClientInterface;
  * and generating events specific to usage of the AI Config when interacting
  * with model providers.
  */
-public class LDAiClient implements LDAiClientInterface {
+public final class LDAiClient implements LDAiClientInterface {
     private LDClientInterface client;
     private LDLogger logger;
 
@@ -89,11 +89,7 @@ public class LDAiClient implements LDAiClientInterface {
                     throw new AiConfigParseException("individual message must be a JSON object");
                 }
 
-                Message message = new Message();
-                message.setContent(ldValueNullCheck(valueMessage.get("content")).stringValue());
-                // TODO: For absolute safety, we need to check this is one out of the three
-                // possible enum
-                message.setRole(Role.valueOf(valueMessage.get("role").stringValue().toUpperCase()));
+                Message message = new Message(ldValueNullCheck(valueMessage.get("content")).stringValue(), Role.valueOf(valueMessage.get("role").stringValue().toUpperCase()));
                 messages.add(message);
             }
             result.setMessages(messages);
@@ -150,8 +146,7 @@ public class LDAiClient implements LDAiClientInterface {
                     throw new AiConfigParseException("non-null provider must be a JSON object");
                 }
 
-                Provider provider = new Provider();
-                provider.setName(ldValueNullCheck(valueProvider.get("name")).stringValue());
+                Provider provider = new Provider(ldValueNullCheck(valueProvider.get("name")).stringValue());
                 result.setProvider(provider);
             } else {
                 // Provider is optional - we can just set null and proceed

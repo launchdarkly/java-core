@@ -2,7 +2,7 @@ package com.launchdarkly.sdk.server.ai.datamodel;
 
 import java.util.List;
 
-public class AiConfig {
+public final class AiConfig {
     private List<Message> messages;
 
     private Meta meta;

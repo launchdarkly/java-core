@@ -4,7 +4,7 @@ import java.util.HashMap;
 
 import com.launchdarkly.sdk.LDValue;
 
-public class Model {
+public final class Model {
     private String name;
 
     private HashMap<String, LDValue> parameters;
