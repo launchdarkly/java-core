@@ -1,39 +1,40 @@
 package com.launchdarkly.sdk.server.ai.datamodel;
 
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.Map;
 
 import com.launchdarkly.sdk.LDValue;
 
 public final class Model {
-    private String name;
+    private final String name;
 
-    private HashMap<String, LDValue> parameters;
+    private final Map<String, LDValue> parameters;
 
-    private HashMap<String, LDValue> custom;
+    private final Map<String, LDValue> custom;
 
-    // Getters and Setters
+    /**
+     * Constructor for Model with all required fields.
+     * 
+     * @param name the model name
+     * @param parameters the parameters map
+     * @param custom the custom map
+     */
+    public Model(String name, Map<String, LDValue> parameters, Map<String, LDValue> custom) {
+        this.name = name;
+        this.parameters = parameters != null ? Collections.unmodifiableMap(new HashMap<>(parameters)) : Collections.emptyMap();
+        this.custom = custom != null ? Collections.unmodifiableMap(new HashMap<>(custom)) : Collections.emptyMap();
+    }
 
     public String getName() {
         return name;
     }
 
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public HashMap<String, LDValue> getParameters() {
+    public Map<String, LDValue> getParameters() {
         return parameters;
     }
 
-    public void setParameters(HashMap<String, LDValue> parameters) {
-        this.parameters = parameters;
-    }
-
-    public HashMap<String, LDValue> getCustom() {
+    public Map<String, LDValue> getCustom() {
         return custom;
-    }
-
-    public void setCustom(HashMap<String, LDValue> custom) {
-        this.custom = custom;
     }
 }

@@ -6,41 +6,40 @@ public final class Meta {
     /**
      * The variation key.
      */
-    private String variationKey;
+    private final String variationKey;
 
     /**
      * The variation version.
      */
-    private Optional<Integer> version;
+    private final Optional<Integer> version;
 
     /**
      * If the config is enabled.
      */
-    private boolean enabled;
+    private final boolean enabled;
 
-    // Getters and Setters
+    /**
+     * Constructor for Meta with all required fields.
+     * 
+     * @param variationKey the variation key
+     * @param version the version
+     * @param enabled if the config is enabled
+     */
+    public Meta(String variationKey, Optional<Integer> version, boolean enabled) {
+        this.variationKey = variationKey;
+        this.version = version != null ? version : Optional.empty();
+        this.enabled = enabled;
+    }
 
     public String getVariationKey() {
         return variationKey;
-    }
-
-    public void setVariationKey(String variationKey) {
-        this.variationKey = variationKey;
     }
 
     public Optional<Integer> getVersion() {
         return version;
     }
 
-    public void setVersion(Optional<Integer> version) {
-        this.version = version;
-    }
-
     public boolean isEnabled() {
         return enabled;
-    }
-
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
     }
 }

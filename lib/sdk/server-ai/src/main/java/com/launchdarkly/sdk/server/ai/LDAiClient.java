@@ -44,11 +44,6 @@ public final class LDAiClient implements LDAiClientInterface {
     /**
      * Method to convert the JSON variable into the AiConfig object
      *
-     * Currently, I am doing this in a mutable way, just to verify the logic convert
-     * LDValue into AiConfig.
-     * It is possible we need a builder to create immutable version of this for ease
-     * of use in a later PR.
-     *
      * @param value
      * @param key
      */
@@ -67,13 +62,12 @@ public final class LDAiClient implements LDAiClientInterface {
                 throw new AiConfigParseException("_ldMeta must be a JSON object");
             }
 
-            Meta meta = new Meta();
-            // TODO: Do we expect customer calling this to build default value?
-            // If we do, then some of the values would be null
-            meta.setEnabled(ldValueNullCheck(valueMeta.get("enabled")).booleanValue());
-            meta.setVariationKey(ldValueNullCheck(valueMeta.get("variationKey")).stringValue());
-            Optional<Integer> version = Optional.of(valueMeta.get("version").intValue());
-            meta.setVersion(version);
+            // Create Meta using constructor
+            Meta meta = new Meta(
+                ldValueNullCheck(valueMeta.get("variationKey")).stringValue(),
+                Optional.of(valueMeta.get("version").intValue()),
+                ldValueNullCheck(valueMeta.get("enabled")).booleanValue()
+            );
             result.setMeta(meta);
 
             // Convert the optional messages from an JSON array of JSON objects into Message
@@ -97,8 +91,10 @@ public final class LDAiClient implements LDAiClientInterface {
                 throw new AiConfigParseException("model must be a JSON object");
             }
 
-            Model model = new Model();
-            model.setName(ldValueNullCheck(valueModel.get("name")).stringValue());
+            // Prepare parameters and custom maps for Model
+            String modelName = ldValueNullCheck(valueModel.get("name")).stringValue();
+            HashMap<String, LDValue> parameters = null;
+            HashMap<String, LDValue> custom = null;
 
             LDValue valueParameters = valueModel.get("parameters");
             if (valueParameters.getType() != LDValueType.NULL) {
@@ -106,16 +102,10 @@ public final class LDAiClient implements LDAiClientInterface {
                     throw new AiConfigParseException("non-null parameters must be a JSON object");
                 }
 
-                HashMap<String, LDValue> parameters = new HashMap<>();
+                parameters = new HashMap<>();
                 for (String k : valueParameters.keys()) {
                     parameters.put(k, valueParameters.get(k));
                 }
-                model.setParameters(parameters);
-            } else {
-                // Parameters is optional - so we can just set null and proceed
-
-                // TODO: Mustash validation somewhere
-                model.setParameters(null);
             }
 
             LDValue valueCustom = valueModel.get("custom");
@@ -124,15 +114,14 @@ public final class LDAiClient implements LDAiClientInterface {
                     throw new AiConfigParseException("non-null custom must be a JSON object");
                 }
 
-                HashMap<String, LDValue> custom = new HashMap<>();
+                custom = new HashMap<>();
                 for (String k : valueCustom.keys()) {
                     custom.put(k, valueCustom.get(k));
                 }
-                model.setCustom(custom);
-            } else {
-                // Custom is optional - we can just set null and proceed
-                model.setCustom(null);
             }
+            
+            // Create Model using constructor
+            Model model = new Model(modelName, parameters, custom);
             result.setModel(model);
 
             // Convert the optional provider from an JSON object of with name into Provider
