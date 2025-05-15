@@ -7,13 +7,37 @@ public enum Role {
     /**
      * User Role
      */
-    USER,
+    USER("user"),
     /**
      * System Role
      */
-    SYSTEM,
+    SYSTEM("system"),
     /**
      * Assistant Role
      */
-    ASSISTANT
+    ASSISTANT("assistant");
+
+    private final String role;
+
+    private Role(String role) {
+        this.role = role;
+    }
+
+    public static Role getRole(String role) {
+        switch (role) {
+            case "user":
+                return USER;
+            case "system":
+                return SYSTEM;
+            case "assistant":
+                return ASSISTANT;
+            default:
+                return null;
+        }
+    }
+
+    @Override
+    public String toString() {
+        return role;
+    }
 }
