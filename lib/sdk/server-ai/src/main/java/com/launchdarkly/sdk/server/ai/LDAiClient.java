@@ -84,12 +84,8 @@ public final class LDAiClient implements LDAiClientInterface {
             }
 
             List<Message> messages = new ArrayList<Message>();
-            for (LDValue valueMessage : valueMessages.values()) {
-                if (valueMessage == LDValue.ofNull() || valueMessage.getType() != LDValueType.OBJECT) {
-                    throw new AiConfigParseException("individual message must be a JSON object");
-                }
-
-                Message message = new Message(ldValueNullCheck(valueMessage.get("content")).stringValue(), Role.valueOf(valueMessage.get("role").stringValue().toUpperCase()));
+            valueMessages.valuesAs(new Message.MessageConverter());
+            for (Message message : valueMessages.valuesAs(new Message.MessageConverter())) {
                 messages.add(message);
             }
             result.setMessages(messages);
