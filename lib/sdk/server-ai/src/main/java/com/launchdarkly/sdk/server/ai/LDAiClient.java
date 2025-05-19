@@ -71,8 +71,7 @@ public final class LDAiClient implements LDAiClientInterface {
             return new AiConfig(enabled, null, null, null, null);
         }
 
-        // The booleanValue will get false if that value something that we are not
-        // expecting, which is good
+        // The booleanValue will get false if that value is something that we are not expecting
         enabled = valueMeta.get("enabled").booleanValue();
 
         Meta meta = null;
@@ -140,17 +139,17 @@ public final class LDAiClient implements LDAiClientInterface {
 
         // Convert the optional provider from an JSON object of with name into Provider
         LDValue valueProvider = value.get("provider");
-        String providerName = null;
+        Provider provider = null;
 
         if (checkValueWithFailureLogging(valueProvider, LDValueType.OBJECT, logger,
                 "non-null provider must be a JSON object")) {
             if (checkValueWithFailureLogging(valueProvider.get("name"), LDValueType.STRING, logger,
                     "provider name must be a String")) {
-                providerName = valueProvider.get("name").stringValue();
+                String providerName = valueProvider.get("name").stringValue();
+
+                provider = new Provider(providerName);
             }
         }
-
-        Provider provider = new Provider(providerName);
 
         return new AiConfig(enabled, meta, model, messages, provider);
     }
@@ -158,17 +157,12 @@ public final class LDAiClient implements LDAiClientInterface {
     protected boolean checkValueWithFailureLogging(LDValue ldValue, LDValueType expectedType, LDLogger logger,
             String message) {
         if (ldValue.getType() != expectedType) {
+            // TODO: In the next PR, make this required with some sort of default logger
             if (logger != null) {
                 logger.error(message);
             }
             return false;
         }
         return true;
-    }
-
-    class AiConfigParseException extends Exception {
-        AiConfigParseException(String exceptionMessage) {
-            super(exceptionMessage);
-        }
     }
 }

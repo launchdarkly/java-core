@@ -4,7 +4,6 @@ import org.junit.Test;
 
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.server.ai.datamodel.AiConfig;
-import com.launchdarkly.sdk.server.ai.datamodel.Message;
 import com.launchdarkly.sdk.server.ai.datamodel.Role;
 
 import static org.junit.Assert.assertEquals;
@@ -13,36 +12,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
 
-import java.util.List;
-import java.util.Map;
-
 public class LDAiClientTest {
-    /**
-     * Helper method to generate valid JSON with all required fields
-     * This can be modified for specific test cases
-     */
-    private String getValidBaseJson() {
-        return "{\n" + //
-                "  \"_ldMeta\": {\n" + //
-                "    \"variationKey\" : \"1234\",\n" + //
-                "    \"enabled\": true,\n" + //
-                "    \"version\": 1\n" + //
-                "  },\n" + //
-                "  \"messages\": [\n" + //
-                "    {\n" + //
-                "      \"content\": \"This is an {{ adjective }} message.\",\n" + //
-                "      \"role\": \"user\"\n" + //
-                "    }\n" + //
-                "  ],\n" + //
-                "  \"model\": {\n" + //
-                "    \"name\": \"my-cool-custom-model\"\n" + //
-                "  },\n" + //
-                "  \"provider\": {\n" + //
-                "    \"name\" : \"provider-name\"\n" + //
-                "  }\n" + //
-                "}";
-    }
-
     /**
      * Tests that a complete valid JSON is properly converted to an AiConfig object
      */
@@ -382,8 +352,7 @@ public class LDAiClientTest {
         LDAiClient client = new LDAiClient(null);
         AiConfig result = client.parseAiConfig(input, "Whatever");
 
-        assertNotNull(result.getProvider());
-        assertNull(result.getProvider().getName());
+        assertNull(result.getProvider());
     }
 
     /**
@@ -401,6 +370,7 @@ public class LDAiClientTest {
         assertNull(result.getMeta());
         assertNull(result.getModel());
         assertNull(result.getMessages());
+        assertNull(result.getProvider());
     }
 
     /**
@@ -422,5 +392,6 @@ public class LDAiClientTest {
         assertNull(result.getMeta()); // Meta should be null due to missing variationKey
         assertNull(result.getModel());
         assertNull(result.getMessages());
+        assertNull(result.getProvider());
     }
 }
