@@ -1,5 +1,7 @@
 package com.launchdarkly.sdk.server.ai;
 
+import static java.util.Arrays.binarySearch;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -43,113 +45,114 @@ public final class LDAiClient implements LDAiClientInterface {
 
     /**
      * Method to convert the JSON variable into the AiConfig object
+     * 
+     * If the parsing failed, the code will log an error and 
+     * return a well formed but with nullable value nulled and disabled AIConfig
+     * 
+     * Doing all the error checks, so if somehow LD backend return incorrect value types, there is logging
+     * This also opens up the possibility of allowing customer to build this using a JSON string in the future
      *
      * @param value
      * @param key
      */
     protected AiConfig parseAiConfig(LDValue value, String key) {
-        AiConfig result = new AiConfig();
+        boolean enabled = false;
 
-        try {
-            // Verify the whole value is a JSON object
-            if (value == null || value.getType() != LDValueType.OBJECT) {
-                throw new AiConfigParseException("Input to parseAiConfig must be a JSON object");
+        // Verify the whole value is a JSON object
+        if(!checkValueWithFailureLogging(value, LDValueType.OBJECT, logger, "Input to parseAiConfig must be a JSON object")) {
+            return new AiConfig(enabled, null, null, null, null);
+        }
+
+        // Convert the _meta JSON object into Meta
+        LDValue valueMeta = value.get("_ldMeta");
+        if (!checkValueWithFailureLogging(valueMeta, LDValueType.OBJECT, logger, "_ldMeta must be a JSON object")) {
+            // Q: If we can't read _meta, enabled by spec would be defaulted to false. Does it even matter the rest of the values?
+            return new AiConfig(enabled, null, null, null, null);
+        }
+
+        // The booleanValue will get false if that value something that we are not expecting, which is good
+        enabled = valueMeta.get("enabled").booleanValue();
+
+        String variationKey = null;
+        if (checkValueWithFailureLogging(valueMeta.get("variationKey"), LDValueType.STRING, logger, "variationKey should be a string")) {
+            variationKey = valueMeta.get("variationKey").stringValue();
+        }
+        // Create Meta using constructor
+        Meta meta = new Meta(
+            variationKey,
+            Optional.of(valueMeta.get("version").intValue())
+        );
+
+        // Convert the optional model from an JSON object of with parameters and custom
+        // into Model
+        Model model = null;
+
+        LDValue valueModel = value.get("model");
+        if (checkValueWithFailureLogging(valueModel, LDValueType.OBJECT, logger, "model if exists must be a JSON object")) {
+            if (checkValueWithFailureLogging(valueModel.get("name"), LDValueType.STRING, logger, "model name must be a string and is required")) {
+                String modelName = valueModel.get("name").stringValue();
+
+                // Prepare parameters and custom maps for Model
+                HashMap<String, LDValue> parameters = null;
+                HashMap<String, LDValue> custom = null;
+
+                LDValue valueParameters = valueModel.get("parameters");
+                if (checkValueWithFailureLogging(valueParameters, LDValueType.OBJECT, logger, "non-null parameters must be a JSON object")) {       
+                    parameters = new HashMap<>();
+                    for (String k : valueParameters.keys()) {
+                        parameters.put(k, valueParameters.get(k));
+                    }
+                }
+        
+                LDValue valueCustom = valueModel.get("custom");
+                if (checkValueWithFailureLogging(valueCustom, LDValueType.OBJECT, logger, "non-null custom must be a JSON object")) {
+
+                    custom = new HashMap<>();
+                    for (String k : valueCustom.keys()) {
+                        custom.put(k, valueCustom.get(k));
+                    }
+                }
+
+                model = new Model(modelName, parameters, custom);
             }
+        }
 
-            // Convert the _meta JSON object into Meta
-            LDValue valueMeta = value.get("_ldMeta");
-            if (valueMeta == LDValue.ofNull() || valueMeta.getType() != LDValueType.OBJECT) {
-                throw new AiConfigParseException("_ldMeta must be a JSON object");
-            }
+        // Convert the optional messages from an JSON array of JSON objects into Message
+        // Q: Does it even make sense to have 0 messages?
+        List<Message> messages = null;
 
-            // Create Meta using constructor
-            Meta meta = new Meta(
-                ldValueNullCheck(valueMeta.get("variationKey")).stringValue(),
-                Optional.of(valueMeta.get("version").intValue()),
-                ldValueNullCheck(valueMeta.get("enabled")).booleanValue()
-            );
-            result.setMeta(meta);
-
-            // Convert the optional messages from an JSON array of JSON objects into Message
-            // Q: Does it even make sense to have 0 messages?
-            LDValue valueMessages = value.get("messages");
-            if (valueMeta == LDValue.ofNull() || valueMessages.getType() != LDValueType.ARRAY) {
-                throw new AiConfigParseException("messages must be a JSON array");
-            }
-
-            List<Message> messages = new ArrayList<Message>();
+        LDValue valueMessages = value.get("messages");
+        if (checkValueWithFailureLogging(valueMessages, LDValueType.ARRAY, logger, "messages if exists must be a JSON array")) {
+            messages = new ArrayList<Message>();
             valueMessages.valuesAs(new Message.MessageConverter());
             for (Message message : valueMessages.valuesAs(new Message.MessageConverter())) {
                 messages.add(message);
             }
-            result.setMessages(messages);
-
-            // Convert the optional model from an JSON object of with parameters and custom
-            // into Model
-            LDValue valueModel = value.get("model");
-            if (valueModel == LDValue.ofNull() || valueModel.getType() != LDValueType.OBJECT) {
-                throw new AiConfigParseException("model must be a JSON object");
-            }
-
-            // Prepare parameters and custom maps for Model
-            String modelName = ldValueNullCheck(valueModel.get("name")).stringValue();
-            HashMap<String, LDValue> parameters = null;
-            HashMap<String, LDValue> custom = null;
-
-            LDValue valueParameters = valueModel.get("parameters");
-            if (valueParameters.getType() != LDValueType.NULL) {
-                if (valueParameters.getType() != LDValueType.OBJECT) {
-                    throw new AiConfigParseException("non-null parameters must be a JSON object");
-                }
-
-                parameters = new HashMap<>();
-                for (String k : valueParameters.keys()) {
-                    parameters.put(k, valueParameters.get(k));
-                }
-            }
-
-            LDValue valueCustom = valueModel.get("custom");
-            if (valueCustom.getType() != LDValueType.NULL) {
-                if (valueCustom.getType() != LDValueType.OBJECT) {
-                    throw new AiConfigParseException("non-null custom must be a JSON object");
-                }
-
-                custom = new HashMap<>();
-                for (String k : valueCustom.keys()) {
-                    custom.put(k, valueCustom.get(k));
-                }
-            }
-            
-            // Create Model using constructor
-            Model model = new Model(modelName, parameters, custom);
-            result.setModel(model);
-
-            // Convert the optional provider from an JSON object of with name into Provider
-            LDValue valueProvider = value.get("provider");
-            if (valueProvider.getType() != LDValueType.NULL) {
-                if (valueProvider.getType() != LDValueType.OBJECT) {
-                    throw new AiConfigParseException("non-null provider must be a JSON object");
-                }
-
-                Provider provider = new Provider(ldValueNullCheck(valueProvider.get("name")).stringValue());
-                result.setProvider(provider);
-            } else {
-                // Provider is optional - we can just set null and proceed
-                result.setProvider(null);
-            }
-        } catch (AiConfigParseException e) {
-            // logger.error(e.getMessage());
-            return null;
         }
 
-        return result;
+        // Convert the optional provider from an JSON object of with name into Provider
+        LDValue valueProvider = value.get("provider");
+        String providerName = null;
+
+        if(checkValueWithFailureLogging(valueProvider, LDValueType.OBJECT, logger, "non-null provider must be a JSON object")) {
+            if(checkValueWithFailureLogging(valueProvider.get("name"), LDValueType.STRING, logger, "provider name must be a String")) {
+                providerName = valueProvider.get("name").stringValue();
+            }
+        }
+
+        Provider provider = new Provider(providerName);
+
+        return new AiConfig(enabled, meta, model, messages, provider);
     }
 
-    protected <T> T ldValueNullCheck(T ldValue) throws AiConfigParseException {
-        if (ldValue == LDValue.ofNull()) {
-            throw new AiConfigParseException("Unexpected Null value for non-optional field");
+    protected boolean checkValueWithFailureLogging(LDValue ldValue, LDValueType expectedType, LDLogger logger, String message) {
+        if (ldValue.getType() != expectedType) {
+            if (logger != null) {
+                logger.error(message);
+            }
+            return false;
         }
-        return ldValue;
+        return true;
     }
 
     class AiConfigParseException extends Exception {

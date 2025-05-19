@@ -13,7 +13,7 @@ public class LDAiClientTest {
     public void testParseAiConfig() {
         String rawJson = "{\n" + //
                 "  \"_ldMeta\": {\n" + //
-                "    \"variationKey\" : 1234,\n" + //
+                "    \"variationKey\" : \"1234\",\n" + //
                 "    \"enabled\": true,\n" + //
                 "    \"version\": 1\n" + //
                 "  },\n" + //
