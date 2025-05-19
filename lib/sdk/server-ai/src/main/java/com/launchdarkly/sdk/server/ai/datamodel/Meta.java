@@ -13,21 +13,18 @@ public final class Meta {
      */
     private final Optional<Integer> version;
 
-    /**
-     * If the config is enabled.
-     */
-    // private final boolean enabled;
+    // The enable paramter is taken outside of the Meta to be a top level value of
+    // AiConfig
 
     /**
      * Constructor for Meta with all required fields.
      * 
      * @param variationKey the variation key
-     * @param version the version
+     * @param version      the version
      */
     public Meta(String variationKey, Optional<Integer> version) {
         this.variationKey = variationKey;
         this.version = version != null ? version : Optional.empty();
-        // this.enabled = enabled;
     }
 
     public String getVariationKey() {
@@ -37,8 +34,4 @@ public final class Meta {
     public Optional<Integer> getVersion() {
         return version;
     }
-
-    // public boolean isEnabled() {
-    //     return enabled;
-    // }
 }

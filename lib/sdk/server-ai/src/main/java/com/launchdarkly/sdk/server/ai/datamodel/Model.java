@@ -16,13 +16,14 @@ public final class Model {
     /**
      * Constructor for Model with all required fields.
      * 
-     * @param name the model name
+     * @param name       the model name
      * @param parameters the parameters map
-     * @param custom the custom map
+     * @param custom     the custom map
      */
     public Model(String name, Map<String, LDValue> parameters, Map<String, LDValue> custom) {
         this.name = name;
-        this.parameters = parameters != null ? Collections.unmodifiableMap(new HashMap<>(parameters)) : Collections.emptyMap();
+        this.parameters = parameters != null ? Collections.unmodifiableMap(new HashMap<>(parameters))
+                : Collections.emptyMap();
         this.custom = custom != null ? Collections.unmodifiableMap(new HashMap<>(custom)) : Collections.emptyMap();
     }
 

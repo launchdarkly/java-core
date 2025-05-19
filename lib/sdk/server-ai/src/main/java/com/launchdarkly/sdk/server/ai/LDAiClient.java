@@ -1,7 +1,5 @@
 package com.launchdarkly.sdk.server.ai;
 
-import static java.util.Arrays.binarySearch;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -16,7 +14,6 @@ import com.launchdarkly.sdk.server.ai.datamodel.Message;
 import com.launchdarkly.sdk.server.ai.datamodel.Meta;
 import com.launchdarkly.sdk.server.ai.datamodel.Model;
 import com.launchdarkly.sdk.server.ai.datamodel.Provider;
-import com.launchdarkly.sdk.server.ai.datamodel.Role;
 import com.launchdarkly.sdk.server.ai.interfaces.LDAiClientInterface;
 
 /**
@@ -46,11 +43,13 @@ public final class LDAiClient implements LDAiClientInterface {
     /**
      * Method to convert the JSON variable into the AiConfig object
      * 
-     * If the parsing failed, the code will log an error and 
+     * If the parsing failed, the code will log an error and
      * return a well formed but with nullable value nulled and disabled AIConfig
      * 
-     * Doing all the error checks, so if somehow LD backend return incorrect value types, there is logging
-     * This also opens up the possibility of allowing customer to build this using a JSON string in the future
+     * Doing all the error checks, so if somehow LD backend return incorrect value
+     * types, there is logging
+     * This also opens up the possibility of allowing customer to build this using a
+     * JSON string in the future
      *
      * @param value
      * @param key
@@ -59,37 +58,42 @@ public final class LDAiClient implements LDAiClientInterface {
         boolean enabled = false;
 
         // Verify the whole value is a JSON object
-        if(!checkValueWithFailureLogging(value, LDValueType.OBJECT, logger, "Input to parseAiConfig must be a JSON object")) {
+        if (!checkValueWithFailureLogging(value, LDValueType.OBJECT, logger,
+                "Input to parseAiConfig must be a JSON object")) {
             return new AiConfig(enabled, null, null, null, null);
         }
 
         // Convert the _meta JSON object into Meta
         LDValue valueMeta = value.get("_ldMeta");
         if (!checkValueWithFailureLogging(valueMeta, LDValueType.OBJECT, logger, "_ldMeta must be a JSON object")) {
-            // Q: If we can't read _meta, enabled by spec would be defaulted to false. Does it even matter the rest of the values?
+            // Q: If we can't read _meta, enabled by spec would be defaulted to false. Does
+            // it even matter the rest of the values?
             return new AiConfig(enabled, null, null, null, null);
         }
 
-        // The booleanValue will get false if that value something that we are not expecting, which is good
+        // The booleanValue will get false if that value something that we are not
+        // expecting, which is good
         enabled = valueMeta.get("enabled").booleanValue();
 
         String variationKey = null;
-        if (checkValueWithFailureLogging(valueMeta.get("variationKey"), LDValueType.STRING, logger, "variationKey should be a string")) {
+        if (checkValueWithFailureLogging(valueMeta.get("variationKey"), LDValueType.STRING, logger,
+                "variationKey should be a string")) {
             variationKey = valueMeta.get("variationKey").stringValue();
         }
         // Create Meta using constructor
         Meta meta = new Meta(
-            variationKey,
-            Optional.of(valueMeta.get("version").intValue())
-        );
+                variationKey,
+                Optional.of(valueMeta.get("version").intValue()));
 
         // Convert the optional model from an JSON object of with parameters and custom
         // into Model
         Model model = null;
 
         LDValue valueModel = value.get("model");
-        if (checkValueWithFailureLogging(valueModel, LDValueType.OBJECT, logger, "model if exists must be a JSON object")) {
-            if (checkValueWithFailureLogging(valueModel.get("name"), LDValueType.STRING, logger, "model name must be a string and is required")) {
+        if (checkValueWithFailureLogging(valueModel, LDValueType.OBJECT, logger,
+                "model if exists must be a JSON object")) {
+            if (checkValueWithFailureLogging(valueModel.get("name"), LDValueType.STRING, logger,
+                    "model name must be a string and is required")) {
                 String modelName = valueModel.get("name").stringValue();
 
                 // Prepare parameters and custom maps for Model
@@ -97,15 +101,17 @@ public final class LDAiClient implements LDAiClientInterface {
                 HashMap<String, LDValue> custom = null;
 
                 LDValue valueParameters = valueModel.get("parameters");
-                if (checkValueWithFailureLogging(valueParameters, LDValueType.OBJECT, logger, "non-null parameters must be a JSON object")) {       
+                if (checkValueWithFailureLogging(valueParameters, LDValueType.OBJECT, logger,
+                        "non-null parameters must be a JSON object")) {
                     parameters = new HashMap<>();
                     for (String k : valueParameters.keys()) {
                         parameters.put(k, valueParameters.get(k));
                     }
                 }
-        
+
                 LDValue valueCustom = valueModel.get("custom");
-                if (checkValueWithFailureLogging(valueCustom, LDValueType.OBJECT, logger, "non-null custom must be a JSON object")) {
+                if (checkValueWithFailureLogging(valueCustom, LDValueType.OBJECT, logger,
+                        "non-null custom must be a JSON object")) {
 
                     custom = new HashMap<>();
                     for (String k : valueCustom.keys()) {
@@ -122,7 +128,8 @@ public final class LDAiClient implements LDAiClientInterface {
         List<Message> messages = null;
 
         LDValue valueMessages = value.get("messages");
-        if (checkValueWithFailureLogging(valueMessages, LDValueType.ARRAY, logger, "messages if exists must be a JSON array")) {
+        if (checkValueWithFailureLogging(valueMessages, LDValueType.ARRAY, logger,
+                "messages if exists must be a JSON array")) {
             messages = new ArrayList<Message>();
             valueMessages.valuesAs(new Message.MessageConverter());
             for (Message message : valueMessages.valuesAs(new Message.MessageConverter())) {
@@ -134,8 +141,10 @@ public final class LDAiClient implements LDAiClientInterface {
         LDValue valueProvider = value.get("provider");
         String providerName = null;
 
-        if(checkValueWithFailureLogging(valueProvider, LDValueType.OBJECT, logger, "non-null provider must be a JSON object")) {
-            if(checkValueWithFailureLogging(valueProvider.get("name"), LDValueType.STRING, logger, "provider name must be a String")) {
+        if (checkValueWithFailureLogging(valueProvider, LDValueType.OBJECT, logger,
+                "non-null provider must be a JSON object")) {
+            if (checkValueWithFailureLogging(valueProvider.get("name"), LDValueType.STRING, logger,
+                    "provider name must be a String")) {
                 providerName = valueProvider.get("name").stringValue();
             }
         }
@@ -145,7 +154,8 @@ public final class LDAiClient implements LDAiClientInterface {
         return new AiConfig(enabled, meta, model, messages, provider);
     }
 
-    protected boolean checkValueWithFailureLogging(LDValue ldValue, LDValueType expectedType, LDLogger logger, String message) {
+    protected boolean checkValueWithFailureLogging(LDValue ldValue, LDValueType expectedType, LDLogger logger,
+            String message) {
         if (ldValue.getType() != expectedType) {
             if (logger != null) {
                 logger.error(message);

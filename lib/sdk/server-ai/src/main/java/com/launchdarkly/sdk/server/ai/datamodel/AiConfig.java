@@ -6,9 +6,9 @@ public final class AiConfig {
     private final boolean enabled;
 
     private final Meta meta;
-    
+
     private final Model model;
-    
+
     private final List<Message> messages;
 
     private final Provider provider;
