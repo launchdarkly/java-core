@@ -75,15 +75,16 @@ public final class LDAiClient implements LDAiClientInterface {
         // expecting, which is good
         enabled = valueMeta.get("enabled").booleanValue();
 
-        String variationKey = null;
+        Meta meta = null;
+
         if (checkValueWithFailureLogging(valueMeta.get("variationKey"), LDValueType.STRING, logger,
                 "variationKey should be a string")) {
-            variationKey = valueMeta.get("variationKey").stringValue();
-        }
-        // Create Meta using constructor
-        Meta meta = new Meta(
+            String variationKey = valueMeta.get("variationKey").stringValue();
+
+            meta = new Meta(
                 variationKey,
                 Optional.of(valueMeta.get("version").intValue()));
+        }
 
         // Convert the optional model from an JSON object of with parameters and custom
         // into Model
