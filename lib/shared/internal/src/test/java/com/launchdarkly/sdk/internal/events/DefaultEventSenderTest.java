@@ -51,7 +51,7 @@ public class DefaultEventSenderTest extends BaseEventTest {
   }
 
   private EventSender makeEventSender(HttpProperties httpProperties) {
-    return new DefaultEventSender(httpProperties, null, null, BRIEF_RETRY_DELAY_MILLIS, testLogger);
+    return new DefaultEventSender(httpProperties, null, null, BRIEF_RETRY_DELAY_MILLIS, false, testLogger);
   }
 
   @Test
@@ -92,7 +92,7 @@ public class DefaultEventSenderTest extends BaseEventTest {
   public void customRequestPaths() throws Exception {
     try (HttpServer server = HttpServer.start(eventsSuccessResponse())) {
       try (EventSender es = new DefaultEventSender(HttpProperties.defaults(),
-          "/custom/path/a", "/custom/path/d", BRIEF_RETRY_DELAY_MILLIS, testLogger)) {
+          "/custom/path/a", "/custom/path/d", BRIEF_RETRY_DELAY_MILLIS, false, testLogger)) {
         EventSender.Result result = es.sendAnalyticsEvents(FAKE_DATA_BYTES, 1, server.getUri());
         assertTrue(result.isSuccess());
         result = es.sendDiagnosticEvent(FAKE_DATA_BYTES, server.getUri());
@@ -353,6 +353,38 @@ public class DefaultEventSenderTest extends BaseEventTest {
         assertTrue(result2.isSuccess());
         assertEquals(0, server.getRecorder().count());
       }
+    }
+  }
+
+  @Test
+  public void gzipCompressionIsEnabledWhenConfigured() throws Exception {
+    try (HttpServer server = HttpServer.start(eventsSuccessResponse())) {
+      try (EventSender es = new DefaultEventSender(HttpProperties.defaults(), null, null, BRIEF_RETRY_DELAY_MILLIS, true, testLogger)) {
+        EventSender.Result result = es.sendAnalyticsEvents(FAKE_DATA_BYTES, 1, server.getUri());
+
+        assertTrue(result.isSuccess());
+        assertFalse(result.isMustShutDown());
+      }
+
+      RequestInfo req = server.getRecorder().requireRequest();
+      assertThat(req.getHeader("content-type"), equalToIgnoringCase("application/json; charset=utf-8"));
+      assertThat(req.getHeader("content-encoding"), equalToIgnoringCase("gzip"));
+    }
+  }
+
+  @Test
+  public void gzipCompressionIsDisabledByDefault() throws Exception {
+    try (HttpServer server = HttpServer.start(eventsSuccessResponse())) {
+      try (EventSender es = makeEventSender()) {
+        EventSender.Result result = es.sendAnalyticsEvents(FAKE_DATA_BYTES, 1, server.getUri());
+
+        assertTrue(result.isSuccess());
+        assertFalse(result.isMustShutDown());
+      }
+
+      RequestInfo req = server.getRecorder().requireRequest();
+      assertThat(req.getHeader("content-type"), equalToIgnoringCase("application/json; charset=utf-8"));
+      assertThat(req.getHeader("content-encoding"), not(equalToIgnoringCase("gzip")));
     }
   }
 
