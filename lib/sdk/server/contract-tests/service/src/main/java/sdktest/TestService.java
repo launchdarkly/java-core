@@ -28,7 +28,7 @@ public class TestService {
     "all-flags-with-reasons",
     "anonymous-redaction",
     "big-segments",
-    "client-prereq-events"
+    "client-prereq-events",
     "context-type",
     "evaluation-hooks",
     "event-sampling",
