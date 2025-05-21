@@ -23,22 +23,22 @@ import sdktest.Representations.Status;
 public class TestService {
   private static final int PORT = 8000;
   private static final String[] CAPABILITIES = new String[]{
-    "server-side",
-    "strongly-typed",
     "all-flags-client-side-only",
     "all-flags-details-only-for-tracked-flags",
     "all-flags-with-reasons",
-    "big-segments",
-    "context-type",
-    "service-endpoints",
-    "tags",
-    "filtering",
-    "migrations",
-    "event-sampling",
-    "inline-context-all",
     "anonymous-redaction",
-    "evaluation-hooks",
+    "big-segments",
     "client-prereq-events"
+    "context-type",
+    "evaluation-hooks",
+    "event-sampling",
+    "filtering",
+    "inline-context-all",
+    "migrations",
+    "server-side",
+    "service-endpoints",
+    "strongly-typed",
+    "tags",
   };
 
   static final Gson gson = new GsonBuilder().serializeNulls().create();
