@@ -20,7 +20,7 @@ public final class Model {
      * @param parameters the parameters map
      * @param custom     the custom map
      */
-    public Model(String name, Map<String, LDValue> parameters, Map<String, LDValue> custom) {
+    Model(String name, Map<String, LDValue> parameters, Map<String, LDValue> custom) {
         this.name = name;
         this.parameters = parameters != null ? Collections.unmodifiableMap(new HashMap<>(parameters))
                 : Collections.emptyMap();
@@ -37,5 +37,36 @@ public final class Model {
 
     public Map<String, LDValue> getCustom() {
         return custom;
+    }
+    
+    public static Builder builder() {
+        return new Builder();
+    }
+    
+    public static final class Builder {
+        private String name;
+        private Map<String, LDValue> parameters;
+        private Map<String, LDValue> custom;
+        
+        private Builder() {}
+        
+        public Builder name(String name) {
+            this.name = name;
+            return this;
+        }
+        
+        public Builder parameters(Map<String, LDValue> parameters) {
+            this.parameters = parameters;
+            return this;
+        }
+        
+        public Builder custom(Map<String, LDValue> custom) {
+            this.custom = custom;
+            return this;
+        }
+        
+        public Model build() {
+            return new Model(name, parameters, custom);
+        }
     }
 }

@@ -60,7 +60,7 @@ public final class LDAiClient implements LDAiClientInterface {
         // Verify the whole value is a JSON object
         if (!checkValueWithFailureLogging(value, LDValueType.OBJECT, logger,
                 "Input to parseAiConfig must be a JSON object")) {
-            return new AiConfig(enabled, null, null, null, null);
+            return AiConfig.builder().enabled(enabled).build();
         }
 
         // Convert the _meta JSON object into Meta
@@ -68,7 +68,7 @@ public final class LDAiClient implements LDAiClientInterface {
         if (!checkValueWithFailureLogging(valueMeta, LDValueType.OBJECT, logger, "_ldMeta must be a JSON object")) {
             // Q: If we can't read _meta, enabled by spec would be defaulted to false. Does
             // it even matter the rest of the values?
-            return new AiConfig(enabled, null, null, null, null);
+            return AiConfig.builder().enabled(enabled).build();
         }
 
         // The booleanValue will get false if that value is something that we are not expecting
@@ -80,9 +80,10 @@ public final class LDAiClient implements LDAiClientInterface {
                 "variationKey should be a string")) {
             String variationKey = valueMeta.get("variationKey").stringValue();
 
-            meta = new Meta(
-                variationKey,
-                Optional.of(valueMeta.get("version").intValue()));
+            meta = Meta.builder()
+                .variationKey(variationKey)
+                .version(Optional.of(valueMeta.get("version").intValue()))
+                .build();
         }
 
         // Convert the optional model from an JSON object of with parameters and custom
@@ -119,7 +120,11 @@ public final class LDAiClient implements LDAiClientInterface {
                     }
                 }
 
-                model = new Model(modelName, parameters, custom);
+                model = Model.builder()
+                    .name(modelName)
+                    .parameters(parameters)
+                    .custom(custom)
+                    .build();
             }
         }
 
@@ -147,11 +152,17 @@ public final class LDAiClient implements LDAiClientInterface {
                     "provider name must be a String")) {
                 String providerName = valueProvider.get("name").stringValue();
 
-                provider = new Provider(providerName);
+                provider = Provider.builder().name(providerName).build();
             }
         }
 
-        return new AiConfig(enabled, meta, model, messages, provider);
+        return AiConfig.builder()
+            .enabled(enabled)
+            .meta(meta)
+            .model(model)
+            .messages(messages)
+            .provider(provider)
+            .build();
     }
 
     protected boolean checkValueWithFailureLogging(LDValue ldValue, LDValueType expectedType, LDLogger logger,
