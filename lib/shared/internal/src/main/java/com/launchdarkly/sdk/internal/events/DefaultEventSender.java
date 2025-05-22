@@ -5,6 +5,7 @@ import com.launchdarkly.logging.LogValues;
 import com.launchdarkly.sdk.internal.http.HttpHelpers;
 import com.launchdarkly.sdk.internal.http.HttpProperties;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.Charset;
@@ -13,6 +14,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.zip.GZIPOutputStream;
 
 import static com.launchdarkly.sdk.internal.http.HttpErrors.checkIfErrorIsRecoverableAndLog;
 import static com.launchdarkly.sdk.internal.http.HttpErrors.httpErrorDescription;
@@ -55,6 +57,16 @@ public final class DefaultEventSender implements EventSender {
       Locale.US); // server dates as defined by RFC-822/RFC-1123 use English day/month names
   private static final Object HTTP_DATE_FORMAT_LOCK = new Object(); // synchronize on this because DateFormat isn't thread-safe
 
+  private static class CompressionResult<T> {
+    final T data;
+    final boolean wasCompressed;
+
+    CompressionResult(T data, boolean wasCompressed) {
+      this.data = data;
+      this.wasCompressed = wasCompressed;
+    }
+  }
+
   private final OkHttpClient httpClient;
   private final boolean shouldCloseHttpClient;
   private final Headers baseHeaders;
@@ -62,6 +74,7 @@ public final class DefaultEventSender implements EventSender {
   private final String diagnosticRequestPath;
   final long retryDelayMillis; // visible for testing
   private final LDLogger logger;
+  private final boolean enableGzipCompression;
 
   /**
    * Creates an instance.
@@ -70,6 +83,7 @@ public final class DefaultEventSender implements EventSender {
    * @param analyticsRequestPath the request path for posting analytics events
    * @param diagnosticRequestPath the request path for posting diagnostic events
    * @param retryDelayMillis retry delay, or zero to use the default
+   * @param enableGzipCompression whether to enable gzip compression
    * @param logger the logger
    */
   public DefaultEventSender(
@@ -77,6 +91,7 @@ public final class DefaultEventSender implements EventSender {
       String analyticsRequestPath,
       String diagnosticRequestPath,
       long retryDelayMillis,
+      boolean enableGzipCompression,
       LDLogger logger
       ) {
     if (httpProperties.getSharedHttpClient() == null) {
@@ -87,6 +102,7 @@ public final class DefaultEventSender implements EventSender {
       shouldCloseHttpClient = false;
     }
     this.logger = logger;
+    this.enableGzipCompression = enableGzipCompression;
 
     this.baseHeaders = httpProperties.toHeadersBuilder()
         .add("Content-Type", "application/json")
@@ -115,6 +131,24 @@ public final class DefaultEventSender implements EventSender {
     return sendEventData(true, data, 1, eventsBaseUri);
   }
 
+  private CompressionResult<byte[]> compressData(byte[] data) {
+    if (!enableGzipCompression) {
+      return new CompressionResult<>(data, false);
+    }
+
+    try {
+      ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+      try (GZIPOutputStream gzipStream = new GZIPOutputStream(byteStream)) {
+        gzipStream.write(data);
+      }
+      byte[] compressedData = byteStream.toByteArray();
+      return new CompressionResult<>(compressedData, true);
+    } catch (IOException e) {
+      logger.warn("Failed to compress event data, falling back to uncompressed: {}", e.toString());
+      return new CompressionResult<>(data, false);
+    }
+  }
+
   private Result sendEventData(boolean isDiagnostic, byte[] data, int eventCount, URI eventsBaseUri) {
     if (data == null || data.length == 0) {
       // DefaultEventProcessor won't normally pass us an empty payload, but if it does, don't bother sending
@@ -137,10 +171,15 @@ public final class DefaultEventSender implements EventSender {
     }
 
     URI uri = HttpHelpers.concatenateUriPath(eventsBaseUri, path);
-    Headers headers = headersBuilder.build();
-    RequestBody body = RequestBody.create(data, JSON_CONTENT_TYPE);
+    CompressionResult<byte[]> compressionResult = compressData(data);
+    RequestBody body = RequestBody.create(compressionResult.data, JSON_CONTENT_TYPE);
     boolean mustShutDown = false;
 
+    if (compressionResult.wasCompressed) {
+      headersBuilder.add("Content-Encoding", "gzip");
+    }
+
+    Headers headers = headersBuilder.build();
     logger.debug("Posting {} to {} with payload: {}", description, uri,
         LogValues.defer(new LazilyPrintedUtf8Data(data)));
 

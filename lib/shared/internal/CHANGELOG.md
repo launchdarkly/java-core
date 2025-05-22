@@ -2,6 +2,13 @@
 
 All notable changes to the project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [1.5.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.4.0...launchdarkly-java-sdk-internal-1.5.0) (2025-05-21)
+
+
+### Features
+
+* Enable gzip option for sending events ([#66](https://github.com/launchdarkly/java-core/issues/66)) ([553883d](https://github.com/launchdarkly/java-core/commit/553883df07e60cf65ad3025eff30a9c6ca637262))
+
 ## [1.4.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-v1.3.0...launchdarkly-java-sdk-internal-1.4.0) (2025-05-08)
 
 
