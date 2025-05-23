@@ -66,6 +66,7 @@ public abstract class EventProcessorBuilder implements ComponentConfigurer<Event
   protected int userKeysCapacity = DEFAULT_USER_KEYS_CAPACITY;
   protected Duration userKeysFlushInterval = DEFAULT_USER_KEYS_FLUSH_INTERVAL;
   protected ComponentConfigurer<EventSender> eventSenderConfigurer = null;
+  protected boolean enableGzipCompression = false;
 
   /**
    * Sets whether or not all optional user attributes should be hidden from LaunchDarkly.
@@ -209,6 +210,22 @@ public abstract class EventProcessorBuilder implements ComponentConfigurer<Event
    */
   public EventProcessorBuilder userKeysFlushInterval(Duration userKeysFlushInterval) {
     this.userKeysFlushInterval = userKeysFlushInterval == null ? DEFAULT_USER_KEYS_FLUSH_INTERVAL : userKeysFlushInterval;
+    return this;
+  }
+
+  /**
+   * Enables gzip compression for event payloads.
+   * <p>
+   * When enabled, event payloads will be compressed using gzip before being sent to LaunchDarkly.
+   * This can significantly reduce bandwidth usage when sending large event payloads.
+   * <p>
+   * The default value is false.
+   *
+   * @param enableGzipCompression whether to enable gzip compression
+   * @return the builder
+   */
+  public EventProcessorBuilder enableGzipCompression(boolean enableGzipCompression) {
+    this.enableGzipCompression = enableGzipCompression;
     return this;
   }
 }

@@ -222,6 +222,7 @@ abstract class ComponentsImpl {
             null, // use default request path for server-side events
             null, // use default request path for client-side events
             0, // 0 means default retry delay
+            enableGzipCompression,
             context.getBaseLogger().subLogger(Loggers.EVENTS_LOGGER_NAME));
       } else {
         eventSender = new EventSenderWrapper(eventSenderConfigurer.build(context));

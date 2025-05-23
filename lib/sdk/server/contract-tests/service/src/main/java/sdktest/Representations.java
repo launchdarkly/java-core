@@ -45,6 +45,7 @@ public abstract class Representations {
     boolean allAttributesPrivate;
     int capacity;
     boolean enableDiagnostics;
+    boolean enableGzip;
     String[] globalPrivateAttributes;
     Long flushIntervalMs;
   }

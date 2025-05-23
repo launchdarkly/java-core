@@ -390,7 +390,8 @@ public class SdkClientEntity {
     } else {
       endpoints.events(params.events.baseUri);
       EventProcessorBuilder eb = Components.sendEvents()
-          .allAttributesPrivate(params.events.allAttributesPrivate);
+          .allAttributesPrivate(params.events.allAttributesPrivate)
+          .enableGzipCompression(params.events.enableGzip);
       if (params.events.capacity > 0) {
         eb.capacity(params.events.capacity);
       }
