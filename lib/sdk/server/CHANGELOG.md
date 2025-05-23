@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.9.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.8.0...launchdarkly-java-server-sdk-7.9.0) (2025-05-23)
+
+
+### Features
+
+* Enable gzip option for events in server SDK ([#67](https://github.com/launchdarkly/java-core/issues/67)) ([2420219](https://github.com/launchdarkly/java-core/commit/2420219efa0258fc57031979ece8a1deb6a54ff5))
+
 ## [7.8.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.7.0...launchdarkly-java-server-sdk-7.8.0) (2025-05-09)
 
 
