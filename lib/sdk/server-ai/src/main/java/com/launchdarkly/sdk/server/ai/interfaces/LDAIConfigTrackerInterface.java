@@ -1,6 +1,6 @@
 package com.launchdarkly.sdk.server.ai.interfaces;
 
-import com.launchdarkly.sdk.server.ai.datamodel.AIConfig;
+import com.launchdarkly.sdk.server.ai.config.LDAIConfig;
 import com.launchdarkly.sdk.server.ai.tracking.Feedback;
 import com.launchdarkly.sdk.server.ai.tracking.Response;
 import com.launchdarkly.sdk.server.ai.tracking.Usage;
@@ -15,7 +15,7 @@ public interface LDAIConfigTrackerInterface {
     /**
      * The AI model configuration retrieved from LaunchDarkly, or a default value if unable to retrieve.
      */
-    AIConfig getConfig();
+    LDAIConfig getConfig();
     
     /**
      * Tracks a duration metric related to this config. For example, if a particular operation

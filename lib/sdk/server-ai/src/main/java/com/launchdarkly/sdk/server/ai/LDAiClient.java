@@ -17,12 +17,13 @@ import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
 import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.LDValueType;
-import com.launchdarkly.sdk.server.ai.datamodel.AIConfig;
+import com.launchdarkly.sdk.server.ai.config.LDAIConfig;
 import com.launchdarkly.sdk.server.ai.datamodel.Message;
 import com.launchdarkly.sdk.server.ai.datamodel.Meta;
 import com.launchdarkly.sdk.server.ai.datamodel.Model;
 import com.launchdarkly.sdk.server.ai.datamodel.Provider;
 import com.launchdarkly.sdk.server.ai.interfaces.LDAIClientInterface;
+import com.launchdarkly.sdk.server.ai.interfaces.LDAIConfigTrackerInterface;
 
 /**
  * The LaunchDarkly AI client. The client is capable of retrieving AI Configs
@@ -61,7 +62,7 @@ public final class LDAIClient implements LDAIClientInterface {
      * 
      * @return
      */
-    public AIConfig config(String key, LDContext context, AIConfig defaultValue, Map<String, Object> variables) {
+    public LDAIConfigTrackerInterface config(String key, LDContext context, LDAIConfig defaultValue, Map<String, Object> variables) {
         // It is wasteful to serialize the defaultValue and deserialize that if we need to return the default value
         // We will check if the result is null
         LDValue result = client.jsonValueVariation(key, context, LDValue.ofNull());
@@ -71,7 +72,7 @@ public final class LDAIClient implements LDAIClientInterface {
             // TODO: return a new AiConfigTracker using the default value
         }
 
-        AIConfig rawConfig = parseAiConfig(result, key);
+        LDAIConfig rawConfig = parseAiConfig(result, key);
 
         Map<String, Object> allVariables = new HashMap<>();
         if (variables != null) {
@@ -115,13 +116,13 @@ public final class LDAIClient implements LDAIClientInterface {
      * @param value
      * @param key
      */
-    protected AIConfig parseAiConfig(LDValue value, String key) {
+    protected LDAIConfig parseAiConfig(LDValue value, String key) {
         boolean enabled = false;
 
         // Verify the whole value is a JSON object
         if (!checkValueWithFailureLogging(value, LDValueType.OBJECT, logger,
                 "Input to parseAiConfig must be a JSON object")) {
-            return AIConfig.builder().enabled(enabled).build();
+            return LDAIConfig.builder().enabled(enabled).build();
         }
 
         // Convert the _meta JSON object into Meta
@@ -129,7 +130,7 @@ public final class LDAIClient implements LDAIClientInterface {
         if (!checkValueWithFailureLogging(valueMeta, LDValueType.OBJECT, logger, "_ldMeta must be a JSON object")) {
             // Q: If we can't read _meta, enabled by spec would be defaulted to false. Does
             // it even matter the rest of the values?
-            return AIConfig.builder().enabled(enabled).build();
+            return LDAIConfig.builder().enabled(enabled).build();
         }
 
         // The booleanValue will get false if that value is something that we are not expecting
@@ -217,7 +218,7 @@ public final class LDAIClient implements LDAIClientInterface {
             }
         }
 
-        return AIConfig.builder()
+        return LDAIConfig.builder()
             .enabled(enabled)
             .meta(meta)
             .model(model)
