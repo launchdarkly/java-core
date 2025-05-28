@@ -35,6 +35,7 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
 
     implementation "com.launchdarkly:launchdarkly-java-server-sdk:7.4.0"
+    implementation "com.github.spullara.mustache.java:compiler:0.9.14"
 }
 
 java {

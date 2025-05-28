@@ -17,12 +17,12 @@ import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
 import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.LDValueType;
-import com.launchdarkly.sdk.server.ai.datamodel.AiConfig;
+import com.launchdarkly.sdk.server.ai.datamodel.AIConfig;
 import com.launchdarkly.sdk.server.ai.datamodel.Message;
 import com.launchdarkly.sdk.server.ai.datamodel.Meta;
 import com.launchdarkly.sdk.server.ai.datamodel.Model;
 import com.launchdarkly.sdk.server.ai.datamodel.Provider;
-import com.launchdarkly.sdk.server.ai.interfaces.LDAiClientInterface;
+import com.launchdarkly.sdk.server.ai.interfaces.LDAIClientInterface;
 
 /**
  * The LaunchDarkly AI client. The client is capable of retrieving AI Configs
@@ -30,16 +30,16 @@ import com.launchdarkly.sdk.server.ai.interfaces.LDAiClientInterface;
  * and generating events specific to usage of the AI Config when interacting
  * with model providers.
  */
-public final class LDAiClient implements LDAiClientInterface {
+public final class LDAIClient implements LDAIClientInterface {
     private LDClientInterface client;
     private LDLogger logger;
 
     /**
-     * Creates a {@link LDAiClient}
+     * Creates a {@link LDAIClient}
      * 
      * @param client LaunchDarkly Java Server SDK
      */
-    public LDAiClient(LDClientInterface client) {
+    public LDAIClient(LDClientInterface client) {
         if (client == null) {
             // Error
         } else {
@@ -54,11 +54,14 @@ public final class LDAiClient implements LDAiClientInterface {
     /**
      * Get the value of a model configuration.
      * 
-     * @param value
      * @param key
+     * @param context
+     * @param defaultValue
+     * @param variables
+     * 
      * @return
      */
-    public AiConfig config(String key, LDContext context, AiConfig defaultValue, Map<String, Object> variables) {
+    public AIConfig config(String key, LDContext context, AIConfig defaultValue, Map<String, Object> variables) {
         // It is wasteful to serialize the defaultValue and deserialize that if we need to return the default value
         // We will check if the result is null
         LDValue result = client.jsonValueVariation(key, context, LDValue.ofNull());
@@ -68,7 +71,7 @@ public final class LDAiClient implements LDAiClientInterface {
             // TODO: return a new AiConfigTracker using the default value
         }
 
-        AiConfig rawConfig = parseAiConfig(result, key);
+        AIConfig rawConfig = parseAiConfig(result, key);
 
         Map<String, Object> allVariables = new HashMap<>();
         if (variables != null) {
@@ -112,13 +115,13 @@ public final class LDAiClient implements LDAiClientInterface {
      * @param value
      * @param key
      */
-    protected AiConfig parseAiConfig(LDValue value, String key) {
+    protected AIConfig parseAiConfig(LDValue value, String key) {
         boolean enabled = false;
 
         // Verify the whole value is a JSON object
         if (!checkValueWithFailureLogging(value, LDValueType.OBJECT, logger,
                 "Input to parseAiConfig must be a JSON object")) {
-            return AiConfig.builder().enabled(enabled).build();
+            return AIConfig.builder().enabled(enabled).build();
         }
 
         // Convert the _meta JSON object into Meta
@@ -126,7 +129,7 @@ public final class LDAiClient implements LDAiClientInterface {
         if (!checkValueWithFailureLogging(valueMeta, LDValueType.OBJECT, logger, "_ldMeta must be a JSON object")) {
             // Q: If we can't read _meta, enabled by spec would be defaulted to false. Does
             // it even matter the rest of the values?
-            return AiConfig.builder().enabled(enabled).build();
+            return AIConfig.builder().enabled(enabled).build();
         }
 
         // The booleanValue will get false if that value is something that we are not expecting
@@ -214,7 +217,7 @@ public final class LDAiClient implements LDAiClientInterface {
             }
         }
 
-        return AiConfig.builder()
+        return AIConfig.builder()
             .enabled(enabled)
             .meta(meta)
             .model(model)
@@ -233,9 +236,5 @@ public final class LDAiClient implements LDAiClientInterface {
             return false;
         }
         return true;
-    }
-
-    private static Map<String, LDValue> getAllSingleKindContextAttributes(LDContext context) {
-        
     }
 }

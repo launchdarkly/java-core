@@ -2,7 +2,7 @@ package com.launchdarkly.sdk.server.ai.datamodel;
 
 import java.util.List;
 
-public final class AiConfig {
+public final class AIConfig {
     private final boolean enabled;
 
     private final Meta meta;
@@ -13,7 +13,7 @@ public final class AiConfig {
 
     private final Provider provider;
 
-    AiConfig(boolean enabled, Meta meta, Model model, List<Message> messages, Provider provider) {
+    AIConfig(boolean enabled, Meta meta, Model model, List<Message> messages, Provider provider) {
         this.enabled = enabled;
         this.meta = meta;
         this.model = model;
@@ -79,8 +79,8 @@ public final class AiConfig {
             return this;
         }
         
-        public AiConfig build() {
-            return new AiConfig(enabled, meta, model, messages, provider);
+        public AIConfig build() {
+            return new AIConfig(enabled, meta, model, messages, provider);
         }
     }
 }
