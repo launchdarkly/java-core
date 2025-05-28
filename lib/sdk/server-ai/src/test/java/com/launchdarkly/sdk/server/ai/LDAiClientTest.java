@@ -167,13 +167,13 @@ public class LDAIClientTest {
 
         assertNotNull(result.getMessages());
         assertEquals(3, result.getMessages().size());
-        
+
         assertEquals(Role.USER, result.getMessages().get(0).getRole());
         assertEquals("User message", result.getMessages().get(0).getContent());
-        
+
         assertEquals(Role.SYSTEM, result.getMessages().get(1).getRole());
         assertEquals("System message", result.getMessages().get(1).getContent());
-        
+
         assertEquals(Role.ASSISTANT, result.getMessages().get(2).getRole());
         assertEquals("Assistant message", result.getMessages().get(2).getContent());
     }
@@ -251,13 +251,13 @@ public class LDAIClientTest {
 
         assertNotNull(result.getModel());
         assertEquals("test-model", result.getModel().getName());
-        
+
         assertNotNull(result.getModel().getParameters());
         assertEquals(5, result.getModel().getParameters().size());
         assertEquals(LDValue.of("value"), result.getModel().getParameters().get("string_param"));
         assertEquals(LDValue.of(42), result.getModel().getParameters().get("number_param"));
         assertEquals(LDValue.of(true), result.getModel().getParameters().get("bool_param"));
-        
+
         assertNotNull(result.getModel().getCustom());
         assertEquals(1, result.getModel().getCustom().size());
         assertEquals(LDValue.of("custom_value"), result.getModel().getCustom().get("custom_key"));
@@ -356,7 +356,8 @@ public class LDAIClientTest {
     }
 
     /**
-     * Tests that a completely invalid JSON input (not an object) is handled properly
+     * Tests that a completely invalid JSON input (not an object) is handled
+     * properly
      */
     @Test
     public void testInvalidJsonNotObject() {

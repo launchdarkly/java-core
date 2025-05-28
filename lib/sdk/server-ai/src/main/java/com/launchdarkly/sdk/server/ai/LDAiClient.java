@@ -62,8 +62,10 @@ public final class LDAIClient implements LDAIClientInterface {
      * 
      * @return
      */
-    public LDAIConfigTrackerInterface config(String key, LDContext context, LDAIConfig defaultValue, Map<String, Object> variables) {
-        // It is wasteful to serialize the defaultValue and deserialize that if we need to return the default value
+    public LDAIConfigTrackerInterface config(String key, LDContext context, LDAIConfig defaultValue,
+            Map<String, Object> variables) {
+        // It is wasteful to serialize the defaultValue and deserialize that if we need
+        // to return the default value
         // We will check if the result is null
         LDValue result = client.jsonValueVariation(key, context, LDValue.ofNull());
 
@@ -78,14 +80,16 @@ public final class LDAIClient implements LDAIClientInterface {
         if (variables != null) {
             allVariables.putAll(variables);
         }
-        if(allVariables.containsKey(LdContextVariable)) {
-            logger.warn("AI model config variables contains 'ldctx' key, which is reserved; the value of this key will be overwritten by the LaunchDarkly context");
+        if (allVariables.containsKey(LdContextVariable)) {
+            logger.warn(
+                    "AI model config variables contains 'ldctx' key, which is reserved; the value of this key will be overwritten by the LaunchDarkly context");
         }
-        
-        // TODO - the complicated logic to traverse the Context and stuff all the attributes into the map.
+
+        // TODO - the complicated logic to traverse the Context and stuff all the
+        // attributes into the map.
 
         List<Message> prompts = new ArrayList<>();
-        if(rawConfig.getMessages() != null && rawConfig.getMessages().size() > 0) {
+        if (rawConfig.getMessages() != null && rawConfig.getMessages().size() > 0) {
             MustacheFactory mFactory = new DefaultMustacheFactory();
             for (Message m : rawConfig.getMessages()) {
                 Mustache template = mFactory.compile(new StringReader(m.getContent()), m.getContent());
@@ -93,7 +97,9 @@ public final class LDAIClient implements LDAIClientInterface {
                 try {
                     template.execute(writer, allVariables).flush();
                 } catch (IOException e) {
-                    logger.error("AI model config prompt has malformed message at index : {ex.Message} (returning default config, which will not contain interpolated prompt messages)", m.getContent());
+                    logger.error(
+                            "AI model config prompt has malformed message at index : {ex.Message} (returning default config, which will not contain interpolated prompt messages)",
+                            m.getContent());
                 }
                 prompts.add(Message.builder().content(writer.toString()).role(m.getRole()).build());
             }
@@ -133,7 +139,8 @@ public final class LDAIClient implements LDAIClientInterface {
             return LDAIConfig.builder().enabled(enabled).build();
         }
 
-        // The booleanValue will get false if that value is something that we are not expecting
+        // The booleanValue will get false if that value is something that we are not
+        // expecting
         enabled = valueMeta.get("enabled").booleanValue();
 
         Meta meta = null;
@@ -143,9 +150,9 @@ public final class LDAIClient implements LDAIClientInterface {
             String variationKey = valueMeta.get("variationKey").stringValue();
 
             meta = Meta.builder()
-                .variationKey(variationKey)
-                .version(Optional.of(valueMeta.get("version").intValue()))
-                .build();
+                    .variationKey(variationKey)
+                    .version(Optional.of(valueMeta.get("version").intValue()))
+                    .build();
         }
 
         // Convert the optional model from an JSON object of with parameters and custom
@@ -183,10 +190,10 @@ public final class LDAIClient implements LDAIClientInterface {
                 }
 
                 model = Model.builder()
-                    .name(modelName)
-                    .parameters(parameters)
-                    .custom(custom)
-                    .build();
+                        .name(modelName)
+                        .parameters(parameters)
+                        .custom(custom)
+                        .build();
             }
         }
 
@@ -219,12 +226,12 @@ public final class LDAIClient implements LDAIClientInterface {
         }
 
         return LDAIConfig.builder()
-            .enabled(enabled)
-            .meta(meta)
-            .model(model)
-            .messages(messages)
-            .provider(provider)
-            .build();
+                .enabled(enabled)
+                .meta(meta)
+                .model(model)
+                .messages(messages)
+                .provider(provider)
+                .build();
     }
 
     protected boolean checkValueWithFailureLogging(LDValue ldValue, LDValueType expectedType, LDLogger logger,

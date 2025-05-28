@@ -10,21 +10,22 @@ public final class Provider {
     public String getName() {
         return name;
     }
-    
+
     public static Builder builder() {
         return new Builder();
     }
-    
+
     public static final class Builder {
         private String name;
-        
-        private Builder() {}
-        
+
+        private Builder() {
+        }
+
         public Builder name(String name) {
             this.name = name;
             return this;
         }
-        
+
         public Provider build() {
             return new Provider(name);
         }

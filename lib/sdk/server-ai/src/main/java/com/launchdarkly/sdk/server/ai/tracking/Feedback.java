@@ -8,7 +8,7 @@ public enum Feedback {
      * The sentiment was positive.
      */
     POSITIVE,
-    
+
     /**
      * The sentiment was negative.
      */

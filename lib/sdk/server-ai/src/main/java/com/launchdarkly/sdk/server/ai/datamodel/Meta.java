@@ -34,32 +34,33 @@ public final class Meta {
     public Optional<Integer> getVersion() {
         return version;
     }
-    
+
     public static Builder builder() {
         return new Builder();
     }
-    
+
     public static final class Builder {
         private String variationKey;
         private Optional<Integer> version = Optional.empty();
-        
-        private Builder() {}
-        
+
+        private Builder() {
+        }
+
         public Builder variationKey(String variationKey) {
             this.variationKey = variationKey;
             return this;
         }
-        
+
         public Builder version(Optional<Integer> version) {
             this.version = version;
             return this;
         }
-        
+
         public Builder version(int version) {
             this.version = Optional.of(version);
             return this;
         }
-        
+
         public Meta build() {
             return new Meta(variationKey, version);
         }

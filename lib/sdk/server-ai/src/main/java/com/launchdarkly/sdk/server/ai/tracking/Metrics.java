@@ -5,10 +5,12 @@ package com.launchdarkly.sdk.server.ai.tracking;
  */
 public final class Metrics {
     private final Long latencyMs;
-    
+
     public Metrics(Long latencyMs) {
         this.latencyMs = latencyMs;
     }
-    
-    public Long getLatencyMs() { return latencyMs; }
+
+    public Long getLatencyMs() {
+        return latencyMs;
+    }
 }

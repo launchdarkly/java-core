@@ -15,9 +15,9 @@ public final class Message {
         @Override
         public Message toType(LDValue ldValue) {
             return Message.builder()
-                .content(ldValue.get("content").stringValue())
-                .role(Role.getRole(ldValue.get("role").stringValue()))
-                .build();
+                    .content(ldValue.get("content").stringValue())
+                    .role(Role.getRole(ldValue.get("role").stringValue()))
+                    .build();
         }
     }
 
@@ -37,27 +37,28 @@ public final class Message {
     public Role getRole() {
         return role;
     }
-    
+
     public static Builder builder() {
         return new Builder();
     }
-    
+
     public static final class Builder {
         private String content;
         private Role role;
-        
-        private Builder() {}
-        
+
+        private Builder() {
+        }
+
         public Builder content(String content) {
             this.content = content;
             return this;
         }
-        
+
         public Builder role(Role role) {
             this.role = role;
             return this;
         }
-        
+
         public Message build() {
             return new Message(content, role);
         }
