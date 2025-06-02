@@ -1,6 +1,6 @@
 package com.launchdarkly.sdk.server.ai.interfaces;
 
-import com.launchdarkly.sdk.server.ai.config.LDAIConfig;
+import com.launchdarkly.sdk.server.ai.config.LDAiConfig;
 import com.launchdarkly.sdk.server.ai.tracking.Feedback;
 import com.launchdarkly.sdk.server.ai.tracking.Response;
 import com.launchdarkly.sdk.server.ai.tracking.Usage;
@@ -10,13 +10,13 @@ import java.util.concurrent.CompletableFuture;
  * A utility capable of generating events related to a specific AI model
  * configuration.
  */
-public interface LDAIConfigTrackerInterface {
+public interface LDAiConfigTrackerInterface {
 
     /**
      * The AI model configuration retrieved from LaunchDarkly, or a default value if
      * unable to retrieve.
      */
-    LDAIConfig getConfig();
+    LDAiConfig getConfig();
 
     /**
      * Tracks a duration metric related to this config. For example, if a particular

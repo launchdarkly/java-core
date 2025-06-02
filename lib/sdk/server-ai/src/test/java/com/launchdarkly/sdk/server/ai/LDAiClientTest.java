@@ -3,7 +3,7 @@ package com.launchdarkly.sdk.server.ai;
 import org.junit.Test;
 
 import com.launchdarkly.sdk.LDValue;
-import com.launchdarkly.sdk.server.ai.config.LDAIConfig;
+import com.launchdarkly.sdk.server.ai.config.LDAiConfig;
 import com.launchdarkly.sdk.server.ai.datamodel.Role;
 
 import static org.junit.Assert.assertEquals;
@@ -12,7 +12,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
 
-public class LDAIClientTest {
+public class LDAiClientTest {
     /**
      * Tests that a complete valid JSON is properly converted to an AiConfig object
      */
@@ -54,8 +54,8 @@ public class LDAIClientTest {
                 "}";
 
         LDValue input = LDValue.parse(rawJson);
-        LDAIClient client = new LDAIClient(null);
-        LDAIConfig result = client.parseAiConfig(input, "Whatever");
+        LDAiClient client = new LDAiClient(null);
+        LDAiConfig result = client.parseAiConfig(input, "Whatever");
 
         assertEquals(Role.USER, result.getMessages().get(0).getRole());
         assertEquals("This is the final {{ noun }}.", result.getMessages().get(2).getContent());
@@ -89,8 +89,8 @@ public class LDAIClientTest {
                 "}";
 
         LDValue input = LDValue.parse(json);
-        LDAIClient client = new LDAIClient(null);
-        LDAIConfig result = client.parseAiConfig(input, "Whatever");
+        LDAiClient client = new LDAiClient(null);
+        LDAiConfig result = client.parseAiConfig(input, "Whatever");
 
         assertNotNull(result.getMeta());
         assertEquals("key-123", result.getMeta().getVariationKey());
@@ -122,8 +122,8 @@ public class LDAIClientTest {
                 "}";
 
         LDValue input = LDValue.parse(json);
-        LDAIClient client = new LDAIClient(null);
-        LDAIConfig result = client.parseAiConfig(input, "Whatever");
+        LDAiClient client = new LDAiClient(null);
+        LDAiConfig result = client.parseAiConfig(input, "Whatever");
 
         assertNull(result.getMeta());
     }
@@ -162,8 +162,8 @@ public class LDAIClientTest {
                 "}";
 
         LDValue input = LDValue.parse(json);
-        LDAIClient client = new LDAIClient(null);
-        LDAIConfig result = client.parseAiConfig(input, "Whatever");
+        LDAiClient client = new LDAiClient(null);
+        LDAiConfig result = client.parseAiConfig(input, "Whatever");
 
         assertNotNull(result.getMessages());
         assertEquals(3, result.getMessages().size());
@@ -204,8 +204,8 @@ public class LDAIClientTest {
                 "}";
 
         LDValue input = LDValue.parse(json);
-        LDAIClient client = new LDAIClient(null);
-        LDAIConfig result = client.parseAiConfig(input, "Whatever");
+        LDAiClient client = new LDAiClient(null);
+        LDAiConfig result = client.parseAiConfig(input, "Whatever");
 
         assertNotNull(result.getMessages());
         assertEquals(1, result.getMessages().size());
@@ -246,8 +246,8 @@ public class LDAIClientTest {
                 "}";
 
         LDValue input = LDValue.parse(json);
-        LDAIClient client = new LDAIClient(null);
-        LDAIConfig result = client.parseAiConfig(input, "Whatever");
+        LDAiClient client = new LDAiClient(null);
+        LDAiConfig result = client.parseAiConfig(input, "Whatever");
 
         assertNotNull(result.getModel());
         assertEquals("test-model", result.getModel().getName());
@@ -288,8 +288,8 @@ public class LDAIClientTest {
                 "}";
 
         LDValue input = LDValue.parse(json);
-        LDAIClient client = new LDAIClient(null);
-        LDAIConfig result = client.parseAiConfig(input, "Whatever");
+        LDAiClient client = new LDAiClient(null);
+        LDAiConfig result = client.parseAiConfig(input, "Whatever");
 
         assertNull(result.getModel());
     }
@@ -318,8 +318,8 @@ public class LDAIClientTest {
                 "}";
 
         LDValue input = LDValue.parse(json);
-        LDAIClient client = new LDAIClient(null);
-        LDAIConfig result = client.parseAiConfig(input, "Whatever");
+        LDAiClient client = new LDAiClient(null);
+        LDAiConfig result = client.parseAiConfig(input, "Whatever");
 
         assertNotNull(result.getProvider());
         assertEquals("test-provider", result.getProvider().getName());
@@ -349,8 +349,8 @@ public class LDAIClientTest {
                 "}";
 
         LDValue input = LDValue.parse(json);
-        LDAIClient client = new LDAIClient(null);
-        LDAIConfig result = client.parseAiConfig(input, "Whatever");
+        LDAiClient client = new LDAiClient(null);
+        LDAiConfig result = client.parseAiConfig(input, "Whatever");
 
         assertNull(result.getProvider());
     }
@@ -364,8 +364,8 @@ public class LDAIClientTest {
         String json = "[]"; // Array instead of object
 
         LDValue input = LDValue.parse(json);
-        LDAIClient client = new LDAIClient(null);
-        LDAIConfig result = client.parseAiConfig(input, "Whatever");
+        LDAiClient client = new LDAiClient(null);
+        LDAiConfig result = client.parseAiConfig(input, "Whatever");
 
         assertFalse(result.isEnabled());
         assertNull(result.getMeta());
@@ -386,8 +386,8 @@ public class LDAIClientTest {
                 "}";
 
         LDValue input = LDValue.parse(json);
-        LDAIClient client = new LDAIClient(null);
-        LDAIConfig result = client.parseAiConfig(input, "Whatever");
+        LDAiClient client = new LDAiClient(null);
+        LDAiConfig result = client.parseAiConfig(input, "Whatever");
 
         assertTrue(result.isEnabled()); // enabled is present and true
         assertNull(result.getMeta()); // Meta should be null due to missing variationKey

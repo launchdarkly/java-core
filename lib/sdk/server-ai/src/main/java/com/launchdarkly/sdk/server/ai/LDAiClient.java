@@ -17,13 +17,13 @@ import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
 import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.LDValueType;
-import com.launchdarkly.sdk.server.ai.config.LDAIConfig;
+import com.launchdarkly.sdk.server.ai.config.LDAiConfig;
 import com.launchdarkly.sdk.server.ai.datamodel.Message;
 import com.launchdarkly.sdk.server.ai.datamodel.Meta;
 import com.launchdarkly.sdk.server.ai.datamodel.Model;
 import com.launchdarkly.sdk.server.ai.datamodel.Provider;
-import com.launchdarkly.sdk.server.ai.interfaces.LDAIClientInterface;
-import com.launchdarkly.sdk.server.ai.interfaces.LDAIConfigTrackerInterface;
+import com.launchdarkly.sdk.server.ai.interfaces.LDAiClientInterface;
+import com.launchdarkly.sdk.server.ai.interfaces.LDAiConfigTrackerInterface;
 
 /**
  * The LaunchDarkly AI client. The client is capable of retrieving AI Configs
@@ -31,16 +31,16 @@ import com.launchdarkly.sdk.server.ai.interfaces.LDAIConfigTrackerInterface;
  * and generating events specific to usage of the AI Config when interacting
  * with model providers.
  */
-public final class LDAIClient implements LDAIClientInterface {
+public final class LDAiClient implements LDAiClientInterface {
     private LDClientInterface client;
     private LDLogger logger;
 
     /**
-     * Creates a {@link LDAIClient}
+     * Creates a {@link LDAiClient}
      * 
      * @param client LaunchDarkly Java Server SDK
      */
-    public LDAIClient(LDClientInterface client) {
+    public LDAiClient(LDClientInterface client) {
         if (client == null) {
             // Error
         } else {
@@ -62,7 +62,7 @@ public final class LDAIClient implements LDAIClientInterface {
      * 
      * @return
      */
-    public LDAIConfigTrackerInterface config(String key, LDContext context, LDAIConfig defaultValue,
+    public LDAiConfigTrackerInterface config(String key, LDContext context, LDAiConfig defaultValue,
             Map<String, Object> variables) {
         // It is wasteful to serialize the defaultValue and deserialize that if we need
         // to return the default value
@@ -74,7 +74,7 @@ public final class LDAIClient implements LDAIClientInterface {
             // TODO: return a new AiConfigTracker using the default value
         }
 
-        LDAIConfig rawConfig = parseAiConfig(result, key);
+        LDAiConfig rawConfig = parseAiConfig(result, key);
 
         Map<String, Object> allVariables = new HashMap<>();
         if (variables != null) {
@@ -122,13 +122,13 @@ public final class LDAIClient implements LDAIClientInterface {
      * @param value
      * @param key
      */
-    protected LDAIConfig parseAiConfig(LDValue value, String key) {
+    protected LDAiConfig parseAiConfig(LDValue value, String key) {
         boolean enabled = false;
 
         // Verify the whole value is a JSON object
         if (!checkValueWithFailureLogging(value, LDValueType.OBJECT, logger,
                 "Input to parseAiConfig must be a JSON object")) {
-            return LDAIConfig.builder().enabled(enabled).build();
+            return LDAiConfig.builder().enabled(enabled).build();
         }
 
         // Convert the _meta JSON object into Meta
@@ -136,7 +136,7 @@ public final class LDAIClient implements LDAIClientInterface {
         if (!checkValueWithFailureLogging(valueMeta, LDValueType.OBJECT, logger, "_ldMeta must be a JSON object")) {
             // Q: If we can't read _meta, enabled by spec would be defaulted to false. Does
             // it even matter the rest of the values?
-            return LDAIConfig.builder().enabled(enabled).build();
+            return LDAiConfig.builder().enabled(enabled).build();
         }
 
         // The booleanValue will get false if that value is something that we are not
@@ -225,7 +225,7 @@ public final class LDAIClient implements LDAIClientInterface {
             }
         }
 
-        return LDAIConfig.builder()
+        return LDAiConfig.builder()
                 .enabled(enabled)
                 .meta(meta)
                 .model(model)

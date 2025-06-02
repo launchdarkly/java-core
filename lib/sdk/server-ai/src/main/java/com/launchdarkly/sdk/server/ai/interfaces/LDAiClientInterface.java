@@ -1,19 +1,19 @@
 package com.launchdarkly.sdk.server.ai.interfaces;
 
 import com.launchdarkly.sdk.LDContext;
-import com.launchdarkly.sdk.server.ai.config.LDAIConfig;
+import com.launchdarkly.sdk.server.ai.config.LDAiConfig;
 
 import java.util.Map;
 
 /**
  * Represents the interface of the AI client, useful for mocking.
  */
-public interface LDAIClientInterface {
+public interface LDAiClientInterface {
 
     /**
      * Retrieves a LaunchDarkly AI Config identified by the given key. The return
      * value
-     * is an {@link LDAIConfigTrackerInterface}, which makes the configuration
+     * is an {@link LDAiConfigTrackerInterface}, which makes the configuration
      * available and
      * provides convenience methods for generating events related to model usage.
      *
@@ -29,6 +29,6 @@ public interface LDAIClientInterface {
      * @param variables    the list of variables used when interpolating the prompt
      * @return an AI Config tracker
      */
-    LDAIConfigTrackerInterface config(String key, LDContext context, LDAIConfig defaultValue,
+    LDAiConfigTrackerInterface config(String key, LDContext context, LDAiConfig defaultValue,
             Map<String, Object> variables);
 }

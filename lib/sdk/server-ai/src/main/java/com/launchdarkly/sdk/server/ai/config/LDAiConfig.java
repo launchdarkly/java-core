@@ -7,7 +7,7 @@ import com.launchdarkly.sdk.server.ai.datamodel.Meta;
 import com.launchdarkly.sdk.server.ai.datamodel.Model;
 import com.launchdarkly.sdk.server.ai.datamodel.Provider;
 
-public final class LDAIConfig {
+public final class LDAiConfig {
     private final boolean enabled;
 
     private final Meta meta;
@@ -18,7 +18,7 @@ public final class LDAIConfig {
 
     private final Provider provider;
 
-    LDAIConfig(boolean enabled, Meta meta, Model model, List<Message> messages, Provider provider) {
+    LDAiConfig(boolean enabled, Meta meta, Model model, List<Message> messages, Provider provider) {
         this.enabled = enabled;
         this.meta = meta;
         this.model = model;
@@ -85,8 +85,8 @@ public final class LDAIConfig {
             return this;
         }
 
-        public LDAIConfig build() {
-            return new LDAIConfig(enabled, meta, model, messages, provider);
+        public LDAiConfig build() {
+            return new LDAiConfig(enabled, meta, model, messages, provider);
         }
     }
 }
