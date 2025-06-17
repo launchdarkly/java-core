@@ -37,16 +37,18 @@ class EvaluatorWithHooks implements EvaluatorInterface {
   public EvalResultAndFlag evalAndFlag(String method, String featureKey, LDContext context, LDValue defaultValue, LDValueType requireType, EvaluationOptions options) {
     // Each hook will have an opportunity to provide series data to carry along to later stages.  This list
     // is to track that data.
-    List<Map> seriesDataList = new ArrayList<>(hooks.size());
+    int size = hooks.size();
+    List<Map> seriesDataList = new ArrayList<>(size);
 
     EvaluationSeriesContext seriesContext = new EvaluationSeriesContext(method, featureKey, context, defaultValue);
-    for (int i = 0; i < hooks.size(); i++) {
+    Map<String, Object> emptyMap = Collections.emptyMap();
+    for (int i = 0; i < size; i++) {
       Hook currentHook = hooks.get(i);
       try {
-        Map<String, Object> seriesData = currentHook.beforeEvaluation(seriesContext, Collections.emptyMap());
-        seriesDataList.add(Collections.unmodifiableMap(seriesData)); // make data immutable
+        Map<String, Object> seriesData = currentHook.beforeEvaluation(seriesContext, emptyMap);
+        seriesDataList.add(seriesData.isEmpty() ? emptyMap : Collections.unmodifiableMap(seriesData)); // make data immutable
       } catch (Exception e) {
-        seriesDataList.add(Collections.emptyMap()); // since the provided hook failed to execute, we default the series data to an empty map in this case
+        seriesDataList.add(emptyMap); // since the provided hook failed to execute, we default the series data to an empty map in this case
         logger.error("During evaluation of flag \"{}\". Stage \"BeforeEvaluation\" of hook \"{}\" reported error: {}", featureKey, currentHook.getMetadata().getName(), e.toString());
       }
     }
@@ -54,7 +56,7 @@ class EvaluatorWithHooks implements EvaluatorInterface {
     EvalResultAndFlag result = underlyingEvaluator.evalAndFlag(method, featureKey, context, defaultValue, requireType, options);
 
     // Invoke hooks in reverse order and give them back the series data they gave us.
-    for (int i = hooks.size() - 1; i >= 0; i--) {
+    for (int i = size - 1; i >= 0; i--) {
       Hook currentHook = hooks.get(i);
       try {
         currentHook.afterEvaluation(seriesContext, seriesDataList.get(i), result.getResult().getAnyType());
