@@ -58,7 +58,7 @@ public final class LDContext implements JsonSerializable {
   final String key;
   final String fullyQualifiedKey;
   final String name;
-  final Map<String, LDValue> attributes;
+  final AttributeMap attributes;
   final boolean anonymous;
   final List<AttributeRef> privateAttributes;
   
@@ -68,7 +68,7 @@ public final class LDContext implements JsonSerializable {
       String key,
       String fullyQualifiedKey,
       String name,
-      Map<String, LDValue> attributes,
+      AttributeMap attributes,
       boolean anonymous,
       List<AttributeRef> privateAttributes
       ) {
@@ -100,7 +100,7 @@ public final class LDContext implements JsonSerializable {
       ContextKind kind,
       String key,
       String name,
-      Map<String, LDValue> attributes,
+      AttributeMap attributes,
       boolean anonymous,
       List<AttributeRef> privateAttributes,
       boolean allowEmptyKey // allowEmptyKey is true only when deserializing old-style user JSON
@@ -300,7 +300,7 @@ public final class LDContext implements JsonSerializable {
         return failed(Errors.CONTEXT_NO_KEY);
       }
     }
-    Map<String, LDValue> attributes = null;
+    AttributeMap attributes = null;
     for (UserAttribute a: UserAttribute.OPTIONAL_STRING_ATTRIBUTES) {
       if (a == UserAttribute.NAME) {
         continue;
@@ -308,14 +308,14 @@ public final class LDContext implements JsonSerializable {
       LDValue value = user.getAttribute(a);
       if (!value.isNull()) {
         if (attributes == null) {
-          attributes = new HashMap<>(); 
+          attributes = new AttributeMap(); 
         }
         attributes.put(a.getName(), value);
       }
     }
     if (user.custom != null && !user.custom.isEmpty()) {
       if (attributes == null) {
-        attributes = new HashMap<>(); 
+        attributes = new AttributeMap(); 
       }
       for (Map.Entry<UserAttribute, LDValue> kv: user.custom.entrySet()) {
         attributes.put(kv.getKey().getName(), kv.getValue());
@@ -671,7 +671,7 @@ public final class LDContext implements JsonSerializable {
    * @return an iterable of strings (may be empty, but will never be null)
    */
   public Iterable<String> getCustomAttributeNames() {
-    return attributes == null ? Collections.<String>emptyList() : attributes.keySet();
+    return attributes == null ? Collections.<String>emptyList() : attributes.flatten().keySet();
   }
   
   /**
@@ -853,16 +853,8 @@ public final class LDContext implements JsonSerializable {
     if (!Objects.equals(key, o.key) || !Objects.equals(name, o.name) || anonymous != o.anonymous) {
       return false;
     }
-    if ((attributes == null ? 0 : attributes.size()) !=
-        (o.attributes == null ? 0 : o.attributes.size())) {
+    if (!Objects.equals(attributes, o.attributes)) {
       return false;
-    }
-    if (attributes != null) {
-      for (Map.Entry<String, LDValue> kv: attributes.entrySet()) {
-        if (!Objects.equals(o.attributes.get(kv.getKey()), kv.getValue())) {
-          return false;
-        }
-      }
     }
     if (getPrivateAttributeCount() != o.getPrivateAttributeCount()) {
       return false;
@@ -886,10 +878,8 @@ public final class LDContext implements JsonSerializable {
   
   @Override
   public int hashCode() {
-    // This implementation of hashCode() is inefficient due to the need to create a predictable ordering
-    // of attribute names. That's necessary just for the sake of aligning with the behavior of equals(),
-    // which is insensitive to ordering. However, using an LDContext as a map key is not an anticipated
-    // or recommended use case.
+    // This implementation of hashCode() is inefficient due to the need to flatten the attributes map.
+    // However, using an LDContext as a map key is not an anticipated or recommended use case.
     int h = Objects.hash(error, kind, key, name, anonymous);
     if (multiContexts != null) {
       for (LDContext c: multiContexts) {
@@ -897,11 +887,7 @@ public final class LDContext implements JsonSerializable {
       }
     }
     if (attributes != null) {
-      String[] names = attributes.keySet().toArray(new String[attributes.size()]);
-      Arrays.sort(names);
-      for (String name: names) {
-        h = (h * 17 + name.hashCode()) * 17 + attributes.get(name).hashCode(); 
-      }
+      h = h * 17 + attributes.hashCode();
     }
     if (privateAttributes != null) {
       AttributeRef[] refs = privateAttributes.toArray(new AttributeRef[privateAttributes.size()]);
