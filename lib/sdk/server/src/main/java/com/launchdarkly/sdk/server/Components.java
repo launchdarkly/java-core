@@ -10,6 +10,7 @@ import com.launchdarkly.sdk.server.ComponentsImpl.InMemoryDataStoreFactory;
 import com.launchdarkly.sdk.server.ComponentsImpl.LoggingConfigurationBuilderImpl;
 import com.launchdarkly.sdk.server.ComponentsImpl.NullDataSourceFactory;
 import com.launchdarkly.sdk.server.ComponentsImpl.PersistentDataStoreBuilderImpl;
+import com.launchdarkly.sdk.server.ComponentsImpl.PluginsConfigurationBuilderImpl;
 import com.launchdarkly.sdk.server.ComponentsImpl.PollingDataSourceBuilderImpl;
 import com.launchdarkly.sdk.server.ComponentsImpl.ServiceEndpointsBuilderImpl;
 import com.launchdarkly.sdk.server.ComponentsImpl.StreamingDataSourceBuilderImpl;
@@ -21,6 +22,7 @@ import com.launchdarkly.sdk.server.integrations.HooksConfigurationBuilder;
 import com.launchdarkly.sdk.server.integrations.HttpConfigurationBuilder;
 import com.launchdarkly.sdk.server.integrations.LoggingConfigurationBuilder;
 import com.launchdarkly.sdk.server.integrations.PersistentDataStoreBuilder;
+import com.launchdarkly.sdk.server.integrations.PluginsConfigurationBuilder;
 import com.launchdarkly.sdk.server.integrations.PollingDataSourceBuilder;
 import com.launchdarkly.sdk.server.integrations.ServiceEndpointsBuilder;
 import com.launchdarkly.sdk.server.integrations.StreamingDataSourceBuilder;
@@ -443,6 +445,26 @@ public abstract class Components {
    */
   public static HooksConfigurationBuilder hooks() {
     return new HooksConfigurationBuilderImpl();
+  }
+
+  /**
+   * Returns a builder for configuring plugins.
+   *
+   * Passing this to {@link LDConfig.Builder#plugins(com.launchdarkly.sdk.server.integrations.PluginsConfigurationBuilder)},
+   * after setting any desired plugins on the builder, applies this configuration to the SDK.
+   * <pre><code>
+   *     List plugins = myCreatePluginsFunc();
+   *     LDConfig config = new LDConfig.Builder()
+   *         .plugins(
+   *             Components.plugins()
+   *                 .setPlugins(plugins)
+   *         )
+   *         .build();
+   * </code></pre>
+   * @return a {@link PluginsConfigurationBuilder} that can be used for customization
+   */
+  public static PluginsConfigurationBuilder plugins() {
+    return new PluginsConfigurationBuilderImpl();
   }
 
   /**
