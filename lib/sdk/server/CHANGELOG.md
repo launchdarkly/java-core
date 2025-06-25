@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.9.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.9.0...launchdarkly-java-server-sdk-7.9.1) (2025-06-20)
+
+
+### Performance Improvements
+
+* optimize EvaluatorWithHooks ([#73](https://github.com/launchdarkly/java-core/issues/73)) ([6b42592](https://github.com/launchdarkly/java-core/commit/6b42592c7efd84eae7bb13977a5a3f3fb2237c9c))
+
 ## [7.9.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.8.0...launchdarkly-java-server-sdk-7.9.0) (2025-05-23)
 
 
