@@ -30,7 +30,7 @@ public abstract class Plugin {
    * If the plugin does not need to register any hooks, this method doesn't need to be implemented.
    *
    * @param metadata metadata about the environment where the plugin is running.
-   * @return
+   * @return a list of hooks that the plugin wants to register.
    */
   public List<Hook> getHooks(EnvironmentMetadata metadata) {
     return Collections.emptyList();
