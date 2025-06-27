@@ -9,6 +9,10 @@ import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.LDValueType;
 import com.launchdarkly.sdk.internal.http.HttpHelpers;
+import com.launchdarkly.sdk.server.integrations.EnvironmentMetadata;
+import com.launchdarkly.sdk.server.integrations.Hook;
+import com.launchdarkly.sdk.server.integrations.Plugin;
+import com.launchdarkly.sdk.server.integrations.SdkMetadata;
 import com.launchdarkly.sdk.server.interfaces.BigSegmentStoreStatusProvider;
 import com.launchdarkly.sdk.server.interfaces.BigSegmentsConfiguration;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
@@ -30,6 +34,9 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -206,13 +213,33 @@ public final class LDClient implements LDClientInterface {
 
     EvaluatorInterface evaluator = new InputValidatingEvaluator(dataStore, bigSegmentStoreWrapper, eventProcessor, evaluationLogger);
 
+    // build environment metadata for plugins
+    SdkMetadata sdkMetadata;
+    if (config.wrapperInfo == null) {
+      sdkMetadata = new SdkMetadata("JavaClient", Version.SDK_VERSION);
+    } else {
+      sdkMetadata = new SdkMetadata("JavaClient", Version.SDK_VERSION, config.wrapperInfo.getWrapperName(), config.wrapperInfo.getWrapperVersion());
+    }
+    EnvironmentMetadata environmentMetadata = new EnvironmentMetadata(config.applicationInfo, sdkMetadata, sdkKey);
+
+    // add plugin hooks
+    List<Hook> allHooks = new ArrayList<>(config.hooks.getHooks());
+    for (Plugin plugin : config.plugins.getPlugins()) {
+      try {
+        allHooks.addAll(plugin.getHooks(environmentMetadata));
+      } catch (Exception e) {
+        baseLogger.error("Exception thrown getting hooks for plugin " + plugin.getMetadata().getName() + ". Unable to get hooks, plugin will not be registered.");
+      }
+    }
+    allHooks = Collections.unmodifiableList(allHooks);
+
     // decorate evaluator with hooks if hooks were provided
-    if (config.hooks.getHooks().isEmpty()) {
+    if (allHooks.isEmpty()) {
       this.evaluator = evaluator;
       this.migrationEvaluator = new MigrationStageEnforcingEvaluator(evaluator, evaluationLogger);
     } else {
-      this.evaluator = new EvaluatorWithHooks(evaluator, config.hooks.getHooks(), this.baseLogger.subLogger(Loggers.HOOKS_LOGGER_NAME));
-      this.migrationEvaluator = new EvaluatorWithHooks(new MigrationStageEnforcingEvaluator(evaluator, evaluationLogger), config.hooks.getHooks(), this.baseLogger.subLogger(Loggers.HOOKS_LOGGER_NAME));
+      this.evaluator = new EvaluatorWithHooks(evaluator, allHooks, this.baseLogger.subLogger(Loggers.HOOKS_LOGGER_NAME));
+      this.migrationEvaluator = new EvaluatorWithHooks(new MigrationStageEnforcingEvaluator(evaluator, evaluationLogger), allHooks, this.baseLogger.subLogger(Loggers.HOOKS_LOGGER_NAME));
     }
 
     this.flagChangeBroadcaster = EventBroadcasterImpl.forFlagChangeEvents(sharedExecutor, baseLogger);
@@ -235,6 +262,15 @@ public final class LDClient implements LDClientInterface {
     this.dataSourceUpdates = dataSourceUpdates;
     this.dataSource = config.dataSource.build(context.withDataSourceUpdateSink(dataSourceUpdates));
     this.dataSourceStatusProvider = new DataSourceStatusProviderImpl(dataSourceStatusNotifier, dataSourceUpdates);
+
+    // register plugins as soon as possible after client is valid
+    for (Plugin plugin : config.plugins.getPlugins()) {
+      try {
+        plugin.register(this, environmentMetadata);
+      } catch (Exception e) {
+        baseLogger.error("Exception thrown registering plugin " + plugin.getMetadata().getName() + ". Plugin will not be registered.");
+      }
+    }
 
     Future<Void> startFuture = dataSource.start();
     if (!config.startWait.isZero() && !config.startWait.isNegative()) {

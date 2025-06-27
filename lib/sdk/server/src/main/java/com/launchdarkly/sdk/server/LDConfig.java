@@ -4,6 +4,7 @@ import com.launchdarkly.sdk.EvaluationReason;
 import com.launchdarkly.sdk.EvaluationReason.BigSegmentsStatus;
 import com.launchdarkly.sdk.server.integrations.ApplicationInfoBuilder;
 import com.launchdarkly.sdk.server.integrations.HooksConfigurationBuilder;
+import com.launchdarkly.sdk.server.integrations.PluginsConfigurationBuilder;
 import com.launchdarkly.sdk.server.integrations.ServiceEndpointsBuilder;
 import com.launchdarkly.sdk.server.integrations.WrapperInfoBuilder;
 import com.launchdarkly.sdk.server.interfaces.ApplicationInfo;
@@ -17,6 +18,7 @@ import com.launchdarkly.sdk.server.subsystems.EventProcessor;
 import com.launchdarkly.sdk.server.subsystems.HookConfiguration;
 import com.launchdarkly.sdk.server.subsystems.HttpConfiguration;
 import com.launchdarkly.sdk.server.subsystems.LoggingConfiguration;
+import com.launchdarkly.sdk.server.subsystems.PluginsConfiguration;
 
 import java.time.Duration;
 
@@ -38,6 +40,7 @@ public final class LDConfig {
   final boolean diagnosticOptOut;
   final ComponentConfigurer<EventProcessor> events;
   final HookConfiguration hooks;
+  final PluginsConfiguration plugins;
   final ComponentConfigurer<HttpConfiguration> http;
   final ComponentConfigurer<LoggingConfiguration> logging;
   final ServiceEndpoints serviceEndpoints;
@@ -61,6 +64,7 @@ public final class LDConfig {
     this.dataStore = builder.dataStore == null ? Components.inMemoryDataStore() : builder.dataStore;
     this.diagnosticOptOut = builder.diagnosticOptOut;
     this.hooks = (builder.hooksConfigurationBuilder == null ? Components.hooks() : builder.hooksConfigurationBuilder).build();
+    this.plugins = (builder.pluginsConfigurationBuilder == null ? Components.plugins() : builder.pluginsConfigurationBuilder).build();
     this.http = builder.http == null ? Components.httpConfiguration() : builder.http;
     this.logging = builder.logging == null ? Components.logging() : builder.logging;
     this.offline = builder.offline;
@@ -91,6 +95,7 @@ public final class LDConfig {
     private boolean diagnosticOptOut = false;
     private ComponentConfigurer<EventProcessor> events = null;
     private HooksConfigurationBuilder hooksConfigurationBuilder = null;
+    private PluginsConfigurationBuilder pluginsConfigurationBuilder = null;
     private ComponentConfigurer<HttpConfiguration> http = null;
     private ComponentConfigurer<LoggingConfiguration> logging = null;
     private ServiceEndpointsBuilder serviceEndpointsBuilder = null;
@@ -120,6 +125,7 @@ public final class LDConfig {
       newBuilder.diagnosticOptOut = config.diagnosticOptOut;
       newBuilder.events = config.events;
       newBuilder.hooksConfigurationBuilder = ComponentsImpl.HooksConfigurationBuilderImpl.fromHooksConfiguration(config.hooks);
+      newBuilder.pluginsConfigurationBuilder = ComponentsImpl.PluginsConfigurationBuilderImpl.fromPluginsConfiguration(config.plugins);
       newBuilder.http = config.http;
       newBuilder.logging = config.logging;
 
@@ -267,6 +273,22 @@ public final class LDConfig {
      */
     public Builder hooks(HooksConfigurationBuilder hooksConfiguration) {
       this.hooksConfigurationBuilder = hooksConfiguration;
+      return this;
+    }
+
+    /**
+     * Sets the SDK's plugins configuration, using a builder. This is normally a obtained from
+     * {@link Components#plugins()} ()}, which has methods for setting individual other plugin
+     * related properties.
+     * <p>
+     * Plugin support is currently experimental and subject to change.
+     *
+     * @param pluginsConfiguration the plugins configuration builder
+     * @return the main configuration builder
+     * @see Components#plugins()
+     */
+    public Builder plugins(PluginsConfigurationBuilder pluginsConfiguration) {
+      this.pluginsConfigurationBuilder = pluginsConfiguration;
       return this;
     }
 
