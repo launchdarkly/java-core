@@ -1,9 +1,7 @@
 package com.launchdarkly.sdk;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * A mutable object that uses the builder pattern to specify properties for {@link LDContext}.
@@ -34,7 +32,7 @@ public final class ContextBuilder {
   private ContextKind kind;
   private String key;
   private String name;
-  private Map<String, LDValue> attributes;
+  private AttributeMap attributes;
   private boolean anonymous;
   private List<AttributeRef> privateAttributes;
   private boolean copyOnWriteAttributes;
@@ -303,7 +301,7 @@ public final class ContextBuilder {
       return false;
     default:
       if (copyOnWriteAttributes) {
-        attributes = new HashMap<>(attributes);
+        attributes = new AttributeMap(attributes);
         copyOnWriteAttributes = false;
       }
       if (value == null || value.isNull()) {
@@ -312,7 +310,7 @@ public final class ContextBuilder {
         }
       } else {
         if (attributes == null) {
-          attributes = new HashMap<>();
+          attributes = new AttributeMap();
         }
         attributes.put(attributeName, value);
       }
