@@ -2,7 +2,9 @@ package com.launchdarkly.sdk;
 
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.launchdarkly.sdk.LDContextTest.kind1;
 import static com.launchdarkly.sdk.LDContextTest.kind2;
@@ -75,6 +77,35 @@ public class ContextBuilderTest {
     assertThat(c1.getValue("b"), equalTo(LDValue.ofNull()));
     assertThat(c2.getValue("a"), equalTo(LDValue.of(2)));
     assertThat(c2.getValue("b"), equalTo(LDValue.of(3)));
+    Map<String, LDValue> c1Map = new HashMap<>();
+    c1Map.put("a", LDValue.of(1));
+    assertThat(c1.attributes.flatten(), equalTo(c1Map));
+    Map<String, LDValue> c2Map = new HashMap<>();
+    c2Map.put("a", LDValue.of(2));
+    c2Map.put("b", LDValue.of(3));
+    assertThat(c2.attributes.flatten(), equalTo(c2Map));
+  }
+  
+  
+  @Test
+  public void copyOnWriteAttributes2() {
+    LDContext c1 = LDContext.builder("key").set("a", 1).set("c", LDValue.ofNull()).set("fsdf", 12).build();
+    LDContext c2 = LDContext.builderFromContext(c1).set("a", 2).set("b", 3).set("fsdf", LDValue.ofNull()).build();
+    
+    assertThat(c1.getValue("a"), equalTo(LDValue.of(1)));
+    assertThat(c1.getValue("b"), equalTo(LDValue.ofNull()));
+    assertThat(c1.getValue("fsdf"), equalTo(LDValue.of(12)));
+    assertThat(c2.getValue("a"), equalTo(LDValue.of(2)));
+    assertThat(c2.getValue("b"), equalTo(LDValue.of(3)));
+    assertThat(c2.getValue("fsdf"), equalTo(LDValue.ofNull()));
+    Map<String, LDValue> c1Map = new HashMap<>();
+    c1Map.put("a", LDValue.of(1));
+    c1Map.put("fsdf", LDValue.of(12));
+    assertThat(c1.attributes.flatten(), equalTo(c1Map));
+    Map<String, LDValue> c2Map = new HashMap<>();
+    c2Map.put("a", LDValue.of(2));
+    c2Map.put("b", LDValue.of(3));
+    assertThat(c2.attributes.flatten(), equalTo(c2Map));
   }
 
   @Test
