@@ -3,5 +3,5 @@
   "lib/java-server-sdk-redis-store": "3.0.1",
   "lib/shared/common": "2.1.1",
   "lib/shared/internal": "1.5.0",
-  "lib/sdk/server": "7.10.0"
+  "lib/sdk/server": "7.10.1"
 }
