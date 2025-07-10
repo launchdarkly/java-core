@@ -51,7 +51,7 @@ final class LDContextTypeAdapter extends TypeAdapter<LDContext> {
       out.name(ATTR_ANONYMOUS).value(c.isAnonymous());
     }
     if (c.attributes != null) {
-      for (Map.Entry<String, LDValue> kv: c.attributes.entrySet()) {
+      for (Map.Entry<String, LDValue> kv: c.attributes.flatten().entrySet()) {
         out.name(kv.getKey());
         LDValueTypeAdapter.INSTANCE.write(out, kv.getValue());
       }
