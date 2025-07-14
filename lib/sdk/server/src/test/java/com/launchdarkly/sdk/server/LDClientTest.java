@@ -3,6 +3,7 @@ package com.launchdarkly.sdk.server;
 import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.server.integrations.MockPersistentDataStore;
+import com.launchdarkly.sdk.server.integrations.Plugin;
 import com.launchdarkly.sdk.server.integrations.Hook;
 import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider;
 import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
@@ -31,9 +32,12 @@ import static com.launchdarkly.sdk.server.TestComponents.failedDataSource;
 import static com.launchdarkly.sdk.server.TestComponents.initedDataStore;
 import static com.launchdarkly.sdk.server.TestComponents.specificComponent;
 import static com.launchdarkly.sdk.server.TestUtil.upsertFlag;
+import static org.easymock.EasyMock.anyObject;
 import static org.easymock.EasyMock.capture;
 import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.mock;
+import static org.easymock.EasyMock.niceMock;
+import static org.easymock.EasyMock.replay;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
@@ -227,6 +231,17 @@ public class LDClientTest extends BaseTest {
         .hooks(Components.hooks().setHooks(Collections.singletonList(mock(Hook.class))))
         .build();
     try (LDClient client = new LDClient(SDK_KEY, config2)) {
+      assertEquals(EvaluatorWithHooks.class, client.evaluator.getClass());
+    }
+
+    Plugin mockPlugin = niceMock(Plugin.class);
+    expect(mockPlugin.getHooks(anyObject())).andReturn(Collections.singletonList(mock(Hook.class)));
+    replay(mockPlugin);
+
+    LDConfig config3 = new LDConfig.Builder()
+      .plugins(Components.plugins().setPlugins(Collections.singletonList(mockPlugin)))
+      .build();
+    try (LDClient client = new LDClient(SDK_KEY, config3)) {
       assertEquals(EvaluatorWithHooks.class, client.evaluator.getClass());
     }
   }

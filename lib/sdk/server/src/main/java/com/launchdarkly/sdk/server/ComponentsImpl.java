@@ -17,6 +17,7 @@ import com.launchdarkly.sdk.server.integrations.HooksConfigurationBuilder;
 import com.launchdarkly.sdk.server.integrations.HttpConfigurationBuilder;
 import com.launchdarkly.sdk.server.integrations.LoggingConfigurationBuilder;
 import com.launchdarkly.sdk.server.integrations.PersistentDataStoreBuilder;
+import com.launchdarkly.sdk.server.integrations.PluginsConfigurationBuilder;
 import com.launchdarkly.sdk.server.integrations.PollingDataSourceBuilder;
 import com.launchdarkly.sdk.server.integrations.ServiceEndpointsBuilder;
 import com.launchdarkly.sdk.server.integrations.StreamingDataSourceBuilder;
@@ -35,6 +36,8 @@ import com.launchdarkly.sdk.server.subsystems.HookConfiguration;
 import com.launchdarkly.sdk.server.subsystems.HttpConfiguration;
 import com.launchdarkly.sdk.server.subsystems.LoggingConfiguration;
 import com.launchdarkly.sdk.server.subsystems.PersistentDataStore;
+import com.launchdarkly.sdk.server.subsystems.PluginsConfiguration;
+
 import okhttp3.Credentials;
 
 import java.io.IOException;
@@ -475,6 +478,19 @@ abstract class ComponentsImpl {
     @Override
     public HookConfiguration build() {
       return new HookConfiguration(hooks);
+    }
+  }
+
+  static final class PluginsConfigurationBuilderImpl extends PluginsConfigurationBuilder {
+    public static PluginsConfigurationBuilderImpl fromPluginsConfiguration(PluginsConfiguration pluginsConfiguration) {
+      PluginsConfigurationBuilderImpl builder = new PluginsConfigurationBuilderImpl();
+      builder.setPlugins(pluginsConfiguration.getPlugins());
+      return builder;
+    }
+
+    @Override
+    public PluginsConfiguration build() {
+      return new PluginsConfiguration(plugins);
     }
   }
 
