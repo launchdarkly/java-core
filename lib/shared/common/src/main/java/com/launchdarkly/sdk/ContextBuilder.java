@@ -32,7 +32,7 @@ public final class ContextBuilder {
   private ContextKind kind;
   private String key;
   private String name;
-  private AttributeMap attributes;
+  private Attributes attributes;
   private boolean anonymous;
   private List<AttributeRef> privateAttributes;
   private boolean copyOnWriteAttributes;
@@ -301,22 +301,34 @@ public final class ContextBuilder {
       return false;
     default:
       if (copyOnWriteAttributes) {
-        attributes = new AttributeMap(attributes);
+        attributes = new Attributes.OfMap(attributes);
         copyOnWriteAttributes = false;
       }
       if (value == null || value.isNull()) {
         if (attributes != null) {
-          attributes.remove(attributeName);
+          attributes = attributes.remove(attributeName);
         }
       } else {
         if (attributes == null) {
-          attributes = new AttributeMap();
+          attributes = new Attributes.OfMap();
         }
-        attributes.put(attributeName, value);
+        attributes = attributes.put(attributeName, value);
       }
     }
     return true;
   }
+
+  /**
+   * Dynamically (and lazily) get attribute values from a provider.
+   * Any existing attributes previously accumulated on this builder
+   * will be used if the provider does not provide a value.
+   * @param attributeProvider the provider
+   * @return the builder
+   */
+  public ContextBuilder attributes(AttributeProvider attributeProvider) {
+    attributes = new Attributes.OfProvider(attributes, attributeProvider);
+    return this;
+  } 
 
   /**
    * Designates any number of context attributes, or properties within them, as private:
