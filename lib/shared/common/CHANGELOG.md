@@ -2,6 +2,13 @@
 
 All notable changes to the project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [2.1.2](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-common-2.1.1...launchdarkly-java-sdk-common-2.1.2) (2025-07-14)
+
+
+### Performance Improvements
+
+* optimize copy on write attributes ([#74](https://github.com/launchdarkly/java-core/issues/74)) ([7e0a623](https://github.com/launchdarkly/java-core/commit/7e0a6239cc4ab674b18548dbcbbba9d3f99dd476))
+
 ## [2.1.1] - 2023-11-13
 ### Fixed:
 - Fixes NPE when interacting with Context created by use of `copyFrom`.  (Thanks, [
