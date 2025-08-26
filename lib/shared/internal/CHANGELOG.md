@@ -2,6 +2,13 @@
 
 All notable changes to the project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [1.5.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.5.0...launchdarkly-java-sdk-internal-1.5.1) (2025-08-26)
+
+
+### Bug Fixes
+
+* updating various dependencies to latest minor to incorporate fixes ([b4425d7](https://github.com/launchdarkly/java-core/commit/b4425d74cc5db3c2cba1768b95b1fb903e591684))
+
 ## [1.5.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.4.0...launchdarkly-java-sdk-internal-1.5.0) (2025-05-21)
 
 
