@@ -3,10 +3,10 @@
 // build script(s).
 
 object Versions {
-    const val gson = "2.8.9"
-    const val launchdarklyJavaSdkCommon = "2.1.1"
+    const val gson = "2.13.1"
+    const val launchdarklyJavaSdkCommon = "2.1.2"
     const val launchdarklyLogging = "1.1.1"
-    const val okhttp = "4.9.1"
+    const val okhttp = "4.12.0"
     const val testHelpers = "1.2.0"
 }
 
