@@ -47,30 +47,42 @@ abstract class EvaluatorBucketing {
       }
     }
 
-    String idHash = getBucketableStringValue(contextValue);
-    if (idHash == null) {
+    StringBuilder keyBuilder = new StringBuilder();
+    if (seed != null) {
+      keyBuilder.append(seed.intValue());
+    } else {
+      keyBuilder.append(flagOrSegmentKey).append('.').append(salt);
+    }
+    keyBuilder.append('.');
+    if (!getBucketableStringValue(keyBuilder, contextValue)) {
       return 0;
     }
 
-    String prefix;
-    if (seed != null) {
-      prefix = seed.toString();
-    } else {
-      prefix = flagOrSegmentKey + "." + salt;
+    // turn the first 15 hex digits of this into a long
+    byte[] hash = DigestUtils.sha1(keyBuilder.toString());
+    long longVal = 0;
+    for (int i = 0; i < 7; i++) {
+      longVal <<= 8;
+      longVal |= (hash[i] & 0xff);
     }
-    String hash = DigestUtils.sha1Hex(prefix + "." + idHash).substring(0, 15);
-    long longVal = Long.parseLong(hash, 16);
+    longVal <<= 4;
+    longVal |= ((hash[7] >> 4) & 0xf);
     return (float) longVal / LONG_SCALE;
   }
 
-  private static String getBucketableStringValue(LDValue userValue) {
+  private static boolean getBucketableStringValue(StringBuilder keyBuilder, LDValue userValue) {
     switch (userValue.getType()) { 
     case STRING:
-      return userValue.stringValue();
+      keyBuilder.append(userValue.stringValue());
+      return true;
     case NUMBER:
-      return userValue.isInt() ? String.valueOf(userValue.intValue()) : null;
+      if (userValue.isInt()) {
+        keyBuilder.append(userValue.intValue());
+        return true;
+      }
+      return false;
     default:
-      return null;
+      return false;
     }
   }
 }
