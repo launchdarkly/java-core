@@ -7,10 +7,6 @@ import com.launchdarkly.sdk.LDValue;
 
 import org.apache.commons.codec.digest.DigestUtils;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.CharBuffer;
-import java.security.MessageDigest;
-
 /**
  * Encapsulates the logic for percentage rollouts.
  */
@@ -63,9 +59,7 @@ abstract class EvaluatorBucketing {
     }
 
     // turn the first 15 hex digits of this into a long
-    MessageDigest digest = DigestUtils.getSha1Digest();
-    digest.update(StandardCharsets.UTF_8.encode(CharBuffer.wrap(keyBuilder)));
-    byte[] hash = digest.digest();
+    byte[] hash = DigestUtils.sha1(keyBuilder.toString());
     long longVal = 0;
     for (int i = 0; i < 7; i++) {
       longVal <<= 8;
