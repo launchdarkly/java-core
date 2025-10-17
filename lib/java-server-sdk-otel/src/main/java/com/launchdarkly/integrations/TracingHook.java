@@ -61,6 +61,7 @@ public class TracingHook extends Hook {
 
     AttributesBuilder attrBuilder = Attributes.builder();
     attrBuilder.put(SEMCONV_FEATURE_FLAG_KEY, seriesContext.flagKey);
+    attrBuilder.put(SEMCONV_FEATURE_FLAG_PROVIDER_NAME, PROVIDER_NAME);
     attrBuilder.put(SEMCONV_FEATURE_FLAG_CONTEXT_ID, seriesContext.context.getFullyQualifiedKey());
     builder.setAllAttributes(attrBuilder.build());
     Span span = builder.startSpan();
