@@ -1,0 +1,22 @@
+# Eclipse project files
+.classpath
+.project
+.settings
+
+# Intellij project files
+*.iml
+*.ipr
+*.iws
+.idea/
+ 
+#Gradle
+.gradletasknamecache
+.gradle/
+build/
+bin/
+out/
+classes/
+
+# Test code that gets temporarily copied by our Android CI build
+src/androidTest/java/com/launchdarkly/sdk/**/*.java
+!src/androidTest/java/com/launchdarkly/sdk/BaseTest.java
