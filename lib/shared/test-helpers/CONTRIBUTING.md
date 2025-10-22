@@ -2,7 +2,7 @@
 
 ## Submitting bug reports and feature requests
 
-The LaunchDarkly SDK team monitors the [issue tracker](https://github.com/launchdarkly/java-test-helpers/issues) in the GitHub repository. Bug reports and feature requests specific to this project should be filed in this issue tracker. The SDK team will respond to all newly filed issues within two business days.
+The LaunchDarkly SDK team monitors the [issue tracker](https://github.com/launchdarkly/java-core/issues) in the GitHub repository. Bug reports and feature requests specific to this project should be filed in this issue tracker. The SDK team will respond to all newly filed issues within two business days.
 
 ## Submitting pull requests
 
@@ -26,7 +26,7 @@ If you wish to clean your working directory between builds, you can clean it by 
 ./gradlew clean
 ```
 
-If you wish to use your generated SDK artifact by another Maven/Gradle project such as [java-server-sdk](https://github.com/launchdarkly/java-server-sdk), you will likely want to publish the artifact to your local Maven repository so that your other project can access it.
+If you wish to use your generated artifact by another Maven/Gradle project, you will likely want to publish the artifact to your local Maven repository so that your other project can access it.
 ```
 ./gradlew publishToMavenLocal
 ```

@@ -16,6 +16,8 @@ build/
 bin/
 out/
 classes/
+buildSrc/build
+buildSrc/.gradle
 
 # Test code that gets temporarily copied by our Android CI build
 src/androidTest/java/com/launchdarkly/sdk/**/*.java
