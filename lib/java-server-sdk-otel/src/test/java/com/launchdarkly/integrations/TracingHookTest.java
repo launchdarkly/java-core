@@ -20,11 +20,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import static com.launchdarkly.integrations.TracingHook.CUSTOM_CONTEXT_KEY_ATTRIBUTE_NAME;
+import static com.launchdarkly.integrations.TracingHook.SEMCONV_FEATURE_FLAG_CONTEXT_ID;
 import static com.launchdarkly.integrations.TracingHook.PROVIDER_NAME;
 import static com.launchdarkly.integrations.TracingHook.SEMCONV_FEATURE_FLAG_KEY;
 import static com.launchdarkly.integrations.TracingHook.SEMCONV_FEATURE_FLAG_PROVIDER_NAME;
-import static com.launchdarkly.integrations.TracingHook.SEMCONV_FEATURE_FLAG_VARIANT;
+import static com.launchdarkly.integrations.TracingHook.SEMCONV_FEATURE_FLAG_VALUE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
@@ -59,11 +59,11 @@ public class TracingHookTest {
     assertEquals(1, spanData.getEvents().size());
 
     Attributes attributes = spanData.getEvents().get(0).getAttributes();
-    assertEquals(3, attributes.size());
+    assertEquals(4, attributes.size());
     assertEquals(PROVIDER_NAME, attributes.get(AttributeKey.stringKey(SEMCONV_FEATURE_FLAG_PROVIDER_NAME)));
     assertEquals("testKey", attributes.get(AttributeKey.stringKey(SEMCONV_FEATURE_FLAG_KEY)));
-    assertNull(attributes.get(AttributeKey.stringKey(SEMCONV_FEATURE_FLAG_VARIANT)));
-    assertEquals("testContextKey", attributes.get(AttributeKey.stringKey(CUSTOM_CONTEXT_KEY_ATTRIBUTE_NAME)));
+    assertNull(attributes.get(AttributeKey.stringKey(SEMCONV_FEATURE_FLAG_VALUE)));
+    assertEquals("testContextKey", attributes.get(AttributeKey.stringKey(SEMCONV_FEATURE_FLAG_CONTEXT_ID)));
   }
 
   @Test
@@ -90,11 +90,11 @@ public class TracingHookTest {
     assertEquals(1, spanData.getEvents().size());
 
     Attributes attributes = spanData.getEvents().get(0).getAttributes();
-    assertEquals(4, attributes.size());
+    assertEquals(5, attributes.size());
     assertEquals(PROVIDER_NAME, attributes.get(AttributeKey.stringKey(SEMCONV_FEATURE_FLAG_PROVIDER_NAME)));
     assertEquals("testKey", attributes.get(AttributeKey.stringKey(SEMCONV_FEATURE_FLAG_KEY)));
-    assertEquals("{\"evalKey\":\"evalValue\"}", attributes.get(AttributeKey.stringKey(SEMCONV_FEATURE_FLAG_VARIANT)));
-    assertEquals("testContextKey", attributes.get(AttributeKey.stringKey(CUSTOM_CONTEXT_KEY_ATTRIBUTE_NAME)));
+    assertEquals("{\"evalKey\":\"evalValue\"}", attributes.get(AttributeKey.stringKey(SEMCONV_FEATURE_FLAG_VALUE)));
+    assertEquals("testContextKey", attributes.get(AttributeKey.stringKey(SEMCONV_FEATURE_FLAG_CONTEXT_ID)));
   }
 
   @Test
@@ -118,10 +118,10 @@ public class TracingHookTest {
     assertEquals("LDClient.testMethod", spanDataList.get(0).getName());
     assertEquals("rootSpan", spanDataList.get(1).getName());
     Attributes attributes = spanDataList.get(1).getEvents().get(0).getAttributes();
-    assertEquals(3, attributes.size());
+    assertEquals(4, attributes.size());
     assertEquals("testKey", attributes.get(AttributeKey.stringKey(SEMCONV_FEATURE_FLAG_KEY)));
     assertEquals(PROVIDER_NAME, attributes.get(AttributeKey.stringKey(SEMCONV_FEATURE_FLAG_PROVIDER_NAME)));
-    assertEquals("testContextKey", attributes.get(AttributeKey.stringKey(CUSTOM_CONTEXT_KEY_ATTRIBUTE_NAME)));
+    assertEquals("testContextKey", attributes.get(AttributeKey.stringKey(SEMCONV_FEATURE_FLAG_CONTEXT_ID)));
   }
 
   @Test
