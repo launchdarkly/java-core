@@ -8,6 +8,8 @@ import com.launchdarkly.sdk.server.DataModel.Rollout;
 import com.launchdarkly.sdk.server.DataModel.RolloutKind;
 import com.launchdarkly.sdk.server.DataModel.WeightedVariation;
 
+import org.apache.commons.codec.digest.DigestUtils;
+
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -130,6 +132,18 @@ public class EvaluatorBucketingTest {
         .build();
     float result = computeBucketValue(false, noSeed, context, null, "key", AttributeRef.fromLiteral("boolattr"), "salt");
     assertEquals(0f, result, Float.MIN_VALUE);
+  }
+
+  @Test
+  public void optimizedHashText() {
+    LDContext context = LDContext.builder("key")
+        .set("stringattr", "33333")
+        .build();
+    float result = computeBucketValue(false, noSeed, context, null, "key", AttributeRef.fromLiteral("stringattr"), "salt");
+    String hash = DigestUtils.sha1Hex("key.salt.33333").substring(0, 15);
+    long longVal = Long.parseLong(hash, 16);
+    float expectedResult = longVal / (float) 0xFFFFFFFFFFFFFFFL;
+    assertEquals(expectedResult, result, Float.MIN_VALUE);
   }
 
   private static void assertVariationIndexFromRollout(
