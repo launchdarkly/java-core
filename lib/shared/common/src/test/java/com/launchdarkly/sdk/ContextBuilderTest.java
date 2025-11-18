@@ -5,6 +5,7 @@ import org.junit.Test;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Arrays;
 
 import static com.launchdarkly.sdk.LDContextTest.kind1;
 import static com.launchdarkly.sdk.LDContextTest.kind2;
@@ -106,6 +107,34 @@ public class ContextBuilderTest {
     c2Map.put("a", LDValue.of(2));
     c2Map.put("b", LDValue.of(3));
     assertThat(c2.attributes.flatten(), equalTo(c2Map));
+  }
+
+  @Test
+  public void provider() {
+    AttributeProvider provider = new AttributeProvider() {
+      public LDValue getValue(String key) {
+        switch(key) {
+          case "a":
+            return LDValue.of(1);
+          case "b":
+            return LDValue.of(2);
+          default:
+            return null;
+        }
+      }
+      public Iterable<String> getKeys() {
+        return Arrays.asList("a", "b");
+      }
+    };
+    LDContext c1 = LDContext.builder("key").set("a", 100).attributes(provider).set("c", 3).build();
+    assertThat(c1.getValue("a"), equalTo(LDValue.of(1)));
+    assertThat(c1.getValue("b"), equalTo(LDValue.of(2)));
+    assertThat(c1.getValue("c"), equalTo(LDValue.of(3)));
+    Map<String, LDValue> c1Map = new HashMap<>();
+    c1Map.put("a", LDValue.of(1));
+    c1Map.put("b", LDValue.of(2));
+    c1Map.put("c", LDValue.of(3));
+    assertThat(c1.attributes.flatten(), equalTo(c1Map));
   }
 
   @Test
