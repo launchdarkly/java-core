@@ -259,7 +259,6 @@ public abstract class DataStoreTypes {
    * 
    * @param <TDescriptor> will be {@link ItemDescriptor} or {@link SerializedItemDescriptor}
    */
-  @Deprecated("Use DataSet instead.  The term Full was too specific")
   public static final class FullDataSet<TDescriptor> {
     private final Iterable<Map.Entry<DataKind, KeyedItems<TDescriptor>>> data;
     
@@ -278,48 +277,6 @@ public abstract class DataStoreTypes {
      * @param data the data set
      */
     public FullDataSet(Iterable<Map.Entry<DataKind, KeyedItems<TDescriptor>>> data) {
-      this.data = data == null ? ImmutableList.of(): data;
-    }
-    
-    @Override
-    public boolean equals(Object o) {
-      return o instanceof FullDataSet<?> && data.equals(((FullDataSet<?>)o).data);
-    }
-    
-    @Override
-    public int hashCode() {
-      return data.hashCode();
-    }
-  }
-
-    /**
-   * Wrapper for a set of storable items being passed to a data store.
-   * <p>
-   * Since the generic type signature for the data set is somewhat complicated (it is an ordered
-   * list of key-value pairs where each key is a {@link DataKind}, and each value is another ordered
-   * list of key-value pairs for the individual data items), this type simplifies the declaration of
-   * data store methods and makes it easier to see what the type represents.
-   * 
-   * @param <TDescriptor> will be {@link ItemDescriptor} or {@link SerializedItemDescriptor}
-   */
-  public static final class DataSet<TDescriptor> {
-    private final Iterable<Map.Entry<DataKind, KeyedItems<TDescriptor>>> data;
-    
-    /**
-     * Returns the wrapped data set.
-     * 
-     * @return an enumeration of key-value pairs; may be empty, but will not be null
-     */
-    public Iterable<Map.Entry<DataKind, KeyedItems<TDescriptor>>> getData() {
-      return data;
-    }
-    
-    /**
-     * Constructs a new instance.
-     * 
-     * @param data the data set
-     */
-    public DataSet(Iterable<Map.Entry<DataKind, KeyedItems<TDescriptor>>> data) {
       this.data = data == null ? ImmutableList.of(): data;
     }
     
