@@ -1,9 +1,10 @@
 package com.launchdarkly.sdk;
 
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
-final class AttributeMap {
+final class AttributeMap implements Serializable {
   private final AttributeMap parent;
   private final Map<String, LDValue> map;
 
