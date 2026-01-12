@@ -141,6 +141,9 @@ public final class FDv2Event {
 
   /**
    * Deserializes the data element as a PutObject.
+   *
+   * @return the deserialized PutObject
+   * @throws SerializationException if deserialization fails
    */
   public PutObject asPutObject() throws SerializationException {
     return deserializeAs(EVENT_PUT_OBJECT, PutObject::parse);
@@ -148,6 +151,9 @@ public final class FDv2Event {
 
   /**
    * Deserializes the data element as a DeleteObject.
+   *
+   * @return the deserialized DeleteObject
+   * @throws SerializationException if deserialization fails
    */
   public DeleteObject asDeleteObject() throws SerializationException {
     return deserializeAs(EVENT_DELETE_OBJECT, DeleteObject::parse);
@@ -155,6 +161,9 @@ public final class FDv2Event {
 
   /**
    * Deserializes the data element as a PayloadTransferred.
+   *
+   * @return the deserialized PayloadTransferred
+   * @throws SerializationException if deserialization fails
    */
   public PayloadTransferred asPayloadTransferred() throws SerializationException {
     return deserializeAs(EVENT_PAYLOAD_TRANSFERRED, PayloadTransferred::parse);
@@ -162,6 +171,9 @@ public final class FDv2Event {
 
   /**
    * Deserializes the data element as an Error.
+   *
+   * @return the deserialized Error
+   * @throws SerializationException if deserialization fails
    */
   public Error asError() throws SerializationException {
     return deserializeAs(EVENT_ERROR, Error::parse);
@@ -169,6 +181,9 @@ public final class FDv2Event {
 
   /**
    * Deserializes the data element as a Goodbye.
+   *
+   * @return the deserialized Goodbye
+   * @throws SerializationException if deserialization fails
    */
   public Goodbye asGoodbye() throws SerializationException {
     return deserializeAs(EVENT_GOODBYE, Goodbye::parse);

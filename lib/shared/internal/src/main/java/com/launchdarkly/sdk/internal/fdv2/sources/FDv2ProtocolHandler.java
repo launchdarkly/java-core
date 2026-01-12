@@ -311,6 +311,8 @@ public final class FDv2ProtocolHandler {
 
   /**
    * Get a list of event types which are handled by the protocol handler.
+   *
+   * @return the list of handled event types
    */
   public static List<String> getHandledEventTypes() {
     return HANDLED_EVENT_TYPES;

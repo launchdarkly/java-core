@@ -90,6 +90,8 @@ public final class FDv2ChangeSet {
 
     /**
      * The raw JSON string representing the object data (only present for Put operations).
+     *
+     * @return the raw JSON element representing the object data
      */
     public JsonElement getObject() {
       return object;
@@ -115,6 +117,8 @@ public final class FDv2ChangeSet {
 
   /**
    * The intent code indicating how the server intends to transfer data.
+   *
+   * @return the type of changeset
    */
   public FDv2ChangeSetType getType() {
     return type;
@@ -122,6 +126,8 @@ public final class FDv2ChangeSet {
 
   /**
    * The list of changes in this changeset. May be empty if there are no changes.
+   *
+   * @return the list of changes in this changeset
    */
   public List<FDv2Change> getChanges() {
     return changes;
@@ -129,6 +135,8 @@ public final class FDv2ChangeSet {
 
   /**
    * The selector (version identifier) for this changeset.
+   *
+   * @return the selector for this changeset
    */
   public Selector getSelector() {
     return selector;
