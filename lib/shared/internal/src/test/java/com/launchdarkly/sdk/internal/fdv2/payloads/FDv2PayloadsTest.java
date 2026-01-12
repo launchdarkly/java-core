@@ -1,4 +1,4 @@
-package com.launchdarkly.sdk.internal.fdv2;
+package com.launchdarkly.sdk.internal.fdv2.payloads;
 
 import com.google.gson.JsonElement;
 import com.google.gson.stream.JsonReader;
