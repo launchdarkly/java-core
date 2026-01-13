@@ -45,7 +45,14 @@ public final class Selector {
     return new Selector(0, null, true);
   }
 
-  static Selector make(int version, String state) {
+  /**
+   * Creates a new Selector with the given version and state.
+   * 
+   * @param version the version number
+   * @param state the state identifier
+   * @return a new Selector instance
+   */
+  public static Selector make(int version, String state) {
     return new Selector(version, state, false);
   }
 
