@@ -4,15 +4,23 @@ import com.launchdarkly.logging.LDLogger;
 
 import java.net.URI;
 
-abstract class StandardEndpoints {
+/**
+ * Internal utility class for resolving service endpoint URIs.
+ * <p>
+ * This class is for internal LaunchDarkly SDK use only. It is public only because it needs to be
+ * accessible to SDK code in different packages. It is not part of the public supported API and
+ * should not be referenced by application code. This class is subject to change without notice.
+ * </p>
+ */
+public abstract class StandardEndpoints {
   private StandardEndpoints() {}
 
-  static final URI DEFAULT_STREAMING_BASE_URI = URI.create("https://stream.launchdarkly.com");
-  static final URI DEFAULT_POLLING_BASE_URI = URI.create("https://app.launchdarkly.com");
-  static final URI DEFAULT_EVENTS_BASE_URI = URI.create("https://events.launchdarkly.com");
+  public static final URI DEFAULT_STREAMING_BASE_URI = URI.create("https://stream.launchdarkly.com");
+  public static final URI DEFAULT_POLLING_BASE_URI = URI.create("https://app.launchdarkly.com");
+  public static final URI DEFAULT_EVENTS_BASE_URI = URI.create("https://events.launchdarkly.com");
 
-  static final String STREAMING_REQUEST_PATH = "/all";
-  static final String POLLING_REQUEST_PATH = "/sdk/latest-all";
+  public static final String STREAMING_REQUEST_PATH = "/all";
+  public static final String POLLING_REQUEST_PATH = "/sdk/latest-all";
 
   /**
    * Internal method to decide which URI a given component should connect to.
@@ -26,7 +34,7 @@ abstract class StandardEndpoints {
    * @param logger the logger to which we should print the warning, if needed
    * @return the base URI we should connect to
    */
-  static URI selectBaseUri(URI serviceEndpointsValue, URI defaultValue, String description, LDLogger logger) {
+  public static URI selectBaseUri(URI serviceEndpointsValue, URI defaultValue, String description, LDLogger logger) {
     if (serviceEndpointsValue != null) {
       return serviceEndpointsValue;
     }
@@ -46,7 +54,7 @@ abstract class StandardEndpoints {
    * @param defaultValue the constant default URI value defined in StandardEndpoints
    * @return true iff the base URI was customized
    */
-  static boolean isCustomBaseUri(URI serviceEndpointsValue, URI defaultValue) {
+  public static boolean isCustomBaseUri(URI serviceEndpointsValue, URI defaultValue) {
     return serviceEndpointsValue != null && !serviceEndpointsValue.equals(defaultValue);
   }
 }
