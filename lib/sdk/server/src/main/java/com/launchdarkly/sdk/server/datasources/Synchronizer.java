@@ -46,7 +46,7 @@ import java.util.concurrent.CompletableFuture;
  *     INTERRUPTED --> RUNNING
  * </code>
  */
-interface Synchronizer {
+public interface Synchronizer {
     /**
      * Get the next result from the stream.
      * @return a future that will complete when the next result is available
