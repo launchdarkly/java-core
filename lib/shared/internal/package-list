@@ -1,0 +1,5 @@
+com.launchdarkly.sdk.internal
+com.launchdarkly.sdk.internal.events
+com.launchdarkly.sdk.internal.fdv2.payloads
+com.launchdarkly.sdk.internal.fdv2.sources
+com.launchdarkly.sdk.internal.http
