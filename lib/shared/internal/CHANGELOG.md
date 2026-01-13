@@ -2,6 +2,13 @@
 
 All notable changes to the project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [1.6.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.5.1...launchdarkly-java-sdk-internal-1.6.0) (2026-01-13)
+
+
+### Features
+
+* adds fdv2 payload parsing and protocol handling ([a1412c4](https://github.com/launchdarkly/java-core/commit/a1412c4f217c5c39a8667381ea51e1c758d7c548))
+
 ## [1.5.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.5.0...launchdarkly-java-sdk-internal-1.5.1) (2025-08-26)
 
 
