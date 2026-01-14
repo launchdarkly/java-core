@@ -147,6 +147,8 @@ class StreamingSynchronizerImpl implements Synchronizer {
             }
         });
         streamThread.setName("LaunchDarkly-FDv2-streaming-synchronizer");
+        // TODO: Implement thread priority.
+        //streamThread.setPriority();
         streamThread.setDaemon(true);
         streamThread.start();
     }
@@ -185,7 +187,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
     }
 
     private void handleMessage(MessageEvent event) {
-        String eventName = null;
+        String eventName;
         try {
             eventName = event.getEventName();
             FDv2Event fdv2Event = parseFDv2Event(eventName, event.getDataReader());
@@ -238,31 +240,10 @@ class StreamingSynchronizerImpl implements Synchronizer {
                     break;
 
                 case ERROR:
+                    // In the case of an error, the protocol handler discards the result and we remain connected.
+                    // We log the error to help with debugging.
                     FDv2ProtocolHandler.FDv2ActionError error = (FDv2ProtocolHandler.FDv2ActionError) action;
-                    // Check if this is an explicit error event from the server (terminal)
-                    // or invalid data in another event type (recoverable)
-                    if ("error".equals(eventName)) {
-                        DataSourceStatusProvider.ErrorInfo errorInfo = new DataSourceStatusProvider.ErrorInfo(
-                                DataSourceStatusProvider.ErrorKind.UNKNOWN,
-                                0,
-                                error.getReason(),
-                                Instant.now()
-                        );
-                        result = FDv2SourceResult.terminalError(errorInfo);
-                        shouldTerminate = true;
-                    } else {
-                        // Invalid data in other event types - recoverable
-                        DataSourceStatusProvider.ErrorInfo errorInfo = new DataSourceStatusProvider.ErrorInfo(
-                                DataSourceStatusProvider.ErrorKind.INVALID_DATA,
-                                0,
-                                error.getReason(),
-                                Instant.now()
-                        );
-                        result = FDv2SourceResult.interrupted(errorInfo);
-                        if (eventSource != null) {
-                            eventSource.interrupt(); // restart the stream
-                        }
-                    }
+                    logger.error("Received error from server: {} - {}", error.getId(), error.getReason());
                     break;
 
                 case GOODBYE:
@@ -297,7 +278,6 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 if (eventSource != null) {
                     eventSource.close();
                 }
-                return;
             }
         } catch (SerializationException e) {
             logger.error("Failed to parse FDv2 event: {}", LogValues.exceptionSummary(e));

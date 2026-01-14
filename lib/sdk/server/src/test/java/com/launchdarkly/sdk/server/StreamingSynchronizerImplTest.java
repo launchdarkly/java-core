@@ -262,37 +262,6 @@ public class StreamingSynchronizerImplTest extends BaseTest {
     }
 
     @Test
-    public void errorEventInResponse() throws Exception {
-        String errorEvent = makeEvent("error", "{\"error\":\"invalid-request\",\"reason\":\"bad request\"}");
-
-        try (HttpServer server = HttpServer.start(Handlers.all(
-                Handlers.SSE.start(),
-                Handlers.SSE.event(errorEvent),
-                Handlers.SSE.leaveOpen()))) {
-
-            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
-            SelectorSource selectorSource = mockSelectorSource();
-
-            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
-                    httpProperties,
-                    server.getUri(),
-                    "/stream",
-                    testLogger,
-                    selectorSource
-            );
-
-            CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
-            FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
-
-            assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-            assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result.getStatus().getState());
-
-            synchronizer.shutdown();
-        }
-    }
-
-    @Test
     public void goodbyeEventInResponse() throws Exception {
         String goodbyeEvent = makeEvent("goodbye", "{\"reason\":\"service-unavailable\"}");
 
