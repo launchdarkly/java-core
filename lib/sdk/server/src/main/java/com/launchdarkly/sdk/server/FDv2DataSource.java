@@ -27,8 +27,12 @@ class FDv2DataSource implements DataSource {
     private final CompletableFuture<Boolean> startFuture = new CompletableFuture<>();
     private final AtomicBoolean started = new AtomicBoolean(false);
 
+    /**
+     * Lock for active sources and shutdown state.
+     */
     private final Object activeSourceLock = new Object();
     private DataSourceShutdown activeSource;
+    private boolean isShutdown = false;
 
     private static class SynchronizerFactoryWithState {
         public enum State {
@@ -130,8 +134,13 @@ class FDv2DataSource implements DataSource {
         // recovering ones, then we likely will want to wait for them to be available (or bypass recovery).
         while (availableSynchronizer != null) {
             Synchronizer synchronizer = availableSynchronizer.build();
+            synchronized (activeSourceLock) {
+                if (isShutdown) {
+                    return;
+                }
+                activeSource = synchronizer;
+            }
             try {
-
                 boolean running = true;
                 while (running) {
                     FDv2SourceResult result = synchronizer.next().get();
@@ -174,6 +183,9 @@ class FDv2DataSource implements DataSource {
             try {
                 Initializer initializer = factory.build();
                 synchronized (activeSourceLock) {
+                    if (isShutdown) {
+                        return;
+                    }
                     activeSource = initializer;
                 }
                 FDv2SourceResult res = initializer.run().get();
@@ -181,7 +193,7 @@ class FDv2DataSource implements DataSource {
                     case CHANGE_SET:
                         // TODO: Apply to the store.
                         anyDataReceived = true;
-                        if(!res.getChangeSet().getSelector().isEmpty()) {
+                        if (!res.getChangeSet().getSelector().isEmpty()) {
                             dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
                             startFuture.complete(true);
                             return;
@@ -194,12 +206,12 @@ class FDv2DataSource implements DataSource {
             } catch (ExecutionException | InterruptedException | CancellationException e) {
                 // TODO: Log.
             }
-            // We received data without a selector, and we have exhausted initializers, so we are going to
-            // conside ourselves initialized.
-            if(anyDataReceived) {
-                dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
-                startFuture.complete(true);
-            }
+        }
+        // We received data without a selector, and we have exhausted initializers, so we are going to
+        // consider ourselves initialized.
+        if (anyDataReceived) {
+            dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
+            startFuture.complete(true);
         }
     }
 
@@ -229,7 +241,12 @@ class FDv2DataSource implements DataSource {
                 synchronizer.block();
             }
         }
+        // If there is an active source, we will shut it down, and that will result in the loop handling that source
+        // exiting.
+        // If we do not have an active source, then the loop will check isShutdown when attempting to set one. When
+        // it detects shutdown it will exit the loop.
         synchronized (activeSourceLock) {
+            isShutdown = true;
             if (activeSource != null) {
                 activeSource.shutdown();
             }
