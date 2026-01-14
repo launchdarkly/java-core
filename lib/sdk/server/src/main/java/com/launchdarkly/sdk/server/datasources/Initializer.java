@@ -1,6 +1,5 @@
 package com.launchdarkly.sdk.server.datasources;
 
-import java.io.Closeable;
 import java.util.concurrent.CompletableFuture;
 
 // Mermaid source for state diagram.
