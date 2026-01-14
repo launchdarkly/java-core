@@ -26,6 +26,7 @@ import com.launchdarkly.sdk.server.integrations.PluginsConfigurationBuilder;
 import com.launchdarkly.sdk.server.integrations.PollingDataSourceBuilder;
 import com.launchdarkly.sdk.server.integrations.ServiceEndpointsBuilder;
 import com.launchdarkly.sdk.server.integrations.StreamingDataSourceBuilder;
+import com.launchdarkly.sdk.server.integrations.DataSystemModes;
 import com.launchdarkly.sdk.server.integrations.WrapperInfoBuilder;
 import com.launchdarkly.sdk.server.interfaces.HttpAuthentication;
 import com.launchdarkly.sdk.server.subsystems.BigSegmentStore;
@@ -476,4 +477,21 @@ public abstract class Components {
    * @since 7.1.0
    */
   public static WrapperInfoBuilder wrapperInfo() { return new WrapperInfoBuilderImpl(); }
+
+  /**
+   * This class is under active development.  Do not use.
+   * 
+   * Returns a set of builder options for configuring the SDK data system. When the data system configuration
+   * is used it overrides {@link LDConfig.Builder#dataSource(ComponentConfigurer)} and
+   * {@link LDConfig.Builder#dataStore(ComponentConfigurer)} in the configuration.
+   * <p>
+   * This class is not stable, and not subject to any backwards compatibility guarantees or semantic versioning.
+   * It is in early access. If you want access to this feature please join the EAP. https://launchdarkly.com/docs/sdk/features/data-saving-mode
+   * </p>
+   *
+   * @return a configuration builder
+   */
+  public static DataSystemModes dataSystem() {
+    return new DataSystemModes();
+  }
 }
