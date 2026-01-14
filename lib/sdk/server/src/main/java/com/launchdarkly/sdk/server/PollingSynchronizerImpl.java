@@ -39,6 +39,27 @@ class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
     private void doPoll() {
         try {
             FDv2SourceResult res = poll(selectorSource.getSelector(), true).get();
+            switch(res.getResultType()) {
+                case CHANGE_SET:
+                    break;
+                case STATUS:
+                    switch(res.getStatus().getState()) {
+                        case INTERRUPTED:
+                            break;
+                        case SHUTDOWN:
+                            // The base poller doesn't emit shutdown, we instead handle it at this level.
+                            // So when shutdown is called, we return shutdown on subsequent calls to next.
+                            break;
+                        case TERMINAL_ERROR:
+                        case GOODBYE:
+                            synchronized (this) {
+                                task.cancel(true);
+                            }
+                            internalShutdown();
+                            break;
+                    }
+                    break;
+            }
             resultQueue.put(res);
         } catch (InterruptedException | ExecutionException e) {
             // TODO: Determine if handling is needed.
