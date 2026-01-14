@@ -479,7 +479,7 @@ public abstract class Components {
   public static WrapperInfoBuilder wrapperInfo() { return new WrapperInfoBuilderImpl(); }
 
   /**
-   * This class is under active development.  Do not use.
+   * This API is under active development.  Do not use.
    * 
    * Returns a set of builder options for configuring the SDK data system. When the data system configuration
    * is used it overrides {@link LDConfig.Builder#dataSource(ComponentConfigurer)} and
