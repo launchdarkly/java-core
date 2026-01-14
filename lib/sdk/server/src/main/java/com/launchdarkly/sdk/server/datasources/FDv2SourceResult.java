@@ -12,7 +12,9 @@ import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 public class FDv2SourceResult {
     public enum State {
         /**
-         * The data source has encountered an interruption and will attempt to reconnect.
+         * The data source has encountered an interruption and will attempt to reconnect. This isn't intended to be used
+         * with an initializer, and instead TERMINAL_ERROR should be used. When this status is used with an initializer
+         * it will still be a terminal state.
          */
         INTERRUPTED,
         /**
