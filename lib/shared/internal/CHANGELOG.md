@@ -2,6 +2,13 @@
 
 All notable changes to the project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [1.6.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.6.0...launchdarkly-java-sdk-internal-1.6.1) (2026-01-13)
+
+
+### Bug Fixes
+
+* making Selector make public ([#102](https://github.com/launchdarkly/java-core/issues/102)) ([9f4f2ee](https://github.com/launchdarkly/java-core/commit/9f4f2ee89e7a8e8f168ceb7e8a7a4c8ced4f3901))
+
 ## [1.6.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.5.1...launchdarkly-java-sdk-internal-1.6.0) (2026-01-13)
 
 
