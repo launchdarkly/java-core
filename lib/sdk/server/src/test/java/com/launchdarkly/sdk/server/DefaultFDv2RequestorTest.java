@@ -11,7 +11,6 @@ import com.launchdarkly.testhelpers.httptest.RequestInfo;
 
 import org.junit.Test;
 
-import java.lang.reflect.Method;
 import java.net.URI;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -98,10 +97,10 @@ public class DefaultFDv2RequestorTest extends BaseTest {
 
         try (HttpServer server = HttpServer.start(resp)) {
             try (DefaultFDv2Requestor requestor = makeRequestor(server)) {
-                CompletableFuture<FDv2Requestor.FDv2PollingResponse> future =
+                CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
                     requestor.Poll(Selector.EMPTY);
 
-                FDv2Requestor.FDv2PollingResponse response = future.get(5, TimeUnit.SECONDS);
+                FDv2Requestor.FDv2PayloadResponse response = future.get(5, TimeUnit.SECONDS);
 
                 assertNotNull(response);
                 assertNotNull(response.getEvents());
@@ -124,10 +123,10 @@ public class DefaultFDv2RequestorTest extends BaseTest {
 
         try (HttpServer server = HttpServer.start(resp)) {
             try (DefaultFDv2Requestor requestor = makeRequestor(server)) {
-                CompletableFuture<FDv2Requestor.FDv2PollingResponse> future =
+                CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
                     requestor.Poll(Selector.EMPTY);
 
-                FDv2Requestor.FDv2PollingResponse response = future.get(5, TimeUnit.SECONDS);
+                FDv2Requestor.FDv2PayloadResponse response = future.get(5, TimeUnit.SECONDS);
 
                 assertNotNull(response);
                 assertNotNull(response.getEvents());
@@ -144,7 +143,7 @@ public class DefaultFDv2RequestorTest extends BaseTest {
             try (DefaultFDv2Requestor requestor = makeRequestor(server)) {
                 Selector selector = Selector.make(42, null);
 
-                CompletableFuture<FDv2Requestor.FDv2PollingResponse> future =
+                CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
                     requestor.Poll(selector);
 
                 future.get(5, TimeUnit.SECONDS);
@@ -164,7 +163,7 @@ public class DefaultFDv2RequestorTest extends BaseTest {
             try (DefaultFDv2Requestor requestor = makeRequestor(server)) {
                 Selector selector = Selector.make(0, "test-state");
 
-                CompletableFuture<FDv2Requestor.FDv2PollingResponse> future =
+                CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
                     requestor.Poll(selector);
 
                 future.get(5, TimeUnit.SECONDS);
@@ -184,7 +183,7 @@ public class DefaultFDv2RequestorTest extends BaseTest {
             try (DefaultFDv2Requestor requestor = makeRequestor(server)) {
                 Selector selector = Selector.make(100, "my-state");
 
-                CompletableFuture<FDv2Requestor.FDv2PollingResponse> future =
+                CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
                     requestor.Poll(selector);
 
                 future.get(5, TimeUnit.SECONDS);
@@ -209,10 +208,10 @@ public class DefaultFDv2RequestorTest extends BaseTest {
         try (HttpServer server = HttpServer.start(sequence)) {
             try (DefaultFDv2Requestor requestor = makeRequestor(server)) {
                 // First request should succeed and cache the ETag
-                CompletableFuture<FDv2Requestor.FDv2PollingResponse> future1 =
+                CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future1 =
                     requestor.Poll(Selector.EMPTY);
 
-                FDv2Requestor.FDv2PollingResponse response1 = future1.get(5, TimeUnit.SECONDS);
+                FDv2Requestor.FDv2PayloadResponse response1 = future1.get(5, TimeUnit.SECONDS);
                 assertNotNull(response1);
                 assertEquals(3, response1.getEvents().size());
 
@@ -221,10 +220,10 @@ public class DefaultFDv2RequestorTest extends BaseTest {
                 assertEquals(null, req1.getHeader("If-None-Match"));
 
                 // Second request should send If-None-Match and receive 304
-                CompletableFuture<FDv2Requestor.FDv2PollingResponse> future2 =
+                CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future2 =
                     requestor.Poll(Selector.EMPTY);
 
-                FDv2Requestor.FDv2PollingResponse response2 = future2.get(5, TimeUnit.SECONDS);
+                FDv2Requestor.FDv2PayloadResponse response2 = future2.get(5, TimeUnit.SECONDS);
                 assertEquals(null, response2);
 
                 RequestInfo req2 = server.getRecorder().requireRequest();
@@ -302,7 +301,7 @@ public class DefaultFDv2RequestorTest extends BaseTest {
 
         try (HttpServer server = HttpServer.start(resp)) {
             try (DefaultFDv2Requestor requestor = makeRequestor(server)) {
-                CompletableFuture<FDv2Requestor.FDv2PollingResponse> future =
+                CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
                     requestor.Poll(Selector.EMPTY);
 
                 try {
@@ -322,7 +321,7 @@ public class DefaultFDv2RequestorTest extends BaseTest {
 
         try (HttpServer server = HttpServer.start(resp)) {
             try (DefaultFDv2Requestor requestor = makeRequestor(server)) {
-                CompletableFuture<FDv2Requestor.FDv2PollingResponse> future =
+                CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
                     requestor.Poll(Selector.EMPTY);
 
                 try {
@@ -342,7 +341,7 @@ public class DefaultFDv2RequestorTest extends BaseTest {
 
         try (HttpServer server = HttpServer.start(resp)) {
             try (DefaultFDv2Requestor requestor = makeRequestor(server)) {
-                CompletableFuture<FDv2Requestor.FDv2PollingResponse> future =
+                CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
                     requestor.Poll(Selector.EMPTY);
 
                 try {
@@ -361,7 +360,7 @@ public class DefaultFDv2RequestorTest extends BaseTest {
 
         try (HttpServer server = HttpServer.start(resp)) {
             try (DefaultFDv2Requestor requestor = makeRequestor(server)) {
-                CompletableFuture<FDv2Requestor.FDv2PollingResponse> future =
+                CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
                     requestor.Poll(Selector.EMPTY);
 
                 try {
@@ -384,7 +383,7 @@ public class DefaultFDv2RequestorTest extends BaseTest {
             try (DefaultFDv2Requestor requestor = new DefaultFDv2Requestor(
                     makeHttpConfig(LDConfig.DEFAULT), uri, REQUEST_PATH, testLogger)) {
 
-                CompletableFuture<FDv2Requestor.FDv2PollingResponse> future =
+                CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
                     requestor.Poll(Selector.EMPTY);
 
                 future.get(5, TimeUnit.SECONDS);
@@ -434,10 +433,10 @@ public class DefaultFDv2RequestorTest extends BaseTest {
 
         try (HttpServer server = HttpServer.start(resp)) {
             try (DefaultFDv2Requestor requestor = makeRequestor(server)) {
-                CompletableFuture<FDv2Requestor.FDv2PollingResponse> future =
+                CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
                     requestor.Poll(Selector.EMPTY);
 
-                FDv2Requestor.FDv2PollingResponse response = future.get(5, TimeUnit.SECONDS);
+                FDv2Requestor.FDv2PayloadResponse response = future.get(5, TimeUnit.SECONDS);
 
                 assertNotNull(response);
                 assertNotNull(response.getHeaders());

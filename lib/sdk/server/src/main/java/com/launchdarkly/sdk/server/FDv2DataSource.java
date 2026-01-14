@@ -169,6 +169,7 @@ class FDv2DataSource implements DataSource {
     }
 
     private void runInitializers() {
+        boolean anyDataReceived = false;
         for (InitializerFactory factory : initializers) {
             try {
                 Initializer initializer = factory.build();
@@ -179,8 +180,12 @@ class FDv2DataSource implements DataSource {
                 switch (res.getResultType()) {
                     case CHANGE_SET:
                         // TODO: Apply to the store.
-                        dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
-                        startFuture.complete(true);
+                        anyDataReceived = true;
+                        if(!res.getChangeSet().getSelector().isEmpty()) {
+                            dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
+                            startFuture.complete(true);
+                            return;
+                        }
                         return;
                     case STATUS:
                         // TODO: Implement.
@@ -188,6 +193,12 @@ class FDv2DataSource implements DataSource {
                 }
             } catch (ExecutionException | InterruptedException | CancellationException e) {
                 // TODO: Log.
+            }
+            // We received data without a selector, and we have exhausted initializers, so we are going to
+            // conside ourselves initialized.
+            if(anyDataReceived) {
+                dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
+                startFuture.complete(true);
             }
         }
     }

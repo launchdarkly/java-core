@@ -57,14 +57,14 @@ public class DefaultFDv2Requestor implements FDv2Requestor, Closeable {
     }
 
     @Override
-    public CompletableFuture<FDv2PollingResponse> Poll(Selector selector) {
-        CompletableFuture<FDv2PollingResponse> future = new CompletableFuture<>();
+    public CompletableFuture<FDv2PayloadResponse> Poll(Selector selector) {
+        CompletableFuture<FDv2PayloadResponse> future = new CompletableFuture<>();
 
         try {
             // Build the request URI with query parameters
             URI requestUri = pollingUri;
 
-            if (selector.getVersion() > 0) {
+            if (!selector.isEmpty()) {
                 requestUri = HttpHelpers.addQueryParam(requestUri, VERSION_QUERY_PARAM, String.valueOf(selector.getVersion()));
             }
 
@@ -131,6 +131,8 @@ public class DefaultFDv2Requestor implements FDv2Requestor, Closeable {
                             }
                         }
 
+                        // If the code makes it here, then the body should not be empty.
+                        // If it is, then it is a logic/implementation error.
                         // Parse the response body
                         if (response.body() == null) {
                             future.completeExceptionally(new IOException("Response body is null"));
@@ -143,7 +145,7 @@ public class DefaultFDv2Requestor implements FDv2Requestor, Closeable {
                         List<FDv2Event> events = FDv2Event.parseEventsArray(responseBody);
 
                         // Create and return the response
-                        FDv2PollingResponse pollingResponse = new FDv2PollingResponse(events, response.headers());
+                        FDv2PayloadResponse pollingResponse = new FDv2PayloadResponse(events, response.headers());
                         future.complete(pollingResponse);
 
                     } catch (IOException | SerializationException e) {

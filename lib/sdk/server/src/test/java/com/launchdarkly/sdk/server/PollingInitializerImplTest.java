@@ -11,7 +11,6 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
@@ -43,7 +42,7 @@ public class PollingInitializerImplTest extends BaseTest {
         return future;
     }
 
-    private FDv2Requestor.FDv2PollingResponse makeSuccessResponse() {
+    private FDv2Requestor.FDv2PayloadResponse makeSuccessResponse() {
         String json = "{\n" +
             "  \"events\": [\n" +
             "    {\n" +
@@ -68,7 +67,7 @@ public class PollingInitializerImplTest extends BaseTest {
             "}";
 
         try {
-            return new FDv2Requestor.FDv2PollingResponse(
+            return new FDv2Requestor.FDv2PayloadResponse(
                 com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(json),
                 okhttp3.Headers.of()
             );
@@ -82,7 +81,7 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2Requestor requestor = mockRequestor();
         SelectorSource selectorSource = mockSelectorSource();
 
-        FDv2Requestor.FDv2PollingResponse response = makeSuccessResponse();
+        FDv2Requestor.FDv2PayloadResponse response = makeSuccessResponse();
         when(requestor.Poll(any(Selector.class)))
             .thenReturn(CompletableFuture.completedFuture(response));
 
@@ -188,7 +187,7 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2Requestor requestor = mockRequestor();
         SelectorSource selectorSource = mockSelectorSource();
 
-        CompletableFuture<FDv2Requestor.FDv2PollingResponse> delayedResponse = new CompletableFuture<>();
+        CompletableFuture<FDv2Requestor.FDv2PayloadResponse> delayedResponse = new CompletableFuture<>();
         when(requestor.Poll(any(Selector.class))).thenReturn(delayedResponse);
 
         PollingInitializerImpl initializer = new PollingInitializerImpl(requestor, testLogger, selectorSource);
@@ -214,7 +213,7 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2Requestor requestor = mockRequestor();
         SelectorSource selectorSource = mockSelectorSource();
 
-        FDv2Requestor.FDv2PollingResponse response = makeSuccessResponse();
+        FDv2Requestor.FDv2PayloadResponse response = makeSuccessResponse();
         when(requestor.Poll(any(Selector.class)))
             .thenReturn(CompletableFuture.completedFuture(response));
 
@@ -249,7 +248,7 @@ public class PollingInitializerImplTest extends BaseTest {
             "  ]\n" +
             "}";
 
-        FDv2Requestor.FDv2PollingResponse response = new FDv2Requestor.FDv2PollingResponse(
+        FDv2Requestor.FDv2PayloadResponse response = new FDv2Requestor.FDv2PayloadResponse(
             com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(errorJson),
             okhttp3.Headers.of()
         );
@@ -285,7 +284,7 @@ public class PollingInitializerImplTest extends BaseTest {
             "  ]\n" +
             "}";
 
-        FDv2Requestor.FDv2PollingResponse response = new FDv2Requestor.FDv2PollingResponse(
+        FDv2Requestor.FDv2PayloadResponse response = new FDv2Requestor.FDv2PayloadResponse(
             com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(goodbyeJson),
             okhttp3.Headers.of()
         );
@@ -312,7 +311,7 @@ public class PollingInitializerImplTest extends BaseTest {
 
         String emptyJson = "{\"events\": []}";
 
-        FDv2Requestor.FDv2PollingResponse response = new FDv2Requestor.FDv2PollingResponse(
+        FDv2Requestor.FDv2PayloadResponse response = new FDv2Requestor.FDv2PayloadResponse(
             com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(emptyJson),
             okhttp3.Headers.of()
         );
