@@ -27,7 +27,7 @@ import java.util.concurrent.CompletableFuture;
  *          │
  *          └─────────────────► GOODBYE ───► [END]
  *
- * <code>
+ * <pre>
  * stateDiagram-v2
  *     [*] --> RUNNING
  *     RUNNING --> SHUTDOWN
@@ -40,7 +40,7 @@ import java.util.concurrent.CompletableFuture;
  *     CHANGESET --> [*]
  *     TERMINAL_ERROR --> [*]
  *     GOODBYE --> [*]
- * </code>
+ * </pre>
  */
 public interface Initializer {
     /**

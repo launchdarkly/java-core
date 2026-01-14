@@ -31,7 +31,7 @@ import java.util.concurrent.CompletableFuture;
  *     │                                      │
  *     └──────────────────────────────────────┘
  * <p>
- * <code>
+ * <pre>
  * stateDiagram-v2
  *     [*] --> RUNNING
  *     RUNNING --> SHUTDOWN
@@ -44,7 +44,7 @@ import java.util.concurrent.CompletableFuture;
  *     CHANGE_SET --> RUNNING
  *     RUNNING --> INTERRUPTED
  *     INTERRUPTED --> RUNNING
- * </code>
+ * </pre>
  */
 public interface Synchronizer {
     /**
