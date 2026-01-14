@@ -1,7 +1,6 @@
 package com.launchdarkly.sdk.server.datasources;
-
-import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ChangeSet;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes;
 
 /**
  * This type is currently experimental and not subject to semantic versioning.
@@ -64,12 +63,12 @@ public class FDv2SourceResult {
         }
     }
 
-    private final FDv2ChangeSet changeSet;
+    private final DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet;
     private final Status status;
 
     private final ResultType resultType;
 
-    private FDv2SourceResult(FDv2ChangeSet changeSet, Status status, ResultType resultType) {
+    private FDv2SourceResult(DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet, Status status, ResultType resultType) {
         this.changeSet = changeSet;
         this.status = status;
         this.resultType = resultType;
@@ -87,7 +86,7 @@ public class FDv2SourceResult {
         return new FDv2SourceResult(null, new Status(State.TERMINAL_ERROR, errorInfo), ResultType.STATUS);
     }
 
-    public static FDv2SourceResult changeSet(FDv2ChangeSet changeSet) {
+    public static FDv2SourceResult changeSet(DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet) {
         return new FDv2SourceResult(changeSet, null, ResultType.CHANGE_SET);
     }
 
@@ -104,7 +103,7 @@ public class FDv2SourceResult {
         return status;
     }
 
-    public FDv2ChangeSet getChangeSet() {
+    public DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> getChangeSet() {
         return changeSet;
     }
 }

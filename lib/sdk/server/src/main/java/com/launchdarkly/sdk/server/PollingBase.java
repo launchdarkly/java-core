@@ -2,12 +2,12 @@ package com.launchdarkly.sdk.server;
 
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event;
-import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ChangeSet;
 import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ProtocolHandler;
 import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
 import com.launchdarkly.sdk.internal.http.HttpErrors;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes;
 import com.launchdarkly.sdk.server.subsystems.SerializationException;
 
 import java.io.IOException;
@@ -79,26 +79,46 @@ class PollingBase {
                 FDv2ProtocolHandler.IFDv2ProtocolAction res = handler.handleEvent(event);
                 switch (res.getAction()) {
                     case CHANGESET:
-                        return FDv2SourceResult.changeSet(((FDv2ProtocolHandler.FDv2ActionChangeset) res).getChangeset());
-                    case ERROR:
+                        try {
+
+                            DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> converted = FDv2ChangeSetTranslator.toChangeSet(
+                                    ((FDv2ProtocolHandler.FDv2ActionChangeset) res).getChangeset(),
+                                    logger,
+                                    // TODO: Implement environment ID support.
+                                    null
+                            );
+                            return FDv2SourceResult.changeSet(converted);
+                        } catch (Exception e) {
+                            // TODO: Do we need to be more specific about the exception type here?
+                            DataSourceStatusProvider.ErrorInfo info = new DataSourceStatusProvider.ErrorInfo(
+                                    DataSourceStatusProvider.ErrorKind.INVALID_DATA,
+                                    0,
+                                    e.toString(),
+                                    new Date().toInstant()
+                            );
+                            return oneShot ? FDv2SourceResult.terminalError(info) : FDv2SourceResult.interrupted(info);
+                        }
+                    case ERROR: {
                         FDv2ProtocolHandler.FDv2ActionError error = ((FDv2ProtocolHandler.FDv2ActionError) res);
-                        return FDv2SourceResult.terminalError(
-                                new DataSourceStatusProvider.ErrorInfo(
-                                        DataSourceStatusProvider.ErrorKind.UNKNOWN,
-                                        0,
-                                        error.getReason(),
-                                        new Date().toInstant()));
+                        DataSourceStatusProvider.ErrorInfo info = new DataSourceStatusProvider.ErrorInfo(
+                                DataSourceStatusProvider.ErrorKind.UNKNOWN,
+                                0,
+                                error.getReason(),
+                                new Date().toInstant());
+                        return oneShot ? FDv2SourceResult.terminalError(info) : FDv2SourceResult.interrupted(info);
+                    }
                     case GOODBYE:
                         return FDv2SourceResult.goodbye(((FDv2ProtocolHandler.FDv2ActionGoodbye) res).getReason());
                     case NONE:
                         break;
-                    case INTERNAL_ERROR:
-                        return FDv2SourceResult.terminalError(
-                                new DataSourceStatusProvider.ErrorInfo(
-                                        DataSourceStatusProvider.ErrorKind.UNKNOWN,
-                                        0,
-                                        "Internal error occurred during polling",
-                                        new Date().toInstant()));
+                    case INTERNAL_ERROR: {
+                        DataSourceStatusProvider.ErrorInfo info = new DataSourceStatusProvider.ErrorInfo(
+                                DataSourceStatusProvider.ErrorKind.UNKNOWN,
+                                0,
+                                "Internal error occurred during polling",
+                                new Date().toInstant());
+                        return oneShot ? FDv2SourceResult.terminalError(info) : FDv2SourceResult.interrupted(info);
+                    }
                 }
             }
             return FDv2SourceResult.terminalError(new DataSourceStatusProvider.ErrorInfo(

@@ -1,5 +1,6 @@
 package com.launchdarkly.sdk.server.datasources;
 
+import java.io.Closeable;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -42,16 +43,10 @@ import java.util.concurrent.CompletableFuture;
  *     GOODBYE --> [*]
  * </pre>
  */
-public interface Initializer {
+public interface Initializer extends DataSourceShutdown {
     /**
      * Run the initializer to completion.
      * @return The result of the initializer.
      */
     CompletableFuture<FDv2SourceResult> run();
-
-    /**
-     * Shutdown the initializer. The initializer should emit a status event with a SHUTDOWN state as soon as possible.
-     * If the initializer has already completed, or is in the process of completing, this method should have no effect.
-     */
-    void shutdown();
 }

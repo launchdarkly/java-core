@@ -46,7 +46,7 @@ import java.util.concurrent.CompletableFuture;
  *     INTERRUPTED --> RUNNING
  * </pre>
  */
-public interface Synchronizer {
+public interface Synchronizer extends DataSourceShutdown {
     /**
      * Get the next result from the stream.
      * <p>
@@ -55,12 +55,4 @@ public interface Synchronizer {
      * @return a future that will complete when the next result is available
      */
     CompletableFuture<FDv2SourceResult> next();
-
-    /**
-     * Shutdown the synchronizer. The synchronizer should emit a status event with a SHUTDOWN state as soon as possible
-     * and then stop producing further results. If the synchronizer involves a resource, such as a network connection,
-     * then those resources should be released.
-     * If the synchronizer has already completed, or is in the process of completing, this method should have no effect.
-     */
-    void shutdown();
 }
