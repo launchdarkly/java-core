@@ -1,4 +1,4 @@
-package com.launchdarkly.sdk.server.datasources;
+package com.launchdarkly.sdk.server;
 
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event;
@@ -16,10 +16,10 @@ import okhttp3.Response;
 
 import javax.annotation.Nonnull;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.net.URI;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +28,7 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Implementation of FDv2Requestor for polling feature flag data via FDv2 protocol.
  */
-public class DefaultFDv2Requestor implements FDv2Requestor {
+public class DefaultFDv2Requestor implements FDv2Requestor, Closeable {
     private static final String VERSION_QUERY_PARAM = "version";
     private static final String STATE_QUERY_PARAM = "state";
 
@@ -57,8 +57,8 @@ public class DefaultFDv2Requestor implements FDv2Requestor {
     }
 
     @Override
-    public CompletableFuture<List<FDv2PollingResponse>> Poll(Selector selector) {
-        CompletableFuture<List<FDv2PollingResponse>> future = new CompletableFuture<>();
+    public CompletableFuture<FDv2PollingResponse> Poll(Selector selector) {
+        CompletableFuture<FDv2PollingResponse> future = new CompletableFuture<>();
 
         try {
             // Build the request URI with query parameters
@@ -110,7 +110,7 @@ public class DefaultFDv2Requestor implements FDv2Requestor {
                         // Handle 304 Not Modified - no new data
                         if (response.code() == 304) {
                             logger.debug("FDv2 polling request returned 304: not modified");
-                            future.complete(Collections.emptyList());
+                            future.complete(null);
                             return;
                         }
 
@@ -144,7 +144,7 @@ public class DefaultFDv2Requestor implements FDv2Requestor {
 
                         // Create and return the response
                         FDv2PollingResponse pollingResponse = new FDv2PollingResponse(events, response.headers());
-                        future.complete(Collections.singletonList(pollingResponse));
+                        future.complete(pollingResponse);
 
                     } catch (IOException | SerializationException e) {
                         future.completeExceptionally(e);

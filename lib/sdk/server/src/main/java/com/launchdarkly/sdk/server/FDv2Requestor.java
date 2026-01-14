@@ -1,4 +1,4 @@
-package com.launchdarkly.sdk.server.datasources;
+package com.launchdarkly.sdk.server;
 
 import com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event;
 import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
@@ -7,6 +7,11 @@ import okhttp3.Headers;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * This type is currently experimental and not subject to semantic versioning.
+ * <p>
+ * Interface for making FDv2 polling requests.
+ */
 interface FDv2Requestor {
     public static class FDv2PollingResponse {
         private final List<FDv2Event> events;
@@ -25,5 +30,7 @@ interface FDv2Requestor {
             return headers;
         }
     }
-    CompletableFuture<List<FDv2PollingResponse>> Poll(Selector selector);
+    CompletableFuture<FDv2PollingResponse> Poll(Selector selector);
+
+    void close();
 }

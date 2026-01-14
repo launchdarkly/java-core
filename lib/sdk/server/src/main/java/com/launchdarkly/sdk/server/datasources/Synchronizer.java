@@ -49,6 +49,9 @@ import java.util.concurrent.CompletableFuture;
 public interface Synchronizer {
     /**
      * Get the next result from the stream.
+     * <p>
+     * This method is intended to be driven by a single thread, and for there to be a single outstanding call
+     * at any given time.
      * @return a future that will complete when the next result is available
      */
     CompletableFuture<FDv2SourceResult> next();

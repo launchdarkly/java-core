@@ -1,4 +1,5 @@
 package com.launchdarkly.sdk.server.datasources;
+
 import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ChangeSet;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 
@@ -60,6 +61,7 @@ public class FDv2SourceResult {
             this.errorInfo = errorInfo;
         }
     }
+
     private final FDv2ChangeSet changeSet;
     private final Status status;
 
@@ -75,23 +77,32 @@ public class FDv2SourceResult {
         return new FDv2SourceResult(null, new Status(State.INTERRUPTED, errorInfo), ResultType.STATUS);
     }
 
-    public static FDv2SourceResult shutdown(DataSourceStatusProvider.ErrorInfo errorInfo) {
-        return new FDv2SourceResult(null, new Status(State.SHUTDOWN, errorInfo), ResultType.STATUS);
+    public static FDv2SourceResult shutdown() {
+        return new FDv2SourceResult(null, new Status(State.SHUTDOWN, null), ResultType.STATUS);
     }
 
-     public static FDv2SourceResult changeSet(FDv2ChangeSet changeSet) {
+    public static FDv2SourceResult terminalError(DataSourceStatusProvider.ErrorInfo errorInfo) {
+        return new FDv2SourceResult(null, new Status(State.TERMINAL_ERROR, errorInfo), ResultType.STATUS);
+    }
+
+    public static FDv2SourceResult changeSet(FDv2ChangeSet changeSet) {
         return new FDv2SourceResult(changeSet, null, ResultType.CHANGE_SET);
-     }
+    }
 
-     public ResultType getResultType() {
+    public static FDv2SourceResult goodbye(String reason) {
+        // TODO: Goodbye reason.
+        return new FDv2SourceResult(null, new Status(State.GOODBYE, null), ResultType.STATUS);
+    }
+
+    public ResultType getResultType() {
         return resultType;
-     }
+    }
 
-     public Status getStatus() {
+    public Status getStatus() {
         return status;
-     }
+    }
 
-     public FDv2ChangeSet getChangeSet() {
+    public FDv2ChangeSet getChangeSet() {
         return changeSet;
-     }
+    }
 }
