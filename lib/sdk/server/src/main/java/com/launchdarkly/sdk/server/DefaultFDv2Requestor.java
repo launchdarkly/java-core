@@ -23,6 +23,7 @@ import java.net.URI;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -131,15 +132,9 @@ public class DefaultFDv2Requestor implements FDv2Requestor, Closeable {
                             }
                         }
 
-                        // If the code makes it here, then the body should not be empty.
-                        // If it is, then it is a logic/implementation error.
-                        // Parse the response body
-                        if (response.body() == null) {
-                            future.completeExceptionally(new IOException("Response body is null"));
-                            return;
-                        }
-
-                        String responseBody = response.body().string();
+                        // The documentation indicates that the body will not be null for a response passed to the
+                        // onResponse callback.
+                        String responseBody = Objects.requireNonNull(response.body()).string();
                         logger.debug("Received FDv2 polling response");
 
                         List<FDv2Event> events = FDv2Event.parseEventsArray(responseBody);
