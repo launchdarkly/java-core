@@ -2,6 +2,20 @@ package com.launchdarkly.sdk.server.datasources;
 
 import java.util.concurrent.CompletableFuture;
 
+// Mermaid source for state diagram.
+// stateDiagram-v2
+//     [*] --> RUNNING
+//     RUNNING --> SHUTDOWN
+//     SHUTDOWN --> [*]
+//     RUNNING --> TERMINAL_ERROR
+//     TERMINAL_ERROR --> [*]
+//     RUNNING --> GOODBYE
+//     GOODBYE --> [*]
+//     RUNNING --> CHANGE_SET
+//     CHANGE_SET --> RUNNING
+//     RUNNING --> INTERRUPTED
+//     INTERRUPTED --> RUNNING
+
 /**
  * This type is currently experimental and not subject to semantic versioning.
  * <p>
@@ -30,21 +44,6 @@ import java.util.concurrent.CompletableFuture;
  *     │   └──────────────────► INTERRUPTED ──┤
  *     │                                      │
  *     └──────────────────────────────────────┘
- * <p>
- * <pre>
- * stateDiagram-v2
- *     [*] --> RUNNING
- *     RUNNING --> SHUTDOWN
- *     SHUTDOWN --> [*]
- *     RUNNING --> TERMINAL_ERROR
- *     TERMINAL_ERROR --> [*]
- *     RUNNING --> GOODBYE
- *     GOODBYE --> [*]
- *     RUNNING --> CHANGE_SET
- *     CHANGE_SET --> RUNNING
- *     RUNNING --> INTERRUPTED
- *     INTERRUPTED --> RUNNING
- * </pre>
  */
 public interface Synchronizer extends DataSourceShutdown {
     /**
