@@ -42,7 +42,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
         return future;
     }
 
-    private FDv2Requestor.FDv2PollingResponse makeSuccessResponse() {
+    private FDv2Requestor.FDv2PayloadResponse makeSuccessResponse() {
         String json = "{\n" +
                 "  \"events\": [\n" +
                 "    {\n" +
@@ -67,7 +67,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
                 "}";
 
         try {
-            return new FDv2Requestor.FDv2PollingResponse(
+            return new FDv2Requestor.FDv2PayloadResponse(
                     com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(json),
                     okhttp3.Headers.of()
             );
@@ -83,7 +83,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
         ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
 
         // Delay the response so queue is initially empty
-        CompletableFuture<FDv2Requestor.FDv2PollingResponse> delayedResponse = new CompletableFuture<>();
+        CompletableFuture<FDv2Requestor.FDv2PayloadResponse> delayedResponse = new CompletableFuture<>();
         when(requestor.Poll(any(Selector.class))).thenReturn(delayedResponse);
 
         try {
@@ -121,7 +121,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
         SelectorSource selectorSource = mockSelectorSource();
         ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
 
-        FDv2Requestor.FDv2PollingResponse response = makeSuccessResponse();
+        FDv2Requestor.FDv2PayloadResponse response = makeSuccessResponse();
         when(requestor.Poll(any(Selector.class)))
                 .thenReturn(CompletableFuture.completedFuture(response));
 
@@ -157,7 +157,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
         SelectorSource selectorSource = mockSelectorSource();
         ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
 
-        FDv2Requestor.FDv2PollingResponse response = makeSuccessResponse();
+        FDv2Requestor.FDv2PayloadResponse response = makeSuccessResponse();
         when(requestor.Poll(any(Selector.class)))
                 .thenReturn(CompletableFuture.completedFuture(response));
 
@@ -198,7 +198,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
         SelectorSource selectorSource = mockSelectorSource();
         ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
 
-        FDv2Requestor.FDv2PollingResponse response = makeSuccessResponse();
+        FDv2Requestor.FDv2PayloadResponse response = makeSuccessResponse();
         when(requestor.Poll(any(Selector.class)))
                 .thenReturn(CompletableFuture.completedFuture(response));
 
@@ -231,7 +231,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
         ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
 
         // Delay the response so next() will be waiting
-        CompletableFuture<FDv2Requestor.FDv2PollingResponse> delayedResponse = new CompletableFuture<>();
+        CompletableFuture<FDv2Requestor.FDv2PayloadResponse> delayedResponse = new CompletableFuture<>();
         when(requestor.Poll(any(Selector.class))).thenReturn(delayedResponse);
 
         try {
@@ -268,7 +268,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
         SelectorSource selectorSource = mockSelectorSource();
         ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
 
-        FDv2Requestor.FDv2PollingResponse response = makeSuccessResponse();
+        FDv2Requestor.FDv2PayloadResponse response = makeSuccessResponse();
         when(requestor.Poll(any(Selector.class)))
                 .thenReturn(CompletableFuture.completedFuture(response));
 
@@ -489,7 +489,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
         SelectorSource selectorSource = mockSelectorSource();
         ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
 
-        FDv2Requestor.FDv2PollingResponse response = makeSuccessResponse();
+        FDv2Requestor.FDv2PayloadResponse response = makeSuccessResponse();
         when(requestor.Poll(any(Selector.class)))
                 .thenReturn(CompletableFuture.completedFuture(response));
 

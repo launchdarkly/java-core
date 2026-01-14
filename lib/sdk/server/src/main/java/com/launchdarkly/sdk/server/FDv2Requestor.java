@@ -13,11 +13,16 @@ import java.util.concurrent.CompletableFuture;
  * Interface for making FDv2 polling requests.
  */
 interface FDv2Requestor {
-    public static class FDv2PollingResponse {
+    /**
+     * Response for a set of FDv2 events that result in a payload. Either a full payload or the events required
+     * to get from one payload version to another.
+     * This isn't intended for use for implementations which may require multiple executions to get an entire payload.
+     */
+    public static class FDv2PayloadResponse {
         private final List<FDv2Event> events;
         private final Headers headers;
 
-        public FDv2PollingResponse(List<FDv2Event> events, Headers headers) {
+        public FDv2PayloadResponse(List<FDv2Event> events, Headers headers) {
             this.events = events;
             this.headers = headers;
         }
@@ -30,7 +35,7 @@ interface FDv2Requestor {
             return headers;
         }
     }
-    CompletableFuture<FDv2PollingResponse> Poll(Selector selector);
+    CompletableFuture<FDv2PayloadResponse> Poll(Selector selector);
 
     void close();
 }
