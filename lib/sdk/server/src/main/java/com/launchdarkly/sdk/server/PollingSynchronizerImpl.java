@@ -38,7 +38,7 @@ class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
 
     private void doPoll() {
         try {
-            FDv2SourceResult res = poll(selectorSource.getSelector(), true).get();
+            FDv2SourceResult res = poll(selectorSource.getSelector(), false).get();
             switch(res.getResultType()) {
                 case CHANGE_SET:
                     break;
