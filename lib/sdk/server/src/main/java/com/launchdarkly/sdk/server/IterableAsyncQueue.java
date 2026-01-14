@@ -1,9 +1,9 @@
-package com.launchdarkly.sdk.server.datasources;
+package com.launchdarkly.sdk.server;
 
 import java.util.LinkedList;
 import java.util.concurrent.CompletableFuture;
 
-public class IterableAsyncQueue<T> {
+class IterableAsyncQueue<T> {
     private final Object lock = new Object();
     private final LinkedList<T> queue = new LinkedList<>();
 
