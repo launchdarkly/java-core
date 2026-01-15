@@ -35,7 +35,9 @@ class PollingBase {
                 if (ex instanceof HttpErrors.HttpErrorException) {
                     HttpErrors.HttpErrorException e = (HttpErrors.HttpErrorException) ex;
                     DataSourceStatusProvider.ErrorInfo errorInfo = DataSourceStatusProvider.ErrorInfo.fromHttpError(e.getStatus());
-                    boolean recoverable = e.getStatus() > 0 && !isHttpErrorRecoverable(e.getStatus());
+                    // Errors without an HTTP status are recoverable. If there is a status, then we check if the error
+                    // is recoverable.
+                    boolean recoverable = e.getStatus() <= 0 || isHttpErrorRecoverable(e.getStatus());
                     logger.error("Polling request failed with HTTP error: {}", e.getStatus());
                     // For a one-shot request all errors are terminal.
                     if (oneShot) {
