@@ -3,6 +3,7 @@ package com.launchdarkly.sdk.server;
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event;
 import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.internal.http.HttpErrors;
 import com.launchdarkly.sdk.internal.http.HttpHelpers;
 import com.launchdarkly.sdk.internal.http.HttpProperties;
 import com.launchdarkly.sdk.json.SerializationException;
@@ -117,7 +118,7 @@ public class DefaultFDv2Requestor implements FDv2Requestor, Closeable {
 
                         if (!response.isSuccessful()) {
                             future.completeExceptionally(
-                                new IOException("FDv2 polling request failed with status code: " + response.code())
+                                new HttpErrors.HttpErrorException(response.code())
                             );
                             return;
                         }
