@@ -14,21 +14,30 @@ public final class DataSystemComponents {
   private DataSystemComponents() {}
   
   /**
-   * Get a builder for a polling data source.
-   * 
-   * @return the polling data source builder
+   * Get a builder for a polling initializer.
+   *
+   * @return the polling initializer builder
    */
-  public static FDv2PollingDataSourceBuilder polling() {
-    return new FDv2PollingDataSourceBuilder();
+  public static FDv2PollingInitializerBuilder pollingInitializer() {
+    return new FDv2PollingInitializerBuilder();
   }
 
   /**
-   * Get a builder for a streaming data source.
-   * 
-   * @return the streaming data source builder
+   * Get a builder for a polling synchronizer.
+   *
+   * @return the polling synchronizer builder
    */
-  public static FDv2StreamingDataSourceBuilder streaming() {
-    return new FDv2StreamingDataSourceBuilder();
+  public static FDv2PollingSynchronizerBuilder pollingSynchronizer() {
+    return new FDv2PollingSynchronizerBuilder();
+  }
+
+  /**
+   * Get a builder for a streaming synchronizer.
+   *
+   * @return the streaming synchronizer builder
+   */
+  public static FDv2StreamingSynchronizerBuilder streamingSynchronizer() {
+    return new FDv2StreamingSynchronizerBuilder();
   }
 
   /**

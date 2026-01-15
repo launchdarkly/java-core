@@ -3,8 +3,9 @@ package com.launchdarkly.sdk.server;
 import com.launchdarkly.sdk.server.integrations.DataSystemBuilder;
 import com.launchdarkly.sdk.server.integrations.DataSystemComponents;
 import com.launchdarkly.sdk.server.integrations.DataSystemModes;
-import com.launchdarkly.sdk.server.integrations.FDv2PollingDataSourceBuilder;
-import com.launchdarkly.sdk.server.integrations.FDv2StreamingDataSourceBuilder;
+import com.launchdarkly.sdk.server.integrations.FDv2PollingInitializerBuilder;
+import com.launchdarkly.sdk.server.integrations.FDv2PollingSynchronizerBuilder;
+import com.launchdarkly.sdk.server.integrations.FDv2StreamingSynchronizerBuilder;
 import com.launchdarkly.sdk.server.integrations.MockPersistentDataStore;
 import com.launchdarkly.sdk.server.integrations.PersistentDataStoreBuilder;
 import com.launchdarkly.sdk.server.integrations.PollingDataSourceBuilder;
@@ -61,12 +62,12 @@ public class ConfigurationTest {
     DataSystemModes modes = new DataSystemModes();
     DataSystemBuilder builder = modes.defaultMode();
     DataSystemConfiguration dataSystemConfig = builder.build();
-    
+
     assertEquals(1, dataSystemConfig.getInitializers().size());
-    assertTrue(dataSystemConfig.getInitializers().get(0) instanceof FDv2PollingDataSourceBuilder);
+    assertTrue(dataSystemConfig.getInitializers().get(0) instanceof FDv2PollingInitializerBuilder);
     assertEquals(2, dataSystemConfig.getSynchronizers().size());
-    assertTrue(dataSystemConfig.getSynchronizers().get(0) instanceof FDv2StreamingDataSourceBuilder);
-    assertTrue(dataSystemConfig.getSynchronizers().get(1) instanceof FDv2PollingDataSourceBuilder);
+    assertTrue(dataSystemConfig.getSynchronizers().get(0) instanceof FDv2StreamingSynchronizerBuilder);
+    assertTrue(dataSystemConfig.getSynchronizers().get(1) instanceof FDv2PollingSynchronizerBuilder);
     assertTrue(dataSystemConfig.getFDv1FallbackSynchronizer() instanceof PollingDataSourceBuilder);
     assertNull(dataSystemConfig.getPersistentStore());
   }
@@ -79,7 +80,7 @@ public class ConfigurationTest {
     
     assertTrue(dataSystemConfig.getInitializers().isEmpty());
     assertEquals(1, dataSystemConfig.getSynchronizers().size());
-    assertTrue(dataSystemConfig.getSynchronizers().get(0) instanceof FDv2StreamingDataSourceBuilder);
+    assertTrue(dataSystemConfig.getSynchronizers().get(0) instanceof FDv2StreamingSynchronizerBuilder);
     assertTrue(dataSystemConfig.getFDv1FallbackSynchronizer() instanceof PollingDataSourceBuilder);
     assertNull(dataSystemConfig.getPersistentStore());
   }
@@ -89,10 +90,10 @@ public class ConfigurationTest {
     DataSystemModes modes = new DataSystemModes();
     DataSystemBuilder builder = modes.polling();
     DataSystemConfiguration dataSystemConfig = builder.build();
-    
+
     assertTrue(dataSystemConfig.getInitializers().isEmpty());
     assertEquals(1, dataSystemConfig.getSynchronizers().size());
-    assertTrue(dataSystemConfig.getSynchronizers().get(0) instanceof FDv2PollingDataSourceBuilder);
+    assertTrue(dataSystemConfig.getSynchronizers().get(0) instanceof FDv2PollingSynchronizerBuilder);
     assertTrue(dataSystemConfig.getFDv1FallbackSynchronizer() instanceof PollingDataSourceBuilder);
     assertNull(dataSystemConfig.getPersistentStore());
   }
@@ -122,16 +123,16 @@ public class ConfigurationTest {
     ComponentConfigurer<PersistentDataStore> storeConfigurer = TestComponents.specificComponent(mockStore);
     ComponentConfigurer<DataStore> dataStoreConfigurer = TestComponents.specificComponent(
         Components.persistentDataStore(storeConfigurer).build(clientContextWithDataStoreUpdateSink()));
-    
+
     DataSystemModes modes = new DataSystemModes();
     DataSystemBuilder builder = modes.persistentStore(dataStoreConfigurer);
     DataSystemConfiguration dataSystemConfig = builder.build();
-    
+
     assertEquals(1, dataSystemConfig.getInitializers().size());
-    assertTrue(dataSystemConfig.getInitializers().get(0) instanceof FDv2PollingDataSourceBuilder);
+    assertTrue(dataSystemConfig.getInitializers().get(0) instanceof FDv2PollingInitializerBuilder);
     assertEquals(2, dataSystemConfig.getSynchronizers().size());
-    assertTrue(dataSystemConfig.getSynchronizers().get(0) instanceof FDv2StreamingDataSourceBuilder);
-    assertTrue(dataSystemConfig.getSynchronizers().get(1) instanceof FDv2PollingDataSourceBuilder);
+    assertTrue(dataSystemConfig.getSynchronizers().get(0) instanceof FDv2StreamingSynchronizerBuilder);
+    assertTrue(dataSystemConfig.getSynchronizers().get(1) instanceof FDv2PollingSynchronizerBuilder);
     assertTrue(dataSystemConfig.getFDv1FallbackSynchronizer() instanceof PollingDataSourceBuilder);
     assertNotNull(dataSystemConfig.getPersistentStore());
     assertEquals(DataSystemConfiguration.DataStoreMode.READ_WRITE, dataSystemConfig.getPersistentDataStoreMode());
@@ -146,21 +147,21 @@ public class ConfigurationTest {
 
     DataSystemModes modes = new DataSystemModes();
     DataSystemBuilder builder = modes.custom()
-        .initializers(DataSystemComponents.polling())
-        .synchronizers(DataSystemComponents.streaming(), DataSystemComponents.polling())
+        .initializers(DataSystemComponents.pollingInitializer())
+        .synchronizers(DataSystemComponents.streamingSynchronizer(), DataSystemComponents.pollingSynchronizer())
         .fDv1FallbackSynchronizer(DataSystemComponents.fDv1Polling())
         .persistentStore(dataStoreConfigurer, DataSystemConfiguration.DataStoreMode.READ_WRITE);
-    
+
     DataSystemConfiguration dataSystemConfig = builder.build();
 
     // Verify initializers
     assertEquals(1, dataSystemConfig.getInitializers().size());
-    assertTrue(dataSystemConfig.getInitializers().get(0) instanceof FDv2PollingDataSourceBuilder);
+    assertTrue(dataSystemConfig.getInitializers().get(0) instanceof FDv2PollingInitializerBuilder);
 
     // Verify synchronizers
     assertEquals(2, dataSystemConfig.getSynchronizers().size());
-    assertTrue(dataSystemConfig.getSynchronizers().get(0) instanceof FDv2StreamingDataSourceBuilder);
-    assertTrue(dataSystemConfig.getSynchronizers().get(1) instanceof FDv2PollingDataSourceBuilder);
+    assertTrue(dataSystemConfig.getSynchronizers().get(0) instanceof FDv2StreamingSynchronizerBuilder);
+    assertTrue(dataSystemConfig.getSynchronizers().get(1) instanceof FDv2PollingSynchronizerBuilder);
 
     // Verify FDv1 fallback
     assertTrue(dataSystemConfig.getFDv1FallbackSynchronizer() instanceof PollingDataSourceBuilder);
@@ -174,51 +175,51 @@ public class ConfigurationTest {
   public void canReplaceInitializersInCustomDataSystem() {
     DataSystemModes modes = new DataSystemModes();
     DataSystemBuilder builder = modes.custom()
-        .initializers(DataSystemComponents.polling())
-        .replaceInitializers(DataSystemComponents.streaming());
-    
+        .initializers(DataSystemComponents.pollingInitializer())
+        .replaceInitializers(DataSystemComponents.pollingInitializer());
+
     DataSystemConfiguration dataSystemConfig = builder.build();
     assertEquals(1, dataSystemConfig.getInitializers().size());
-    assertTrue(dataSystemConfig.getInitializers().get(0) instanceof FDv2StreamingDataSourceBuilder);
+    assertTrue(dataSystemConfig.getInitializers().get(0) instanceof FDv2PollingInitializerBuilder);
   }
 
   @Test
   public void canReplaceSynchronizersInCustomDataSystem() {
     DataSystemModes modes = new DataSystemModes();
     DataSystemBuilder builder = modes.custom()
-        .synchronizers(DataSystemComponents.polling())
-        .replaceSynchronizers(DataSystemComponents.streaming());
-    
+        .synchronizers(DataSystemComponents.pollingSynchronizer())
+        .replaceSynchronizers(DataSystemComponents.streamingSynchronizer());
+
     DataSystemConfiguration dataSystemConfig = builder.build();
     assertEquals(1, dataSystemConfig.getSynchronizers().size());
-    assertTrue(dataSystemConfig.getSynchronizers().get(0) instanceof FDv2StreamingDataSourceBuilder);
+    assertTrue(dataSystemConfig.getSynchronizers().get(0) instanceof FDv2StreamingSynchronizerBuilder);
   }
 
   @Test
   public void canAddMultipleInitializersToCustomDataSystem() {
     DataSystemModes modes = new DataSystemModes();
     DataSystemBuilder builder = modes.custom()
-        .initializers(DataSystemComponents.polling())
-        .initializers(DataSystemComponents.streaming());
-    
+        .initializers(DataSystemComponents.pollingInitializer())
+        .initializers(DataSystemComponents.pollingInitializer());
+
     DataSystemConfiguration dataSystemConfig = builder.build();
     assertEquals(2, dataSystemConfig.getInitializers().size());
-    assertTrue(dataSystemConfig.getInitializers().get(0) instanceof FDv2PollingDataSourceBuilder);
-    assertTrue(dataSystemConfig.getInitializers().get(1) instanceof FDv2StreamingDataSourceBuilder);
+    assertTrue(dataSystemConfig.getInitializers().get(0) instanceof FDv2PollingInitializerBuilder);
+    assertTrue(dataSystemConfig.getInitializers().get(1) instanceof FDv2PollingInitializerBuilder);
   }
 
   @Test
   public void canAddMultipleSynchronizersToCustomDataSystem() {
     DataSystemModes modes = new DataSystemModes();
     DataSystemBuilder builder = modes.custom()
-        .synchronizers(DataSystemComponents.polling())
-        .synchronizers(DataSystemComponents.streaming())
+        .synchronizers(DataSystemComponents.pollingSynchronizer())
+        .synchronizers(DataSystemComponents.streamingSynchronizer())
         .synchronizers(DataSystemComponents.fDv1Polling());
-    
+
     DataSystemConfiguration dataSystemConfig = builder.build();
     assertEquals(3, dataSystemConfig.getSynchronizers().size());
-    assertTrue(dataSystemConfig.getSynchronizers().get(0) instanceof FDv2PollingDataSourceBuilder);
-    assertTrue(dataSystemConfig.getSynchronizers().get(1) instanceof FDv2StreamingDataSourceBuilder);
+    assertTrue(dataSystemConfig.getSynchronizers().get(0) instanceof FDv2PollingSynchronizerBuilder);
+    assertTrue(dataSystemConfig.getSynchronizers().get(1) instanceof FDv2StreamingSynchronizerBuilder);
     assertTrue(dataSystemConfig.getSynchronizers().get(2) instanceof PollingDataSourceBuilder);
   }
 
@@ -262,7 +263,7 @@ public class ConfigurationTest {
     DataSystemModes modes = new DataSystemModes();
     DataSystemBuilder builder = modes.custom()
         .persistentStore(dataStoreConfigurer, DataSystemConfiguration.DataStoreMode.READ_WRITE)
-        .synchronizers(DataSystemComponents.streaming());
+        .synchronizers(DataSystemComponents.streamingSynchronizer());
     
     DataSystemConfiguration dataSystemConfig = builder.build();
     assertNotNull(dataSystemConfig.getPersistentStore());
