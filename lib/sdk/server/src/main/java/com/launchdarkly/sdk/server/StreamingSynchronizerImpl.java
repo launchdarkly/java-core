@@ -192,15 +192,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
             eventName = event.getEventName();
             FDv2Event fdv2Event = parseFDv2Event(eventName, event.getDataReader());
 
-            FDv2ProtocolHandler.IFDv2ProtocolAction action;
-            try {
-                action = protocolHandler.handleEvent(fdv2Event);
-            } catch (Exception e) {
-                // Protocol handler threw exception processing the event - treat as invalid data
-                logger.error("FDv2 protocol handler error: {}", LogValues.exceptionSummary(e));
-                interruptedWithException(e, DataSourceStatusProvider.ErrorKind.INVALID_DATA);
-                return;
-            }
+            FDv2ProtocolHandler.IFDv2ProtocolAction action = protocolHandler.handleEvent(fdv2Event);
 
             FDv2SourceResult result = null;
             boolean shouldTerminate = false;

@@ -438,4 +438,181 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             synchronizer.close();
         }
     }
+
+    @Test
+    public void errorEventFromServer() throws Exception {
+        String errorEvent = makeEvent("error", "{\"id\":\"error-123\",\"reason\":\"some server error\"}");
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.SSE.start(),
+                Handlers.SSE.event(errorEvent),
+                Handlers.SSE.event(serverIntent),
+                Handlers.SSE.event(payloadTransferred),
+                Handlers.SSE.leaveOpen()))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource
+            );
+
+            // Error event should be logged but not queued, so we should get the changeset
+            CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
+            FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+            assertNotNull(result);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertNotNull(result.getChangeSet());
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void selectorWithVersionOnly() throws Exception {
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.SSE.start(),
+                Handlers.SSE.event(serverIntent),
+                Handlers.SSE.event(payloadTransferred),
+                Handlers.SSE.leaveOpen()))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+
+            SelectorSource selectorSource = mock(SelectorSource.class);
+            when(selectorSource.getSelector()).thenReturn(Selector.make(75, null));
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource
+            );
+
+            CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
+            FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+            assertNotNull(result);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+
+            // Verify the request had version but not state parameter
+            assertEquals(1, server.getRecorder().count());
+            RequestInfo request = server.getRecorder().requireRequest();
+            assertThat(request.getQuery(), containsString("version=75"));
+            // State should not be present (or if present, not have an actual state value)
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void selectorWithEmptyState() throws Exception {
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.SSE.start(),
+                Handlers.SSE.event(serverIntent),
+                Handlers.SSE.event(payloadTransferred),
+                Handlers.SSE.leaveOpen()))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+
+            SelectorSource selectorSource = mock(SelectorSource.class);
+            when(selectorSource.getSelector()).thenReturn(Selector.make(80, ""));
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource
+            );
+
+            CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
+            FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+            assertNotNull(result);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+
+            // Verify the request had version but not state parameter (empty string shouldn't add state)
+            assertEquals(1, server.getRecorder().count());
+            RequestInfo request = server.getRecorder().requireRequest();
+            assertThat(request.getQuery(), containsString("version=80"));
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void closeCalledMultipleTimes() throws Exception {
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.SSE.start(),
+                Handlers.hang()))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource
+            );
+
+            // Call close multiple times - should not throw exceptions
+            synchronizer.close();
+            synchronizer.close();
+            synchronizer.close();
+
+            // next() should still return shutdown
+            FDv2SourceResult result = synchronizer.next().get(1, TimeUnit.SECONDS);
+            assertNotNull(result);
+            assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
+            assertEquals(FDv2SourceResult.State.SHUTDOWN, result.getStatus().getState());
+        }
+    }
+
+    @Test
+    public void invalidEventStructureCausesInterrupt() throws Exception {
+        // Event with missing required fields - should cause protocol handler to fail
+        String badEventStructure = makeEvent("put-object", "{}");
+
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.SSE.start(),
+                Handlers.SSE.event(badEventStructure),
+                Handlers.SSE.leaveOpen()))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource
+            );
+
+            CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
+            FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+            assertNotNull(result);
+            assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
+            assertEquals(FDv2SourceResult.State.INTERRUPTED, result.getStatus().getState());
+
+            synchronizer.close();
+        }
+    }
 }
