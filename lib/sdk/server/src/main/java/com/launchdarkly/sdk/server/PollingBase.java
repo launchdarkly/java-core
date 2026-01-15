@@ -80,7 +80,7 @@ class PollingBase {
             if (pollingResponse == null) {
                 return FDv2SourceResult.changeSet(
                         new DataStoreTypes.ChangeSet<>(DataStoreTypes.ChangeSetType.None,
-                                null,
+                                Selector.EMPTY,
                                 null,
                                 // TODO: Implement environment ID support.
                                 null
