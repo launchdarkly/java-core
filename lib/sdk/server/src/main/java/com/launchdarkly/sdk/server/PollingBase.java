@@ -66,12 +66,12 @@ class PollingBase {
                     );
                     return oneShot ? FDv2SourceResult.terminalError(info) : FDv2SourceResult.interrupted(info);
                 }
-                Exception e = (Exception) ex;
-                logger.error("Polling request failed with an unknown error: {}", e.toString());
+                String msg = ex.toString();
+                logger.error("Polling request failed with an unknown error: {}", msg);
                 DataSourceStatusProvider.ErrorInfo info = new DataSourceStatusProvider.ErrorInfo(
                         DataSourceStatusProvider.ErrorKind.UNKNOWN,
                         0,
-                        e.toString(),
+                        msg,
                         new Date().toInstant()
                 );
                 return oneShot ? FDv2SourceResult.terminalError(info) : FDv2SourceResult.interrupted(info);
