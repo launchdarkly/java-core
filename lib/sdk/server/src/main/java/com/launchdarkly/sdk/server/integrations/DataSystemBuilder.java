@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableList;
 import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.subsystems.ComponentConfigurer;
+import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
 import com.launchdarkly.sdk.server.subsystems.DataSystemConfiguration;
 
@@ -96,8 +97,11 @@ public final class DataSystemBuilder {
    * @param fDv1FallbackSynchronizer the FDv1 fallback synchronizer
    * @return a reference to the builder
    */
-  public DataSystemBuilder fDv1FallbackSynchronizer(ComponentConfigurer<Synchronizer> fDv1FallbackSynchronizer) {
-    this.fDv1FallbackSynchronizer = fDv1FallbackSynchronizer;
+  @SuppressWarnings("unchecked")
+  public DataSystemBuilder fDv1FallbackSynchronizer(ComponentConfigurer<DataSource> fDv1FallbackSynchronizer) {
+    // Legacy DataSource configurers are used for FDv1 backward compatibility
+    // This is safe because DataSource is only used in the fallback context
+    this.fDv1FallbackSynchronizer = (ComponentConfigurer<Synchronizer>) (ComponentConfigurer<?>) fDv1FallbackSynchronizer;
     return this;
   }
 

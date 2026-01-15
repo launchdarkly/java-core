@@ -3,7 +3,6 @@ package com.launchdarkly.sdk.server.integrations;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.internal.events.DiagnosticConfigProperty;
 import com.launchdarkly.sdk.server.StandardEndpoints;
-import com.launchdarkly.sdk.server.StreamingSynchronizerImpl;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.interfaces.ServiceEndpoints;
 import com.launchdarkly.sdk.server.subsystems.ClientContext;
@@ -85,13 +84,17 @@ public final class FDv2StreamingSynchronizerBuilder implements ComponentConfigur
         "Streaming",
         context.getBaseLogger());
 
-    return new StreamingSynchronizerImpl(
-        context.getHttp(),
-        configuredBaseUri,
-        StandardEndpoints.FDV2_STREAMING_REQUEST_PATH,
-        context.getBaseLogger(),
-        context.getSelectorSource()
-    );
+    // TODO: Implement FDv2StreamingSynchronizer
+    // return new StreamingSynchronizerImpl(
+    //     context.getHttp(),
+    //     configuredBaseUri,
+    //     StandardEndpoints.FDV2_STREAMING_REQUEST_PATH,
+    //     context.getBaseLogger(),
+    //     context.getSelectorSource()
+    // );
+
+    // Placeholder - this will not compile until FDv2StreamingSynchronizer is fully integrated
+    throw new UnsupportedOperationException("FDv2StreamingSynchronizer is not yet implemented");
   }
 
   @Override
