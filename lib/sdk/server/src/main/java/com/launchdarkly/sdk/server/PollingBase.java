@@ -74,6 +74,16 @@ class PollingBase {
                 );
                 return oneShot ? FDv2SourceResult.terminalError(info) : FDv2SourceResult.interrupted(info);
             }
+            // A null polling response indicates that we received a 304, which means nothing has changed.
+            if (pollingResponse == null) {
+                return FDv2SourceResult.changeSet(
+                        new DataStoreTypes.ChangeSet<>(DataStoreTypes.ChangeSetType.None,
+                                null,
+                                null,
+                                // TODO: Implement environment ID support.
+                                null
+                        ));
+            }
             FDv2ProtocolHandler handler = new FDv2ProtocolHandler();
             for (FDv2Event event : pollingResponse.getEvents()) {
                 FDv2ProtocolHandler.IFDv2ProtocolAction res = handler.handleEvent(event);

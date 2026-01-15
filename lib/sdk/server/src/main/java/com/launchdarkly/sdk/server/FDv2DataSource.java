@@ -122,12 +122,8 @@ class FDv2DataSource implements DataSource {
         // recovering ones, then we likely will want to wait for them to be available (or bypass recovery).
         while (availableSynchronizer != null) {
             Synchronizer synchronizer = availableSynchronizer.build();
-            synchronized (activeSourceLock) {
-                if (isShutdown) {
-                    return;
-                }
-                activeSource = synchronizer;
-            }
+            // Returns true if shutdown.
+            if (setActiveSource(synchronizer)) return;
             try {
                 boolean running = true;
                 while (running) {
@@ -165,17 +161,27 @@ class FDv2DataSource implements DataSource {
         }
     }
 
+    private boolean setActiveSource(Closeable synchronizer) {
+        synchronized (activeSourceLock) {
+            try {
+                activeSource.close();
+            } catch(Exception e) {
+                // We don't care about closing exceptions for the previous source.
+            }
+            if (isShutdown) {
+                return true;
+            }
+            activeSource = synchronizer;
+        }
+        return false;
+    }
+
     private void runInitializers() {
         boolean anyDataReceived = false;
         for (InitializerFactory factory : initializers) {
             try {
                 Initializer initializer = factory.build();
-                synchronized (activeSourceLock) {
-                    if (isShutdown) {
-                        return;
-                    }
-                    activeSource = initializer;
-                }
+                if (setActiveSource(initializer)) return;
                 FDv2SourceResult res = initializer.run().get();
                 switch (res.getResultType()) {
                     case CHANGE_SET:
