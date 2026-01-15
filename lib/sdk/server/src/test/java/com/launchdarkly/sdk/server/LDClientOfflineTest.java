@@ -26,8 +26,9 @@ public class LDClientOfflineTest extends BaseTest {
     LDConfig config = baseConfig()
         .offline(true)
         .build();
-    try (LDClient client = new LDClient("SDK_KEY", config)) {    
-      assertEquals(ComponentsImpl.NullDataSource.class, client.dataSource.getClass());
+    try (LDClient client = new LDClient("SDK_KEY", config)) {
+      assertTrue(client.dataSystem instanceof FDv1DataSystem);
+      assertEquals(ComponentsImpl.NullDataSource.class, ((FDv1DataSystem) client.dataSystem).testing.dataSource.getClass());
     }
   }
 
