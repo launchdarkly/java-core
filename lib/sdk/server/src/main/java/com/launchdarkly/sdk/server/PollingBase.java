@@ -133,12 +133,14 @@ class PollingBase {
                     }
                 }
             }
-            return FDv2SourceResult.terminalError(new DataSourceStatusProvider.ErrorInfo(
+
+            DataSourceStatusProvider.ErrorInfo info = new DataSourceStatusProvider.ErrorInfo(
                     DataSourceStatusProvider.ErrorKind.UNKNOWN,
                     0,
                     "Unexpected end of polling response",
                     new Date().toInstant()
-            ));
+            );
+            return oneShot ? FDv2SourceResult.terminalError(info) : FDv2SourceResult.interrupted(info);
         }));
     }
 }
