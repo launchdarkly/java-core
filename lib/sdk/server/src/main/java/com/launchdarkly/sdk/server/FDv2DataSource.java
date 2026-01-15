@@ -146,8 +146,11 @@ class FDv2DataSource implements DataSource {
                                     // TODO: We may need logging or to do a little more.
                                     return;
                                 case TERMINAL_ERROR:
-                                case GOODBYE:
+                                    availableSynchronizer.block();
                                     running = false;
+                                    break;
+                                case GOODBYE:
+                                    // We let the synchronizer handle this internally.
                                     break;
                             }
                             break;

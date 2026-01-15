@@ -144,7 +144,7 @@ public class DefaultFDv2Requestor implements FDv2Requestor, Closeable {
                         FDv2PayloadResponse pollingResponse = new FDv2PayloadResponse(events, response.headers());
                         future.complete(pollingResponse);
 
-                    } catch (IOException | SerializationException e) {
+                    } catch (Exception e) {
                         future.completeExceptionally(e);
                     } finally {
                         response.close();
