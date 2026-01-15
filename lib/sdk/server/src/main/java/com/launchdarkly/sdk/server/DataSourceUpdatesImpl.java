@@ -368,9 +368,7 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
   private static String describeErrorCount(Map.Entry<ErrorInfo, Integer> entry) {
     return entry.getKey() + " (" + entry.getValue() + (entry.getValue() == 1 ? " time" : " times") + ")";
   }
-  
-  // ===== ITransactionalDataSourceUpdates methods =====
-  
+    
   @Override
   public boolean apply(ChangeSet<ItemDescriptor> changeSet) {
     if (store instanceof TransactionalDataStore) {

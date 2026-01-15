@@ -158,8 +158,78 @@ public class DataSourceUpdatesImplTest {
         null
     );
   }
-  
-  // ===== Tests =====
+
+  private static class LegacyDataStore implements DataStore {
+    private final Map<DataKind, Map<String, ItemDescriptor>> data = new HashMap<>();
+    
+    @Override
+    public void init(FullDataSet<ItemDescriptor> allData) {
+      data.clear();
+      for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> kindEntry : allData.getData()) {
+        DataKind kind = kindEntry.getKey();
+        Map<String, ItemDescriptor> items = new HashMap<>();
+        for (Map.Entry<String, ItemDescriptor> itemEntry : kindEntry.getValue().getItems()) {
+          items.put(itemEntry.getKey(), itemEntry.getValue());
+        }
+        data.put(kind, items);
+      }
+    }
+    
+    @Override
+    public boolean upsert(DataKind kind, String key, ItemDescriptor item) {
+      Map<String, ItemDescriptor> items = data.get(kind);
+      if (items == null) {
+        items = new HashMap<>();
+        data.put(kind, items);
+      }
+      
+      ItemDescriptor oldItem = items.get(key);
+      if (oldItem != null && oldItem.getVersion() >= item.getVersion()) {
+        return false;
+      }
+      
+      items.put(key, item);
+      return true;
+    }
+    
+    @Override
+    public ItemDescriptor get(DataKind kind, String key) {
+      Map<String, ItemDescriptor> items = data.get(kind);
+      if (items != null) {
+        return items.get(key);
+      }
+      return null;
+    }
+    
+    @Override
+    public KeyedItems<ItemDescriptor> getAll(DataKind kind) {
+      Map<String, ItemDescriptor> items = data.get(kind);
+      if (items != null) {
+        return new KeyedItems<>(ImmutableList.copyOf(items.entrySet()));
+      }
+      return new KeyedItems<>(ImmutableList.of());
+    }
+    
+    @Override
+    public boolean isInitialized() {
+      return !data.isEmpty();
+    }
+    
+    @Override
+    public boolean isStatusMonitoringEnabled() {
+      return false;
+    }
+    
+    @Override
+    public DataStoreStatusProvider.CacheStats getCacheStats() {
+      return null;
+    }
+    
+    @Override
+    public void close() throws IOException {
+      // No-op
+    }
+  }
   
   @Test
   public void sendsEventsOnInitForNewlyAddedFlags() throws Exception {
@@ -821,80 +891,6 @@ public class DataSourceUpdatesImplTest {
     updates.apply(changeSet);
     
     expectEvents(eventSink, "flag2", "flag4");
-  }
-  
-  // Tests for legacy (non-transactional) data store path
-  
-  private static class LegacyDataStore implements DataStore {
-    private final Map<DataKind, Map<String, ItemDescriptor>> data = new HashMap<>();
-    
-    @Override
-    public void init(FullDataSet<ItemDescriptor> allData) {
-      data.clear();
-      for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> kindEntry : allData.getData()) {
-        DataKind kind = kindEntry.getKey();
-        Map<String, ItemDescriptor> items = new HashMap<>();
-        for (Map.Entry<String, ItemDescriptor> itemEntry : kindEntry.getValue().getItems()) {
-          items.put(itemEntry.getKey(), itemEntry.getValue());
-        }
-        data.put(kind, items);
-      }
-    }
-    
-    @Override
-    public boolean upsert(DataKind kind, String key, ItemDescriptor item) {
-      Map<String, ItemDescriptor> items = data.get(kind);
-      if (items == null) {
-        items = new HashMap<>();
-        data.put(kind, items);
-      }
-      
-      ItemDescriptor oldItem = items.get(key);
-      if (oldItem != null && oldItem.getVersion() >= item.getVersion()) {
-        return false;
-      }
-      
-      items.put(key, item);
-      return true;
-    }
-    
-    @Override
-    public ItemDescriptor get(DataKind kind, String key) {
-      Map<String, ItemDescriptor> items = data.get(kind);
-      if (items != null) {
-        return items.get(key);
-      }
-      return null;
-    }
-    
-    @Override
-    public KeyedItems<ItemDescriptor> getAll(DataKind kind) {
-      Map<String, ItemDescriptor> items = data.get(kind);
-      if (items != null) {
-        return new KeyedItems<>(ImmutableList.copyOf(items.entrySet()));
-      }
-      return new KeyedItems<>(ImmutableList.of());
-    }
-    
-    @Override
-    public boolean isInitialized() {
-      return !data.isEmpty();
-    }
-    
-    @Override
-    public boolean isStatusMonitoringEnabled() {
-      return false;
-    }
-    
-    @Override
-    public DataStoreStatusProvider.CacheStats getCacheStats() {
-      return null;
-    }
-    
-    @Override
-    public void close() throws IOException {
-      // No-op
-    }
   }
   
   @Test
