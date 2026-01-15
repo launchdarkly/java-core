@@ -109,7 +109,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             assertNotNull(result);
             assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
 
-            synchronizer.shutdown();
+            synchronizer.close();
         } finally {
             executor.shutdown();
         }
@@ -145,7 +145,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             assertNotNull(result);
             assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
 
-            synchronizer.shutdown();
+            synchronizer.close();
         } finally {
             executor.shutdown();
         }
@@ -186,7 +186,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             assertNotNull(result3);
             assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result3.getResultType());
 
-            synchronizer.shutdown();
+            synchronizer.close();
         } finally {
             executor.shutdown();
         }
@@ -212,7 +212,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             );
 
             // Shutdown immediately
-            synchronizer.shutdown();
+            synchronizer.close();
 
             // next() should return shutdown result
             FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
@@ -250,7 +250,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             assertEquals(false, nextFuture.isDone());
 
             // Shutdown while waiting
-            synchronizer.shutdown();
+            synchronizer.close();
 
             // next() should complete with shutdown result
             FDv2SourceResult result = nextFuture.get(5, TimeUnit.SECONDS);
@@ -289,7 +289,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             assertNotNull(result1);
 
             // Shutdown with items still in queue
-            synchronizer.shutdown();
+            synchronizer.close();
 
             // next() can return either queued items or shutdown
             // Just verify we get valid results and eventually shutdown
@@ -337,7 +337,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             int count = pollCount.get();
             assertTrue("Expected multiple polls, got " + count, count >= 3);
 
-            synchronizer.shutdown();
+            synchronizer.close();
         } finally {
             executor.shutdown();
         }
@@ -394,7 +394,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             // Verify polling continued after error
             assertTrue("Should have at least 2 successful polls", successCount.get() >= 2);
 
-            synchronizer.shutdown();
+            synchronizer.close();
         } finally {
             executor.shutdown();
         }
@@ -424,7 +424,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             Thread.sleep(100);
             int countBeforeShutdown = pollCount.get();
 
-            synchronizer.shutdown();
+            synchronizer.close();
 
             // Wait and verify no more polls occur
             Thread.sleep(200);
@@ -477,7 +477,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             // Verify polling continued after null response
             assertTrue("Should have successful polls after null", successCount.get() >= 1);
 
-            synchronizer.shutdown();
+            synchronizer.close();
         } finally {
             executor.shutdown();
         }
@@ -518,7 +518,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             assertNotNull(result2);
             assertNotNull(result3);
 
-            synchronizer.shutdown();
+            synchronizer.close();
         } finally {
             executor.shutdown();
         }

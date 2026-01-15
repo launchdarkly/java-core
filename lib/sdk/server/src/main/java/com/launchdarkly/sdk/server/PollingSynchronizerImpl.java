@@ -72,7 +72,7 @@ class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
     }
 
     @Override
-    public void shutdown() {
+    public void close() {
         shutdownFuture.complete(FDv2SourceResult.shutdown());
         synchronized (this) {
             task.cancel(true);

@@ -1,6 +1,5 @@
 package com.launchdarkly.sdk.server;
 
-import com.launchdarkly.sdk.server.datasources.DataSourceShutdown;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
@@ -8,8 +7,8 @@ import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
 
+import java.io.Closeable;
 import java.io.IOException;
-import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
@@ -31,7 +30,7 @@ class FDv2DataSource implements DataSource {
      * Lock for active sources and shutdown state.
      */
     private final Object activeSourceLock = new Object();
-    private DataSourceShutdown activeSource;
+    private Closeable activeSource;
     private boolean isShutdown = false;
 
     private static class SynchronizerFactoryWithState {
@@ -230,7 +229,7 @@ class FDv2DataSource implements DataSource {
         synchronized (activeSourceLock) {
             isShutdown = true;
             if (activeSource != null) {
-                activeSource.shutdown();
+                activeSource.close();
             }
         }
 
