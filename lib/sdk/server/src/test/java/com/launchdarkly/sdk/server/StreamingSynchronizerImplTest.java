@@ -28,7 +28,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-@SuppressWarnings("javadoc")
 public class StreamingSynchronizerImplTest extends BaseTest {
 
     private SelectorSource mockSelectorSource() {
@@ -83,7 +82,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result2.getResultType());
             assertNotNull(result2.getChangeSet());
 
-            synchronizer.shutdown();
+            synchronizer.close();
         }
     }
 
@@ -109,7 +108,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result.getStatus().getState());
             assertEquals(DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE, result.getStatus().getErrorInfo().getKind());
 
-            synchronizer.shutdown();
+            synchronizer.close();
         }
     }
 
@@ -135,7 +134,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             assertEquals(FDv2SourceResult.State.INTERRUPTED, result.getStatus().getState());
             assertEquals(DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE, result.getStatus().getErrorInfo().getKind());
 
-            synchronizer.shutdown();
+            synchronizer.close();
         }
     }
 
@@ -161,7 +160,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
         assertEquals(FDv2SourceResult.State.INTERRUPTED, result.getStatus().getState());
         assertEquals(DataSourceStatusProvider.ErrorKind.NETWORK_ERROR, result.getStatus().getErrorInfo().getKind());
 
-        synchronizer.shutdown();
+        synchronizer.close();
     }
 
     @Test
@@ -192,7 +191,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             assertEquals(FDv2SourceResult.State.INTERRUPTED, result.getStatus().getState());
             assertEquals(DataSourceStatusProvider.ErrorKind.INVALID_DATA, result.getStatus().getErrorInfo().getKind());
 
-            synchronizer.shutdown();
+            synchronizer.close();
         }
     }
 
@@ -217,7 +216,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
 
             // Wait a bit then shutdown
             Thread.sleep(100);
-            synchronizer.shutdown();
+            synchronizer.close();
 
             FDv2SourceResult result = nextFuture.get(5, TimeUnit.SECONDS);
 
@@ -257,7 +256,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
 
             // Shutdown after receiving event should still work
-            synchronizer.shutdown();
+            synchronizer.close();
         }
     }
 
@@ -288,7 +287,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
             assertEquals(FDv2SourceResult.State.GOODBYE, result.getStatus().getState());
 
-            synchronizer.shutdown();
+            synchronizer.close();
         }
     }
 
@@ -324,7 +323,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
             assertNotNull(result.getChangeSet());
 
-            synchronizer.shutdown();
+            synchronizer.close();
         }
     }
 
@@ -367,7 +366,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             assertThat(request.getQuery(), containsString("version=50"));
             assertThat(request.getQuery(), containsString("state="));
 
-            synchronizer.shutdown();
+            synchronizer.close();
         }
     }
 
@@ -436,7 +435,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             // Verify we made at least 2 requests
             assertTrue("Should have made at least 2 requests", server.getRecorder().count() >= 2);
 
-            synchronizer.shutdown();
+            synchronizer.close();
         }
     }
 }

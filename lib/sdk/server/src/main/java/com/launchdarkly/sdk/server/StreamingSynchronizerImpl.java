@@ -160,7 +160,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
     }
 
     @Override
-    public void shutdown() {
+    public void close() {
         if (shutdownRequested.getAndSet(true)) {
             return; // already shutdown
         }
@@ -198,17 +198,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
             } catch (Exception e) {
                 // Protocol handler threw exception processing the event - treat as invalid data
                 logger.error("FDv2 protocol handler error: {}", LogValues.exceptionSummary(e));
-                logger.debug(LogValues.exceptionTrace(e));
-                DataSourceStatusProvider.ErrorInfo errorInfo = new DataSourceStatusProvider.ErrorInfo(
-                        DataSourceStatusProvider.ErrorKind.INVALID_DATA,
-                        0,
-                        e.toString(),
-                        Instant.now()
-                );
-                resultQueue.put(FDv2SourceResult.interrupted(errorInfo));
-                if (eventSource != null) {
-                    eventSource.interrupt(); // restart the stream
-                }
+                interruptedWithException(e, DataSourceStatusProvider.ErrorKind.INVALID_DATA);
                 return;
             }
 
@@ -253,8 +243,21 @@ class StreamingSynchronizerImpl implements Synchronizer {
                     break;
 
                 case INTERNAL_ERROR:
+                    FDv2ProtocolHandler.FDv2ActionInternalError internalErrorAction = (FDv2ProtocolHandler.FDv2ActionInternalError) action;
+                    DataSourceStatusProvider.ErrorKind kind = DataSourceStatusProvider.ErrorKind.UNKNOWN;
+                    switch(internalErrorAction.getErrorType()) {
+
+                        case MISSING_PAYLOAD:
+                        case JSON_ERROR:
+                            kind = DataSourceStatusProvider.ErrorKind.INVALID_DATA;
+                            break;
+                        case UNKNOWN_EVENT:
+                        case IMPLEMENTATION_ERROR:
+                        case PROTOCOL_ERROR:
+                            break;
+                    }
                     DataSourceStatusProvider.ErrorInfo internalError = new DataSourceStatusProvider.ErrorInfo(
-                            DataSourceStatusProvider.ErrorKind.INVALID_DATA,
+                            kind,
                             0,
                             "Internal error during FDv2 event processing",
                             Instant.now()
@@ -281,31 +284,27 @@ class StreamingSynchronizerImpl implements Synchronizer {
             }
         } catch (SerializationException e) {
             logger.error("Failed to parse FDv2 event: {}", LogValues.exceptionSummary(e));
-            logger.debug(LogValues.exceptionTrace(e));
-            DataSourceStatusProvider.ErrorInfo errorInfo = new DataSourceStatusProvider.ErrorInfo(
-                    DataSourceStatusProvider.ErrorKind.INVALID_DATA,
-                    0,
-                    e.toString(),
-                    Instant.now()
-            );
-            // Queue as INTERRUPTED, not TERMINAL_ERROR, so we can continue processing other events
-            resultQueue.put(FDv2SourceResult.interrupted(errorInfo));
-            if (eventSource != null) {
-                eventSource.interrupt(); // restart the stream
-            }
+            interruptedWithException(e, DataSourceStatusProvider.ErrorKind.INVALID_DATA);
         } catch (Exception e) {
             logger.error("Unexpected error handling stream message: {}", LogValues.exceptionSummary(e));
-            logger.debug(LogValues.exceptionTrace(e));
-            DataSourceStatusProvider.ErrorInfo errorInfo = new DataSourceStatusProvider.ErrorInfo(
-                    DataSourceStatusProvider.ErrorKind.UNKNOWN,
-                    0,
-                    e.toString(),
-                    Instant.now()
-            );
-            resultQueue.put(FDv2SourceResult.interrupted(errorInfo));
+            interruptedWithException(e, DataSourceStatusProvider.ErrorKind.UNKNOWN);
             if (eventSource != null) {
                 eventSource.interrupt(); // restart the stream
             }
+        }
+    }
+
+    private void interruptedWithException(Exception e, DataSourceStatusProvider.ErrorKind kind) {
+        logger.debug(LogValues.exceptionTrace(e));
+        DataSourceStatusProvider.ErrorInfo errorInfo = new DataSourceStatusProvider.ErrorInfo(
+                kind,
+                0,
+                e.toString(),
+                Instant.now()
+        );
+        resultQueue.put(FDv2SourceResult.interrupted(errorInfo));
+        if (eventSource != null) {
+            eventSource.interrupt(); // restart the stream
         }
     }
 

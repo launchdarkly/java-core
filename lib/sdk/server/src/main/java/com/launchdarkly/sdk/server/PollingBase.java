@@ -124,8 +124,21 @@ class PollingBase {
                     case NONE:
                         break;
                     case INTERNAL_ERROR: {
+                        FDv2ProtocolHandler.FDv2ActionInternalError internalErrorAction = (FDv2ProtocolHandler.FDv2ActionInternalError) res;
+                        DataSourceStatusProvider.ErrorKind kind = DataSourceStatusProvider.ErrorKind.UNKNOWN;
+                        switch (internalErrorAction.getErrorType()) {
+
+                            case MISSING_PAYLOAD:
+                            case JSON_ERROR:
+                                kind = DataSourceStatusProvider.ErrorKind.INVALID_DATA;
+                                break;
+                            case UNKNOWN_EVENT:
+                            case IMPLEMENTATION_ERROR:
+                            case PROTOCOL_ERROR:
+                                break;
+                        }
                         DataSourceStatusProvider.ErrorInfo info = new DataSourceStatusProvider.ErrorInfo(
-                                DataSourceStatusProvider.ErrorKind.UNKNOWN,
+                                kind,
                                 0,
                                 "Internal error occurred during polling",
                                 new Date().toInstant());

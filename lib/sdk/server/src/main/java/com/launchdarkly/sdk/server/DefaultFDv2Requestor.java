@@ -150,7 +150,7 @@ public class DefaultFDv2Requestor implements FDv2Requestor, Closeable {
                         response.close();
                     }
                 }
-            });
+        });
 
         } catch (Exception e) {
             future.completeExceptionally(e);
