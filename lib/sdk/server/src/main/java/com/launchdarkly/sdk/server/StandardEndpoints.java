@@ -22,6 +22,9 @@ public abstract class StandardEndpoints {
   public static final String STREAMING_REQUEST_PATH = "/all";
   public static final String POLLING_REQUEST_PATH = "/sdk/latest-all";
 
+  public static final String FDV2_POLLING_REQUEST_PATH = "/sdk/poll";
+  public static final String FDV2_STREAMING_REQUEST_PATH = "/sdk/stream";
+
   /**
    * Internal method to decide which URI a given component should connect to.
    * <p>
