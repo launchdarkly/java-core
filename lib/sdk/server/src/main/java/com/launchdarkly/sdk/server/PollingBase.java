@@ -8,7 +8,7 @@ import com.launchdarkly.sdk.internal.http.HttpErrors;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes;
-import com.launchdarkly.sdk.server.subsystems.SerializationException;
+import com.launchdarkly.sdk.json.SerializationException;
 
 import java.io.IOException;
 import java.util.Date;
