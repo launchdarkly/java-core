@@ -51,11 +51,15 @@ class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
                             // So when shutdown is called, we return shutdown on subsequent calls to next.
                             break;
                         case TERMINAL_ERROR:
-                        case GOODBYE:
                             synchronized (this) {
                                 task.cancel(true);
                             }
                             internalShutdown();
+                            break;
+                        case GOODBYE:
+                            // We don't need to take any action, as the connection for the poll
+                            // should already be complete. For a persistent connection we would want
+                            // to proactively disconnect the stream.
                             break;
                     }
                     break;
