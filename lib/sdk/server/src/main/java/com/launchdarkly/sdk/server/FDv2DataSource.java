@@ -200,7 +200,7 @@ class FDv2DataSource implements DataSource {
                             startFuture.complete(true);
                             return;
                         }
-                        return;
+                        break;
                     case STATUS:
                         // TODO: Implement.
                         break;
