@@ -12,25 +12,25 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 
 final class FlagTrackerImpl implements FlagTracker {
-  private final EventBroadcasterImpl<FlagChangeListener, FlagChangeEvent> flagChangeBroadcaster;
+  private final FlagChangeNotifier flagChangeNotifier;
   private final BiFunction<String, LDContext, LDValue> evaluateFn;
 
   FlagTrackerImpl(
-      EventBroadcasterImpl<FlagChangeListener, FlagChangeEvent> flagChangeBroadcaster,
+      FlagChangeNotifier flagChangeNotifier,
       BiFunction<String, LDContext, LDValue> evaluateFn
       ) {
-    this.flagChangeBroadcaster = flagChangeBroadcaster;
+    this.flagChangeNotifier = flagChangeNotifier;
     this.evaluateFn = evaluateFn;
   }
 
   @Override
   public void addFlagChangeListener(FlagChangeListener listener) {
-    flagChangeBroadcaster.register(listener);
+    flagChangeNotifier.addFlagChangeListener(listener);
   }
 
   @Override
   public void removeFlagChangeListener(FlagChangeListener listener) {
-    flagChangeBroadcaster.unregister(listener);
+    flagChangeNotifier.removeFlagChangeListener(listener);
   }
 
   @Override
