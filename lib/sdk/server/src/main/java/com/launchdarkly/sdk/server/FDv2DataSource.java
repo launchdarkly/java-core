@@ -163,10 +163,12 @@ class FDv2DataSource implements DataSource {
 
     private boolean setActiveSource(Closeable synchronizer) {
         synchronized (activeSourceLock) {
-            try {
-                activeSource.close();
-            } catch(Exception e) {
-                // We don't care about closing exceptions for the previous source.
+            if (activeSource != null) {
+                try {
+                    activeSource.close();
+                } catch (Exception e) {
+                    // We don't care about closing exceptions for the previous source.
+                }
             }
             if (isShutdown) {
                 return true;
