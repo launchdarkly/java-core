@@ -14,6 +14,7 @@ class IterableAsyncQueue<T> {
             if(nextFuture != null) {
                 nextFuture.complete(item);
                 nextFuture = null;
+                return;
             }
             queue.addLast(item);
         }
