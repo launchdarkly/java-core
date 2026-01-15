@@ -182,6 +182,7 @@ class FDv2DataSource implements DataSource {
                         // TODO: Apply to the store.
                         anyDataReceived = true;
                         if (!res.getChangeSet().getSelector().isEmpty()) {
+                            // We received data with a selector, so we end the initialization process.
                             dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
                             startFuture.complete(true);
                             return;
