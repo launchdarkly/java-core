@@ -8,16 +8,21 @@ import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.server.DataModel.FeatureFlag;
 import com.launchdarkly.sdk.server.DataModel.Operator;
 import com.launchdarkly.sdk.server.DataModel.Segment;
+import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
 import com.launchdarkly.sdk.server.DataModelDependencies.DependencyTracker;
 import com.launchdarkly.sdk.server.DataModelDependencies.KindAndKey;
 import com.launchdarkly.sdk.server.DataStoreTestTypes.DataBuilder;
 import com.launchdarkly.sdk.server.DataStoreTestTypes.TestItem;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSetType;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 
 import org.junit.Test;
 
+import java.util.AbstractMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +47,8 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.iterableWithSize;
 import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 @SuppressWarnings("javadoc")
@@ -378,4 +385,222 @@ public class DataModelDependenciesTest {
         .addAny(SEGMENTS,
               segmentBuilder("o").build())
         .build();
+  
+  // ===== SortChangeset tests =====
+  
+  @Test
+  public void sortChangesetPreservesChangeSetMetadata() {
+    Selector selector = Selector.make(42, "test-state");
+    String environmentId = "test-env";
+    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+        ChangeSetType.Partial,
+        selector,
+        ImmutableList.of(),
+        environmentId
+    );
+    
+    ChangeSet<ItemDescriptor> result = DataModelDependencies.sortChangeset(changeSet);
+    
+    assertEquals(ChangeSetType.Partial, result.getType());
+    assertEquals(selector.getVersion(), result.getSelector().getVersion());
+    assertEquals(selector.getState(), result.getSelector().getState());
+    assertEquals(environmentId, result.getEnvironmentId());
+  }
+  
+  @Test
+  public void sortChangesetSortsPrerequisiteFlagsFirst() {
+    FeatureFlag flagC = flagBuilder("c").build();
+    FeatureFlag flagE = flagBuilder("e").build();
+    FeatureFlag flagB = flagBuilder("b")
+        .prerequisites(
+            prerequisite("c", 0),
+            prerequisite("e", 0)
+        )
+        .build();
+    FeatureFlag flagA = flagBuilder("a")
+        .prerequisites(
+            prerequisite("b", 0),
+            prerequisite("c", 0)
+        )
+        .build();
+    
+    ImmutableList<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> changeSetData =
+        ImmutableList.of(
+            new AbstractMap.SimpleEntry<>(
+                FEATURES,
+                new KeyedItems<>(ImmutableList.of(
+                    new AbstractMap.SimpleEntry<>("a", new ItemDescriptor(1, flagA)),
+                    new AbstractMap.SimpleEntry<>("b", new ItemDescriptor(1, flagB)),
+                    new AbstractMap.SimpleEntry<>("c", new ItemDescriptor(1, flagC)),
+                    new AbstractMap.SimpleEntry<>("e", new ItemDescriptor(1, flagE))
+                ))
+            )
+        );
+    
+    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+        ChangeSetType.Partial,
+        Selector.make(1, "state1"),
+        changeSetData,
+        null
+    );
+    
+    ChangeSet<ItemDescriptor> result = DataModelDependencies.sortChangeset(changeSet);
+    
+    Map.Entry<DataKind, KeyedItems<ItemDescriptor>> flagsData = null;
+    for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> entry: result.getData()) {
+      if (entry.getKey() == FEATURES) {
+        flagsData = entry;
+        break;
+      }
+    }
+    assertTrue("Should have found FEATURES data", flagsData != null);
+    
+    List<String> resultKeys = ImmutableList.copyOf(transform(flagsData.getValue().getItems(), Map.Entry::getKey));
+    
+    // Verify ordering constraints
+    assertTrue("c should come before b", resultKeys.indexOf("c") < resultKeys.indexOf("b"));
+    assertTrue("e should come before b", resultKeys.indexOf("e") < resultKeys.indexOf("b"));
+    assertTrue("b should come before a", resultKeys.indexOf("b") < resultKeys.indexOf("a"));
+    assertTrue("c should come before a", resultKeys.indexOf("c") < resultKeys.indexOf("a"));
+  }
+  
+  @Test
+  public void sortChangesetSortsSegmentsBeforeFlags() {
+    FeatureFlag flag1 = flagBuilder("flag1").build();
+    Segment segment1 = segmentBuilder("seg1").build();
+    
+    ImmutableList<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> changeSetData =
+        ImmutableList.of(
+            new AbstractMap.SimpleEntry<>(
+                FEATURES,
+                new KeyedItems<>(ImmutableList.of(
+                    new AbstractMap.SimpleEntry<>("flag1", new ItemDescriptor(1, flag1))
+                ))
+            ),
+            new AbstractMap.SimpleEntry<>(
+                SEGMENTS,
+                new KeyedItems<>(ImmutableList.of(
+                    new AbstractMap.SimpleEntry<>("seg1", new ItemDescriptor(1, segment1))
+                ))
+            )
+        );
+    
+    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+        ChangeSetType.Full,
+        Selector.make(1, "state1"),
+        changeSetData,
+        null
+    );
+    
+    ChangeSet<ItemDescriptor> result = DataModelDependencies.sortChangeset(changeSet);
+    
+    List<DataKind> kinds = ImmutableList.copyOf(transform(result.getData(), Map.Entry::getKey));
+    assertEquals(2, kinds.size());
+    assertEquals(SEGMENTS, kinds.get(0));
+    assertEquals(FEATURES, kinds.get(1));
+  }
+  
+  @Test
+  public void sortChangesetHandlesEmptyChangeset() {
+    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+        ChangeSetType.Full,
+        Selector.make(1, "state1"),
+        ImmutableList.of(),
+        null
+    );
+    
+    ChangeSet<ItemDescriptor> result = DataModelDependencies.sortChangeset(changeSet);
+    
+    assertTrue("Result data should be empty", Iterables.isEmpty(result.getData()));
+    assertEquals(ChangeSetType.Full, result.getType());
+  }
+  
+  @Test
+  public void sortChangesetHandlesMultipleDataKinds() {
+    FeatureFlag flag1 = flagBuilder("flag1").build();
+    Segment segment1 = segmentBuilder("seg1").build();
+    Segment segment2 = segmentBuilder("seg2").version(2).build();
+    
+    ImmutableList<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> changeSetData =
+        ImmutableList.of(
+            new AbstractMap.SimpleEntry<>(
+                FEATURES,
+                new KeyedItems<>(ImmutableList.of(
+                    new AbstractMap.SimpleEntry<>("flag1", new ItemDescriptor(1, flag1))
+                ))
+            ),
+            new AbstractMap.SimpleEntry<>(
+                SEGMENTS,
+                new KeyedItems<>(ImmutableList.of(
+                    new AbstractMap.SimpleEntry<>("seg1", new ItemDescriptor(1, segment1)),
+                    new AbstractMap.SimpleEntry<>("seg2", new ItemDescriptor(2, segment2))
+                ))
+            )
+        );
+    
+    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+        ChangeSetType.Partial,
+        Selector.make(1, "state1"),
+        changeSetData,
+        null
+    );
+    
+    ChangeSet<ItemDescriptor> result = DataModelDependencies.sortChangeset(changeSet);
+    
+    assertEquals(2, Iterables.size(result.getData()));
+    
+    Map.Entry<DataKind, KeyedItems<ItemDescriptor>> segments = null;
+    Map.Entry<DataKind, KeyedItems<ItemDescriptor>> flags = null;
+    for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> entry: result.getData()) {
+      if (entry.getKey() == SEGMENTS) {
+        segments = entry;
+      } else if (entry.getKey() == FEATURES) {
+        flags = entry;
+      }
+    }
+    
+    assertTrue("Should have found SEGMENTS", segments != null);
+    assertEquals(2, Iterables.size(segments.getValue().getItems()));
+    
+    assertTrue("Should have found FEATURES", flags != null);
+    assertEquals(1, Iterables.size(flags.getValue().getItems()));
+  }
+  
+  @Test
+  public void sortChangesetPreservesDeletedItems() {
+    ImmutableList<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> changeSetData =
+        ImmutableList.of(
+            new AbstractMap.SimpleEntry<>(
+                FEATURES,
+                new KeyedItems<>(ImmutableList.of(
+                    new AbstractMap.SimpleEntry<>("flag1", ItemDescriptor.deletedItem(5))
+                ))
+            )
+        );
+    
+    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+        ChangeSetType.Partial,
+        Selector.make(1, "state1"),
+        changeSetData,
+        null
+    );
+    
+    ChangeSet<ItemDescriptor> result = DataModelDependencies.sortChangeset(changeSet);
+    
+    Map.Entry<DataKind, KeyedItems<ItemDescriptor>> flagsData = null;
+    for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> entry: result.getData()) {
+      if (entry.getKey() == FEATURES) {
+        flagsData = entry;
+        break;
+      }
+    }
+    assertTrue("Should have found FEATURES data", flagsData != null);
+    
+    Map.Entry<String, ItemDescriptor> item = Iterables.getFirst(flagsData.getValue().getItems(), null);
+    assertTrue("Should have found item", item != null);
+    
+    assertEquals("flag1", item.getKey());
+    assertNull(item.getValue().getItem());
+    assertEquals(5, item.getValue().getVersion());
+  }
 }

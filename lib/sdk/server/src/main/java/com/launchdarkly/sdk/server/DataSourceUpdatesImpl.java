@@ -12,11 +12,14 @@ import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.State;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.Status;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.StatusListener;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
+import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSinkV2;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
+import com.launchdarkly.sdk.server.subsystems.TransactionalDataStore;
 import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider;
 import com.launchdarkly.sdk.server.interfaces.FlagChangeEvent;
 import com.launchdarkly.sdk.server.interfaces.FlagChangeListener;
@@ -48,7 +51,7 @@ import static java.util.Collections.emptyMap;
  * 
  * @since 4.11.0
  */
-final class DataSourceUpdatesImpl implements DataSourceUpdateSink {
+final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpdateSinkV2 {
   private final DataStore store;
   private final EventBroadcasterImpl<FlagChangeListener, FlagChangeEvent> flagChangeEventNotifier;
   private final EventBroadcasterImpl<StatusListener, Status> dataSourceStatusNotifier;
@@ -364,5 +367,179 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink {
   
   private static String describeErrorCount(Map.Entry<ErrorInfo, Integer> entry) {
     return entry.getKey() + " (" + entry.getValue() + (entry.getValue() == 1 ? " time" : " times") + ")";
+  }
+  
+  // ===== ITransactionalDataSourceUpdates methods =====
+  
+  @Override
+  public boolean apply(ChangeSet<ItemDescriptor> changeSet) {
+    if (store instanceof TransactionalDataStore) {
+      return applyToTransactionalStore((TransactionalDataStore) store, changeSet);
+    }
+    
+    // Legacy update path for non-transactional stores
+    return applyToLegacyStore(changeSet);
+  }
+  
+  private boolean applyToTransactionalStore(TransactionalDataStore transactionalDataStore,
+      ChangeSet<ItemDescriptor> changeSet) {
+    Map<DataKind, Map<String, ItemDescriptor>> oldData;
+    // Getting the old values requires accessing the store, which can fail.
+    // If there is a failure to read the store, then we stop treating it as a failure.
+    try {
+      oldData = getOldDataIfFlagChangeListeners();
+    } catch (RuntimeException e) {
+      reportStoreFailure(e);
+      return false;
+    }
+    
+    ChangeSet<ItemDescriptor> sortedChangeSet = DataModelDependencies.sortChangeset(changeSet);
+    
+    try {
+      transactionalDataStore.apply(sortedChangeSet);
+      lastStoreUpdateFailed = false;
+    } catch (RuntimeException e) {
+      reportStoreFailure(e);
+      return false;
+    }
+    
+    // Calling Apply implies that the data source is now in a valid state.
+    updateStatus(State.VALID, null);
+    
+    Set<KindAndKey> changes = updateDependencyTrackerForChangesetAndDetermineChanges(oldData, sortedChangeSet);
+    
+    // Now, if we previously queried the old data because someone is listening for flag change events, compare
+    // the versions of all items and generate events for those (and any other items that depend on them)
+    if (changes != null) {
+      sendChangeEvents(changes);
+    }
+    
+    return true;
+  }
+  
+  private boolean applyToLegacyStore(ChangeSet<ItemDescriptor> sortedChangeSet) {
+    switch (sortedChangeSet.getType()) {
+      case Full:
+        return applyFullChangeSetToLegacyStore(sortedChangeSet);
+      case Partial:
+        return applyPartialChangeSetToLegacyStore(sortedChangeSet);
+      case None:
+      default:
+        return true;
+    }
+  }
+  
+  private boolean applyFullChangeSetToLegacyStore(ChangeSet<ItemDescriptor> unsortedChangeset) {
+    // Convert ChangeSet to FullDataSet for legacy init path
+    return init(new FullDataSet<>(unsortedChangeset.getData()));
+  }
+  
+  private boolean applyPartialChangeSetToLegacyStore(ChangeSet<ItemDescriptor> changeSet) {
+    // Sorting isn't strictly required here, as upsert behavior didn't traditionally have it,
+    // but it also doesn't hurt, and there could be cases where it results in slightly
+    // greater store consistency for persistent stores.
+    ChangeSet<ItemDescriptor> sortedChangeset = DataModelDependencies.sortChangeset(changeSet);
+    
+    for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> kindItemsPair: sortedChangeset.getData()) {
+      for (Map.Entry<String, ItemDescriptor> item: kindItemsPair.getValue().getItems()) {
+        boolean applySuccess = upsert(kindItemsPair.getKey(), item.getKey(), item.getValue());
+        if (!applySuccess) {
+          return false;
+        }
+      }
+    }
+    // The upsert will update the store status in the case of a store failure.
+    // The application of the upserts does not set the store initialized.
+    
+    // Considering the store will be the same for the duration of the application
+    // lifecycle we will not be applying a partial update to a store that didn't
+    // already get a full update. The non-transactional store will also not support a selector.
+    
+    return true;
+  }
+  
+  private Map<DataKind, Map<String, ItemDescriptor>> getOldDataIfFlagChangeListeners() {
+    if (hasFlagChangeEventListeners()) {
+      // Query the existing data if any, so that after the update we can send events for
+      // whatever was changed
+      Map<DataKind, Map<String, ItemDescriptor>> oldData = new HashMap<>();
+      for (DataKind kind: ALL_DATA_KINDS) {
+        KeyedItems<ItemDescriptor> items = store.getAll(kind);
+        oldData.put(kind, ImmutableMap.copyOf(items.getItems()));
+      }
+      return oldData;
+    } else {
+      return null;
+    }
+  }
+  
+  private Map<DataKind, Map<String, ItemDescriptor>> changeSetToMap(ChangeSet<ItemDescriptor> changeSet) {
+    Map<DataKind, Map<String, ItemDescriptor>> ret = new HashMap<>();
+    for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> e: changeSet.getData()) {
+      ret.put(e.getKey(), ImmutableMap.copyOf(e.getValue().getItems()));
+    }
+    return ret;
+  }
+  
+  private Set<KindAndKey> updateDependencyTrackerForChangesetAndDetermineChanges(
+      Map<DataKind, Map<String, ItemDescriptor>> oldDataMap,
+      ChangeSet<ItemDescriptor> changeSet) {
+    switch (changeSet.getType()) {
+      case Full:
+        return handleFullChangeset(oldDataMap, changeSet);
+      case Partial:
+        return handlePartialChangeset(oldDataMap, changeSet);
+      case None:
+        return null;
+      default:
+        return null;
+    }
+  }
+  
+  private Set<KindAndKey> handleFullChangeset(
+      Map<DataKind, Map<String, ItemDescriptor>> oldDataMap,
+      ChangeSet<ItemDescriptor> changeSet) {
+    dependencyTracker.reset();
+    for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> kindEntry: changeSet.getData()) {
+      DataKind kind = kindEntry.getKey();
+      for (Map.Entry<String, ItemDescriptor> itemEntry: kindEntry.getValue().getItems()) {
+        String key = itemEntry.getKey();
+        dependencyTracker.updateDependenciesFrom(kind, key, itemEntry.getValue());
+      }
+    }
+    
+    if (oldDataMap == null) {
+      return null;
+    }
+    
+    Map<DataKind, Map<String, ItemDescriptor>> newDataMap = changeSetToMap(changeSet);
+    return computeChangedItemsForFullDataSet(oldDataMap, newDataMap);
+  }
+  
+  private Set<KindAndKey> handlePartialChangeset(
+      Map<DataKind, Map<String, ItemDescriptor>> oldDataMap,
+      ChangeSet<ItemDescriptor> changeSet) {
+    if (oldDataMap == null) {
+      // Update dependencies but don't track changes when no listeners
+      for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> kindEntry: changeSet.getData()) {
+        DataKind kind = kindEntry.getKey();
+        for (Map.Entry<String, ItemDescriptor> itemEntry: kindEntry.getValue().getItems()) {
+          dependencyTracker.updateDependenciesFrom(kind, itemEntry.getKey(), itemEntry.getValue());
+        }
+      }
+      return null;
+    }
+    
+    Set<KindAndKey> affectedItems = new HashSet<>();
+    for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> kindEntry: changeSet.getData()) {
+      DataKind kind = kindEntry.getKey();
+      for (Map.Entry<String, ItemDescriptor> itemEntry: kindEntry.getValue().getItems()) {
+        String key = itemEntry.getKey();
+        dependencyTracker.updateDependenciesFrom(kind, key, itemEntry.getValue());
+        dependencyTracker.addAffectedItems(affectedItems, new KindAndKey(kind, key));
+      }
+    }
+    
+    return affectedItems;
   }
 }
