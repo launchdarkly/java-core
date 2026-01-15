@@ -109,7 +109,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             assertNotNull(result);
             assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
 
-            synchronizer.shutdown();
+            synchronizer.close();
         } finally {
             executor.shutdown();
         }
@@ -145,7 +145,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             assertNotNull(result);
             assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
 
-            synchronizer.shutdown();
+            synchronizer.close();
         } finally {
             executor.shutdown();
         }
@@ -186,7 +186,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             assertNotNull(result3);
             assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result3.getResultType());
 
-            synchronizer.shutdown();
+            synchronizer.close();
         } finally {
             executor.shutdown();
         }
@@ -212,7 +212,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             );
 
             // Shutdown immediately
-            synchronizer.shutdown();
+            synchronizer.close();
 
             // next() should return shutdown result
             FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
@@ -250,7 +250,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             assertEquals(false, nextFuture.isDone());
 
             // Shutdown while waiting
-            synchronizer.shutdown();
+            synchronizer.close();
 
             // next() should complete with shutdown result
             FDv2SourceResult result = nextFuture.get(5, TimeUnit.SECONDS);
@@ -289,7 +289,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             assertNotNull(result1);
 
             // Shutdown with items still in queue
-            synchronizer.shutdown();
+            synchronizer.close();
 
             // next() can return either queued items or shutdown
             // Just verify we get valid results and eventually shutdown
@@ -337,7 +337,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             int count = pollCount.get();
             assertTrue("Expected multiple polls, got " + count, count >= 3);
 
-            synchronizer.shutdown();
+            synchronizer.close();
         } finally {
             executor.shutdown();
         }
@@ -394,7 +394,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             // Verify polling continued after error
             assertTrue("Should have at least 2 successful polls", successCount.get() >= 2);
 
-            synchronizer.shutdown();
+            synchronizer.close();
         } finally {
             executor.shutdown();
         }
@@ -424,7 +424,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             Thread.sleep(100);
             int countBeforeShutdown = pollCount.get();
 
-            synchronizer.shutdown();
+            synchronizer.close();
 
             // Wait and verify no more polls occur
             Thread.sleep(200);
@@ -477,7 +477,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             // Verify polling continued after null response
             assertTrue("Should have successful polls after null", successCount.get() >= 1);
 
-            synchronizer.shutdown();
+            synchronizer.close();
         } finally {
             executor.shutdown();
         }
@@ -518,7 +518,206 @@ public class PollingSynchronizerImplTest extends BaseTest {
             assertNotNull(result2);
             assertNotNull(result3);
 
-            synchronizer.shutdown();
+            synchronizer.close();
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    public void nonRecoverableHttpErrorStopsPolling() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+
+        AtomicInteger callCount = new AtomicInteger(0);
+        when(requestor.Poll(any(Selector.class))).thenAnswer(invocation -> {
+            int count = callCount.incrementAndGet();
+            // First call returns 401 (non-recoverable)
+            if (count == 1) {
+                return failedFuture(new com.launchdarkly.sdk.internal.http.HttpErrors.HttpErrorException(401));
+            } else {
+                // Subsequent calls should not happen, but return success if they do
+                return CompletableFuture.completedFuture(makeSuccessResponse());
+            }
+        });
+
+        try {
+            PollingSynchronizerImpl synchronizer = new PollingSynchronizerImpl(
+                    requestor,
+                    testLogger,
+                    selectorSource,
+                    executor,
+                    Duration.ofMillis(50)
+            );
+
+            // First result should be terminal error
+            FDv2SourceResult result1 = synchronizer.next().get(1, TimeUnit.SECONDS);
+            assertNotNull(result1);
+            assertEquals(FDv2SourceResult.ResultType.STATUS, result1.getResultType());
+            assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result1.getStatus().getState());
+            assertEquals(DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE, result1.getStatus().getErrorInfo().getKind());
+
+            // Wait to see if polling continues
+            Thread.sleep(200);
+
+            // Should have only called requestor once - polling stopped after terminal error
+            assertEquals("Polling should have stopped after terminal error", 1, callCount.get());
+
+            // Don't call next() again after terminal error - that's incorrect usage
+            synchronizer.close();
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    public void recoverableHttpErrorContinuesPolling() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+
+        AtomicInteger callCount = new AtomicInteger(0);
+        AtomicInteger successCount = new AtomicInteger(0);
+        when(requestor.Poll(any(Selector.class))).thenAnswer(invocation -> {
+            int count = callCount.incrementAndGet();
+            // First call returns 429 (recoverable - too many requests)
+            if (count == 1) {
+                return failedFuture(new com.launchdarkly.sdk.internal.http.HttpErrors.HttpErrorException(429));
+            } else {
+                // Subsequent calls succeed
+                successCount.incrementAndGet();
+                return CompletableFuture.completedFuture(makeSuccessResponse());
+            }
+        });
+
+        try {
+            PollingSynchronizerImpl synchronizer = new PollingSynchronizerImpl(
+                    requestor,
+                    testLogger,
+                    selectorSource,
+                    executor,
+                    Duration.ofMillis(50)
+            );
+
+            // Wait for multiple polls
+            Thread.sleep(250);
+
+            // First result should be interrupted error
+            FDv2SourceResult result1 = synchronizer.next().get(1, TimeUnit.SECONDS);
+            assertNotNull(result1);
+            assertEquals(FDv2SourceResult.ResultType.STATUS, result1.getResultType());
+            assertEquals(FDv2SourceResult.State.INTERRUPTED, result1.getStatus().getState());
+            assertEquals(DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE, result1.getStatus().getErrorInfo().getKind());
+
+            // Second result should be success (polling continued)
+            FDv2SourceResult result2 = synchronizer.next().get(1, TimeUnit.SECONDS);
+            assertNotNull(result2);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result2.getResultType());
+
+            // Verify polling continued after recoverable error
+            assertTrue("Should have at least 2 successful polls after recoverable error", successCount.get() >= 2);
+
+            synchronizer.close();
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    public void multipleRecoverableErrorsContinuePolling() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+
+        AtomicInteger callCount = new AtomicInteger(0);
+        when(requestor.Poll(any(Selector.class))).thenAnswer(invocation -> {
+            int count = callCount.incrementAndGet();
+            // Multiple recoverable errors: 408, 429, network error, success pattern
+            if (count == 1) {
+                return failedFuture(new com.launchdarkly.sdk.internal.http.HttpErrors.HttpErrorException(408));
+            } else if (count == 2) {
+                return failedFuture(new com.launchdarkly.sdk.internal.http.HttpErrors.HttpErrorException(429));
+            } else if (count == 3) {
+                return failedFuture(new IOException("Connection timeout"));
+            } else {
+                return CompletableFuture.completedFuture(makeSuccessResponse());
+            }
+        });
+
+        try {
+            PollingSynchronizerImpl synchronizer = new PollingSynchronizerImpl(
+                    requestor,
+                    testLogger,
+                    selectorSource,
+                    executor,
+                    Duration.ofMillis(50)
+            );
+
+            // Wait for multiple polls
+            Thread.sleep(300);
+
+            // Get first three interrupted results
+            FDv2SourceResult result1 = synchronizer.next().get(1, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.State.INTERRUPTED, result1.getStatus().getState());
+
+            FDv2SourceResult result2 = synchronizer.next().get(1, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.State.INTERRUPTED, result2.getStatus().getState());
+
+            FDv2SourceResult result3 = synchronizer.next().get(1, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.State.INTERRUPTED, result3.getStatus().getState());
+
+            // Fourth result should be success
+            FDv2SourceResult result4 = synchronizer.next().get(1, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result4.getResultType());
+
+            // Verify polling continued through multiple errors
+            assertTrue("Should have made at least 4 calls", callCount.get() >= 4);
+
+            synchronizer.close();
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    public void nonRecoverableThenRecoverableErrorStopsPolling() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+
+        AtomicInteger callCount = new AtomicInteger(0);
+        when(requestor.Poll(any(Selector.class))).thenAnswer(invocation -> {
+            int count = callCount.incrementAndGet();
+            // First call returns 403 (non-recoverable)
+            if (count == 1) {
+                return failedFuture(new com.launchdarkly.sdk.internal.http.HttpErrors.HttpErrorException(403));
+            } else {
+                // Any subsequent calls should not happen
+                return failedFuture(new IOException("Network error"));
+            }
+        });
+
+        try {
+            PollingSynchronizerImpl synchronizer = new PollingSynchronizerImpl(
+                    requestor,
+                    testLogger,
+                    selectorSource,
+                    executor,
+                    Duration.ofMillis(50)
+            );
+
+            // First result should be terminal error
+            FDv2SourceResult result1 = synchronizer.next().get(1, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result1.getStatus().getState());
+
+            // Wait to ensure no more polling
+            Thread.sleep(200);
+
+            // Should have only called requestor once
+            assertEquals("Polling should have stopped after terminal error", 1, callCount.get());
+
+            synchronizer.close();
         } finally {
             executor.shutdown();
         }

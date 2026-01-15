@@ -169,7 +169,8 @@ public class LDClientTest extends BaseTest {
         .startWait(Duration.ZERO)
         .build();
     try (LDClient client = new LDClient(SDK_KEY, config)) {
-      assertEquals(StreamProcessor.class, client.dataSource.getClass());
+      assertTrue(client.dataSystem instanceof FDv1DataSystem);
+      assertEquals(StreamProcessor.class, ((FDv1DataSystem) client.dataSystem).testing.dataSource.getClass());
     }
   }
 
@@ -185,7 +186,9 @@ public class LDClientTest extends BaseTest {
         .startWait(Duration.ZERO)
         .build();
     try (LDClient client = new LDClient(SDK_KEY, config)) {
-      assertEquals(expected, ((StreamProcessor) client.dataSource).streamUri.toString());
+      assertTrue(client.dataSystem instanceof FDv1DataSystem);
+      DataSource dataSource = ((FDv1DataSystem) client.dataSystem).testing.dataSource;
+      assertEquals(expected, ((StreamProcessor) dataSource).streamUri.toString());
     }
   }
 
@@ -199,7 +202,8 @@ public class LDClientTest extends BaseTest {
         .startWait(Duration.ZERO)
         .build();
     try (LDClient client = new LDClient(SDK_KEY, config)) {
-      assertEquals(PollingProcessor.class, client.dataSource.getClass());
+      assertTrue(client.dataSystem instanceof FDv1DataSystem);
+      assertEquals(PollingProcessor.class, ((FDv1DataSystem) client.dataSystem).testing.dataSource.getClass());
     }
   }
 
@@ -214,7 +218,9 @@ public class LDClientTest extends BaseTest {
         .startWait(Duration.ZERO)
         .build();
     try (LDClient client = new LDClient(SDK_KEY, config)) {
-      String actual = ((DefaultFeatureRequestor) ((PollingProcessor) client.dataSource).requestor).pollingUri.toString();
+      assertTrue(client.dataSystem instanceof FDv1DataSystem);
+      DataSource dataSource = ((FDv1DataSystem) client.dataSystem).testing.dataSource;
+      String actual = ((DefaultFeatureRequestor) ((PollingProcessor) dataSource).requestor).pollingUri.toString();
       assertThat(actual, containsString(pu.toString()));
     }
   }

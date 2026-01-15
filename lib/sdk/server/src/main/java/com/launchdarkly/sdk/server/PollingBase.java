@@ -8,7 +8,7 @@ import com.launchdarkly.sdk.internal.http.HttpErrors;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes;
-import com.launchdarkly.sdk.server.subsystems.SerializationException;
+import com.launchdarkly.sdk.json.SerializationException;
 
 import java.io.IOException;
 import java.util.Date;
@@ -35,7 +35,9 @@ class PollingBase {
                 if (ex instanceof HttpErrors.HttpErrorException) {
                     HttpErrors.HttpErrorException e = (HttpErrors.HttpErrorException) ex;
                     DataSourceStatusProvider.ErrorInfo errorInfo = DataSourceStatusProvider.ErrorInfo.fromHttpError(e.getStatus());
-                    boolean recoverable = e.getStatus() > 0 && !isHttpErrorRecoverable(e.getStatus());
+                    // Errors without an HTTP status are recoverable. If there is a status, then we check if the error
+                    // is recoverable.
+                    boolean recoverable = e.getStatus() <= 0 || isHttpErrorRecoverable(e.getStatus());
                     logger.error("Polling request failed with HTTP error: {}", e.getStatus());
                     // For a one-shot request all errors are terminal.
                     if (oneShot) {
@@ -64,15 +66,25 @@ class PollingBase {
                     );
                     return oneShot ? FDv2SourceResult.terminalError(info) : FDv2SourceResult.interrupted(info);
                 }
-                Exception e = (Exception) ex;
-                logger.error("Polling request failed with an unknown error: {}", e.toString());
+                String msg = ex.toString();
+                logger.error("Polling request failed with an unknown error: {}", msg);
                 DataSourceStatusProvider.ErrorInfo info = new DataSourceStatusProvider.ErrorInfo(
                         DataSourceStatusProvider.ErrorKind.UNKNOWN,
                         0,
-                        e.toString(),
+                        msg,
                         new Date().toInstant()
                 );
                 return oneShot ? FDv2SourceResult.terminalError(info) : FDv2SourceResult.interrupted(info);
+            }
+            // A null polling response indicates that we received a 304, which means nothing has changed.
+            if (pollingResponse == null) {
+                return FDv2SourceResult.changeSet(
+                        new DataStoreTypes.ChangeSet<>(DataStoreTypes.ChangeSetType.None,
+                                Selector.EMPTY,
+                                null,
+                                // TODO: Implement environment ID support.
+                                null
+                        ));
             }
             FDv2ProtocolHandler handler = new FDv2ProtocolHandler();
             for (FDv2Event event : pollingResponse.getEvents()) {
@@ -121,12 +133,14 @@ class PollingBase {
                     }
                 }
             }
-            return FDv2SourceResult.terminalError(new DataSourceStatusProvider.ErrorInfo(
+
+            DataSourceStatusProvider.ErrorInfo info = new DataSourceStatusProvider.ErrorInfo(
                     DataSourceStatusProvider.ErrorKind.UNKNOWN,
                     0,
                     "Unexpected end of polling response",
                     new Date().toInstant()
-            ));
+            );
+            return oneShot ? FDv2SourceResult.terminalError(info) : FDv2SourceResult.interrupted(info);
         }));
     }
 }

@@ -5,7 +5,7 @@ import com.launchdarkly.sdk.internal.http.HttpErrors;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.SelectorSource;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
-import com.launchdarkly.sdk.server.subsystems.SerializationException;
+import com.launchdarkly.sdk.json.SerializationException;
 
 import org.junit.Test;
 
@@ -196,7 +196,7 @@ public class PollingInitializerImplTest extends BaseTest {
 
         // Shutdown before poll completes
         Thread.sleep(100);
-        initializer.shutdown();
+        initializer.close();
 
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
@@ -226,7 +226,7 @@ public class PollingInitializerImplTest extends BaseTest {
         assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
 
         // Shutdown after completion should still work
-        initializer.shutdown();
+        initializer.close();
 
         
     }

@@ -1,5 +1,6 @@
 package com.launchdarkly.sdk.server.datasources;
 
+import java.io.Closeable;
 import java.util.concurrent.CompletableFuture;
 
 // Mermaid source for state diagram.
@@ -42,7 +43,7 @@ import java.util.concurrent.CompletableFuture;
  *          └─────────────────► GOODBYE ───► [END]
  *
  */
-public interface Initializer extends DataSourceShutdown {
+public interface Initializer extends Closeable {
     /**
      * Run the initializer to completion.
      * @return The result of the initializer.

@@ -17,12 +17,8 @@ import com.launchdarkly.sdk.server.interfaces.BigSegmentStoreStatusProvider;
 import com.launchdarkly.sdk.server.interfaces.BigSegmentsConfiguration;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider;
-import com.launchdarkly.sdk.server.interfaces.FlagChangeEvent;
-import com.launchdarkly.sdk.server.interfaces.FlagChangeListener;
 import com.launchdarkly.sdk.server.interfaces.FlagTracker;
 import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
-import com.launchdarkly.sdk.server.subsystems.DataSource;
-import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.EventProcessor;
@@ -30,6 +26,7 @@ import org.apache.commons.codec.binary.Hex;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.security.InvalidKeyException;
@@ -61,15 +58,11 @@ public final class LDClient implements LDClientInterface {
   final EvaluatorInterface evaluator;
   final EvaluatorInterface migrationEvaluator;
   final EventProcessor eventProcessor;
-  final DataSource dataSource;
-  final DataStore dataStore;
+  @VisibleForTesting
+  final DataSystem dataSystem;
+  private final FlagTrackerImpl flagTracker;
   private final BigSegmentStoreStatusProvider bigSegmentStoreStatusProvider;
   private final BigSegmentStoreWrapper bigSegmentStoreWrapper;
-  private final DataSourceUpdateSink dataSourceUpdates;
-  private final DataStoreStatusProviderImpl dataStoreStatusProvider;
-  private final DataSourceStatusProviderImpl dataSourceStatusProvider;
-  private final FlagTrackerImpl flagTracker;
-  private final EventBroadcasterImpl<FlagChangeListener, FlagChangeEvent> flagChangeBroadcaster;
   private final ScheduledExecutorService sharedExecutor;
   private final LDLogger baseLogger;
   private final LDLogger evaluationLogger;
@@ -206,12 +199,14 @@ public final class LDClient implements LDClientInterface {
     }
     bigSegmentStoreStatusProvider = new BigSegmentStoreStatusProviderImpl(bigSegmentStoreStatusNotifier, bigSegmentStoreWrapper);
 
-    EventBroadcasterImpl<DataStoreStatusProvider.StatusListener, DataStoreStatusProvider.Status> dataStoreStatusNotifier =
-        EventBroadcasterImpl.forDataStoreStatus(sharedExecutor, baseLogger);
-    DataStoreUpdatesImpl dataStoreUpdates = new DataStoreUpdatesImpl(dataStoreStatusNotifier);
-    this.dataStore = config.dataStore.build(context.withDataStoreUpdateSink(dataStoreUpdates));
+    // Create DataSystem - FDv2 if configured, otherwise FDv1
+    if (config.dataSystem != null) {
+      this.dataSystem = FDv2DataSystem.create(baseLogger, config, context, context.getLogging());
+    } else {
+      this.dataSystem = FDv1DataSystem.create(baseLogger, config, context, context.getLogging());
+    }
 
-    EvaluatorInterface evaluator = new InputValidatingEvaluator(dataStore, bigSegmentStoreWrapper, eventProcessor, evaluationLogger);
+    EvaluatorInterface evaluator = new InputValidatingEvaluator(this.dataSystem.getStore(), bigSegmentStoreWrapper, eventProcessor, evaluationLogger);
 
     // build environment metadata for plugins
     SdkMetadata sdkMetadata;
@@ -242,26 +237,10 @@ public final class LDClient implements LDClientInterface {
       this.migrationEvaluator = new EvaluatorWithHooks(new MigrationStageEnforcingEvaluator(evaluator, evaluationLogger), allHooks, this.baseLogger.subLogger(Loggers.HOOKS_LOGGER_NAME));
     }
 
-    this.flagChangeBroadcaster = EventBroadcasterImpl.forFlagChangeEvents(sharedExecutor, baseLogger);
-    this.flagTracker = new FlagTrackerImpl(flagChangeBroadcaster,
+    // Create FlagTracker using the dataSystem's flag change notifier
+    this.flagTracker = new FlagTrackerImpl(
+        this.dataSystem.getFlagChanged(),
         (key, ctx) -> jsonValueVariation(key, ctx, LDValue.ofNull()));
-
-    this.dataStoreStatusProvider = new DataStoreStatusProviderImpl(this.dataStore, dataStoreUpdates);
-
-    EventBroadcasterImpl<DataSourceStatusProvider.StatusListener, DataSourceStatusProvider.Status> dataSourceStatusNotifier =
-        EventBroadcasterImpl.forDataSourceStatus(sharedExecutor, baseLogger);
-    DataSourceUpdatesImpl dataSourceUpdates = new DataSourceUpdatesImpl(
-        dataStore,
-        dataStoreStatusProvider,
-        flagChangeBroadcaster,
-        dataSourceStatusNotifier,
-        sharedExecutor,
-        context.getLogging().getLogDataSourceOutageAsErrorAfter(),
-        baseLogger
-    );
-    this.dataSourceUpdates = dataSourceUpdates;
-    this.dataSource = config.dataSource.build(context.withDataSourceUpdateSink(dataSourceUpdates));
-    this.dataSourceStatusProvider = new DataSourceStatusProviderImpl(dataSourceStatusNotifier, dataSourceUpdates);
 
     // register plugins as soon as possible after client is valid
     for (Plugin plugin : config.plugins.getPlugins()) {
@@ -272,9 +251,10 @@ public final class LDClient implements LDClientInterface {
       }
     }
 
-    Future<Void> startFuture = dataSource.start();
+    // Start the data system
+    Future<Void> startFuture = dataSystem.start();
     if (!config.startWait.isZero() && !config.startWait.isNegative()) {
-      if (!(dataSource instanceof ComponentsImpl.NullDataSource)) {
+      if (!dataSystem.isInitialized()) {
         baseLogger.info("Waiting up to {} milliseconds for LaunchDarkly client to start...",
             config.startWait.toMillis());
         if (config.startWait.toMillis() > EXCESSIVE_INIT_WAIT_MILLIS) {
@@ -290,7 +270,7 @@ public final class LDClient implements LDClientInterface {
             LogValues.exceptionSummary(e));
         baseLogger.debug("{}", LogValues.exceptionTrace(e));
       }
-      if (!dataSource.isInitialized()) {
+      if (!dataSystem.isInitialized()) {
         baseLogger.warn("LaunchDarkly client was not successfully initialized");
       }
     }
@@ -298,7 +278,7 @@ public final class LDClient implements LDClientInterface {
 
   @Override
   public boolean isInitialized() {
-    return dataSource.isInitialized();
+    return dataSystem.isInitialized();
   }
 
   @Override
@@ -443,8 +423,10 @@ public final class LDClient implements LDClientInterface {
 
   @Override
   public boolean isFlagKnown(String featureKey) {
+    ReadOnlyStore store = dataSystem.getStore();
+    
     if (!isInitialized()) {
-      if (dataStore.isInitialized()) {
+      if (store.isInitialized()) {
         baseLogger.warn("isFlagKnown called before client initialized for feature flag \"{}\"; using last known values from data store", featureKey);
       } else {
         baseLogger.warn("isFlagKnown called before client initialized for feature flag \"{}\"; data store unavailable, returning false", featureKey);
@@ -453,7 +435,7 @@ public final class LDClient implements LDClientInterface {
     }
 
     try {
-      if (getFlag(dataStore, featureKey) != null) {
+      if (store.get(DataModel.FEATURES, featureKey) != null) {
         return true;
       }
     } catch (Exception e) {
@@ -477,7 +459,7 @@ public final class LDClient implements LDClientInterface {
 
   @Override
   public DataStoreStatusProvider getDataStoreStatusProvider() {
-    return dataStoreStatusProvider;
+    return dataSystem.getDataStoreStatusProvider();
   }
 
   @Override
@@ -487,7 +469,7 @@ public final class LDClient implements LDClientInterface {
 
   @Override
   public DataSourceStatusProvider getDataSourceStatusProvider() {
-    return dataSourceStatusProvider;
+    return dataSystem.getDataSourceStatusProvider();
   }
 
   /**
@@ -499,10 +481,10 @@ public final class LDClient implements LDClientInterface {
   @Override
   public void close() throws IOException {
     baseLogger.info("Closing LaunchDarkly Client");
-    this.dataStore.close();
+    if (this.dataSystem instanceof Closeable) {
+      ((Closeable) this.dataSystem).close();
+    }
     this.eventProcessor.close();
-    this.dataSource.close();
-    this.dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.OFF, null);
     if (this.bigSegmentStoreWrapper != null) {
       this.bigSegmentStoreWrapper.close();
     }
