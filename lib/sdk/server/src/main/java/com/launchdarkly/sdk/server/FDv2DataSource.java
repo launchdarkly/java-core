@@ -44,13 +44,7 @@ class FDv2DataSource implements DataSource {
             /**
              * This synchronizer is no longer available to use.
              */
-            Blocked,
-
-            /**
-             * This synchronizer is recovering from a previous failure and will be available to use
-             * after a delay.
-             */
-            Recovering
+            Blocked
         }
 
         private final SynchronizerFactory factory;
@@ -68,11 +62,6 @@ class FDv2DataSource implements DataSource {
 
         public void block() {
             state = State.Blocked;
-        }
-
-        public void setRecovering(Duration delay) {
-            state = State.Recovering;
-            // TODO: Determine how/when to recover.
         }
 
         public Synchronizer build() {
@@ -234,13 +223,6 @@ class FDv2DataSource implements DataSource {
 
     @Override
     public void close() throws IOException {
-        // If this is already set, then this has no impact.
-        startFuture.complete(false);
-        synchronized (synchronizers) {
-            for (SynchronizerFactoryWithState synchronizer : synchronizers) {
-                synchronizer.block();
-            }
-        }
         // If there is an active source, we will shut it down, and that will result in the loop handling that source
         // exiting.
         // If we do not have an active source, then the loop will check isShutdown when attempting to set one. When
@@ -251,5 +233,8 @@ class FDv2DataSource implements DataSource {
                 activeSource.shutdown();
             }
         }
+
+        // If this is already set, then this has no impact.
+        startFuture.complete(false);
     }
 }
