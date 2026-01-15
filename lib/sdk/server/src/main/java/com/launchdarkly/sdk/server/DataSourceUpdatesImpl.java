@@ -210,6 +210,14 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink {
     return flagChangeEventNotifier.hasListeners();
   }
   
+  void addFlagChangeListener(FlagChangeListener listener) {
+    flagChangeEventNotifier.register(listener);
+  }
+  
+  void removeFlagChangeListener(FlagChangeListener listener) {
+    flagChangeEventNotifier.unregister(listener);
+  }
+  
   private void sendChangeEvents(Iterable<KindAndKey> affectedItems) {
     for (KindAndKey item: affectedItems) {
       if (item.kind == FEATURES) {
