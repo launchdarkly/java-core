@@ -46,6 +46,8 @@ import java.util.concurrent.CompletableFuture;
 public interface Initializer extends Closeable {
     /**
      * Run the initializer to completion.
+     * <p>
+     * This method is intended to be called only single time for an instance.
      * @return The result of the initializer.
      */
     CompletableFuture<FDv2SourceResult> run();
