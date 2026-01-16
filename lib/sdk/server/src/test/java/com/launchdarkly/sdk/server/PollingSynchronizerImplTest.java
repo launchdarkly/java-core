@@ -722,4 +722,148 @@ public class PollingSynchronizerImplTest extends BaseTest {
             executor.shutdown();
         }
     }
+
+    @Test
+    public void internalErrorWithInvalidDataKindContinuesPolling() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+
+        AtomicInteger callCount = new AtomicInteger(0);
+        when(requestor.Poll(any(Selector.class))).thenAnswer(invocation -> {
+            int count = callCount.incrementAndGet();
+            if (count == 1) {
+                // First call returns response with malformed put-object which triggers INTERNAL_ERROR (INVALID_DATA)
+                String malformedPutObjectJson = "{\n" +
+                    "  \"events\": [\n" +
+                    "    {\n" +
+                    "      \"event\": \"server-intent\",\n" +
+                    "      \"data\": {\n" +
+                    "        \"payloads\": [{\n" +
+                    "          \"id\": \"payload-1\",\n" +
+                    "          \"target\": 100,\n" +
+                    "          \"intentCode\": \"xfer-full\",\n" +
+                    "          \"reason\": \"payload-missing\"\n" +
+                    "        }]\n" +
+                    "      }\n" +
+                    "    },\n" +
+                    "    {\n" +
+                    "      \"event\": \"payload-transferred\",\n" +
+                    "      \"data\": {\n" +
+                    "        \"state\": \"(p:payload-1:100)\",\n" +
+                    "        \"version\": 100\n" +
+                    "      }\n" +
+                    "    },\n" +
+                    "    {\n" +
+                    "      \"event\": \"put-object\",\n" +
+                    "      \"data\": {}\n" +
+                    "    }\n" +
+                    "  ]\n" +
+                    "}";
+
+                return CompletableFuture.completedFuture(new FDv2Requestor.FDv2PayloadResponse(
+                    com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(malformedPutObjectJson),
+                    okhttp3.Headers.of()
+                ));
+            } else {
+                // Subsequent calls succeed
+                return CompletableFuture.completedFuture(makeSuccessResponse());
+            }
+        });
+
+        try {
+            PollingSynchronizerImpl synchronizer = new PollingSynchronizerImpl(
+                    requestor,
+                    testLogger,
+                    selectorSource,
+                    executor,
+                    Duration.ofMillis(50)
+            );
+
+            // Wait for multiple polls
+            Thread.sleep(250);
+
+            // First result should be interrupted with INVALID_DATA error kind
+            FDv2SourceResult result1 = synchronizer.next().get(1, TimeUnit.SECONDS);
+            assertNotNull(result1);
+            assertEquals(FDv2SourceResult.ResultType.STATUS, result1.getResultType());
+            assertEquals(FDv2SourceResult.State.INTERRUPTED, result1.getStatus().getState());
+            assertEquals(DataSourceStatusProvider.ErrorKind.INVALID_DATA, result1.getStatus().getErrorInfo().getKind());
+
+            // Second result should be success (polling continued)
+            FDv2SourceResult result2 = synchronizer.next().get(1, TimeUnit.SECONDS);
+            assertNotNull(result2);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result2.getResultType());
+
+            // Verify polling continued after internal error
+            assertTrue("Should have made at least 2 calls", callCount.get() >= 2);
+
+            synchronizer.close();
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    public void internalErrorWithUnknownKindContinuesPolling() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+
+        AtomicInteger callCount = new AtomicInteger(0);
+        when(requestor.Poll(any(Selector.class))).thenAnswer(invocation -> {
+            int count = callCount.incrementAndGet();
+            if (count == 1) {
+                // First call returns response with unknown event which triggers INTERNAL_ERROR (UNKNOWN)
+                String unknownEventJson = "{\n" +
+                    "  \"events\": [\n" +
+                    "    {\n" +
+                    "      \"event\": \"unrecognized-event-type\",\n" +
+                    "      \"data\": {}\n" +
+                    "    }\n" +
+                    "  ]\n" +
+                    "}";
+
+                return CompletableFuture.completedFuture(new FDv2Requestor.FDv2PayloadResponse(
+                    com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(unknownEventJson),
+                    okhttp3.Headers.of()
+                ));
+            } else {
+                // Subsequent calls succeed
+                return CompletableFuture.completedFuture(makeSuccessResponse());
+            }
+        });
+
+        try {
+            PollingSynchronizerImpl synchronizer = new PollingSynchronizerImpl(
+                    requestor,
+                    testLogger,
+                    selectorSource,
+                    executor,
+                    Duration.ofMillis(50)
+            );
+
+            // Wait for multiple polls
+            Thread.sleep(250);
+
+            // First result should be interrupted with UNKNOWN error kind
+            FDv2SourceResult result1 = synchronizer.next().get(1, TimeUnit.SECONDS);
+            assertNotNull(result1);
+            assertEquals(FDv2SourceResult.ResultType.STATUS, result1.getResultType());
+            assertEquals(FDv2SourceResult.State.INTERRUPTED, result1.getStatus().getState());
+            assertEquals(DataSourceStatusProvider.ErrorKind.UNKNOWN, result1.getStatus().getErrorInfo().getKind());
+
+            // Second result should be success (polling continued)
+            FDv2SourceResult result2 = synchronizer.next().get(1, TimeUnit.SECONDS);
+            assertNotNull(result2);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result2.getResultType());
+
+            // Verify polling continued after internal error
+            assertTrue("Should have made at least 2 calls", callCount.get() >= 2);
+
+            synchronizer.close();
+        } finally {
+            executor.shutdown();
+        }
+    }
 }

@@ -329,6 +329,98 @@ public class PollingInitializerImplTest extends BaseTest {
         assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
         assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result.getStatus().getState());
 
-        
+
+    }
+
+    @Test
+    public void internalErrorWithInvalidDataKind() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+
+        // Create a response with malformed payload-transferred event. `state->states`.
+        // This will trigger JSON_ERROR internal error which maps to INVALID_DATA
+        String malformedPutObjectJson = "{\n" +
+            "  \"events\": [\n" +
+            "    {\n" +
+            "      \"event\": \"server-intent\",\n" +
+            "      \"data\": {\n" +
+            "        \"payloads\": [{\n" +
+            "          \"id\": \"payload-1\",\n" +
+            "          \"target\": 100,\n" +
+            "          \"intentCode\": \"xfer-full\",\n" +
+            "          \"reason\": \"payload-missing\"\n" +
+            "        }]\n" +
+            "      }\n" +
+            "    },\n" +
+            "    {\n" +
+            "      \"event\": \"payload-transferred\",\n" +
+            "      \"data\": {\n" +
+            "        \"states\": \"(p:payload-1:100)\",\n" +
+            "        \"version\": 100\n" +
+            "      }\n" +
+            "    },\n" +
+            "    {\n" +
+            "      \"event\": \"put-object\",\n" +
+            "      \"data\": {}\n" +
+            "    }\n" +
+            "  ]\n" +
+            "}";
+
+        FDv2Requestor.FDv2PayloadResponse response = new FDv2Requestor.FDv2PayloadResponse(
+            com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(malformedPutObjectJson),
+            okhttp3.Headers.of()
+        );
+
+        when(requestor.Poll(any(Selector.class)))
+            .thenReturn(CompletableFuture.completedFuture(response));
+
+        PollingInitializerImpl initializer = new PollingInitializerImpl(requestor, testLogger, selectorSource);
+
+        CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
+        FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+        assertNotNull(result);
+        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
+        assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result.getStatus().getState());
+        assertEquals(DataSourceStatusProvider.ErrorKind.INVALID_DATA, result.getStatus().getErrorInfo().getKind());
+
+
+    }
+
+    @Test
+    public void internalErrorWithUnknownKind() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+
+        // Create a response with an unrecognized event type
+        // This will trigger UNKNOWN_EVENT internal error which maps to UNKNOWN error kind
+        String unknownEventJson = "{\n" +
+            "  \"events\": [\n" +
+            "    {\n" +
+            "      \"event\": \"unrecognized-event-type\",\n" +
+            "      \"data\": {}\n" +
+            "    }\n" +
+            "  ]\n" +
+            "}";
+
+        FDv2Requestor.FDv2PayloadResponse response = new FDv2Requestor.FDv2PayloadResponse(
+            com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(unknownEventJson),
+            okhttp3.Headers.of()
+        );
+
+        when(requestor.Poll(any(Selector.class)))
+            .thenReturn(CompletableFuture.completedFuture(response));
+
+        PollingInitializerImpl initializer = new PollingInitializerImpl(requestor, testLogger, selectorSource);
+
+        CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
+        FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+        assertNotNull(result);
+        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
+        assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result.getStatus().getState());
+        assertEquals(DataSourceStatusProvider.ErrorKind.UNKNOWN, result.getStatus().getErrorInfo().getKind());
+
+
     }
 }
