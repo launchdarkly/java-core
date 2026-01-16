@@ -1,6 +1,5 @@
 package com.launchdarkly.sdk.server;
 
-import com.launchdarkly.sdk.server.datasources.DataSourceShutdown;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
@@ -8,8 +7,8 @@ import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
 
+import java.io.Closeable;
 import java.io.IOException;
-import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
@@ -31,7 +30,7 @@ class FDv2DataSource implements DataSource {
      * Lock for active sources and shutdown state.
      */
     private final Object activeSourceLock = new Object();
-    private DataSourceShutdown activeSource;
+    private Closeable activeSource;
     private boolean isShutdown = false;
 
     private static class SynchronizerFactoryWithState {
@@ -44,7 +43,7 @@ class FDv2DataSource implements DataSource {
             /**
              * This synchronizer is no longer available to use.
              */
-            Blocked,
+            Blocked
         }
 
         private final SynchronizerFactory factory;
@@ -123,12 +122,8 @@ class FDv2DataSource implements DataSource {
         // recovering ones, then we likely will want to wait for them to be available (or bypass recovery).
         while (availableSynchronizer != null) {
             Synchronizer synchronizer = availableSynchronizer.build();
-            synchronized (activeSourceLock) {
-                if (isShutdown) {
-                    return;
-                }
-                activeSource = synchronizer;
-            }
+            // Returns true if shutdown.
+            if (setActiveSource(synchronizer)) return;
             try {
                 boolean running = true;
                 while (running) {
@@ -151,8 +146,11 @@ class FDv2DataSource implements DataSource {
                                     // TODO: We may need logging or to do a little more.
                                     return;
                                 case TERMINAL_ERROR:
-                                case GOODBYE:
+                                    availableSynchronizer.block();
                                     running = false;
+                                    break;
+                                case GOODBYE:
+                                    // We let the synchronizer handle this internally.
                                     break;
                             }
                             break;
@@ -166,28 +164,46 @@ class FDv2DataSource implements DataSource {
         }
     }
 
+    private void safeClose(Closeable synchronizer) {
+        try {
+            synchronizer.close();
+        } catch (IOException e) {
+            // Ignore close exceptions.
+        }
+    }
+
+    private boolean setActiveSource(Closeable synchronizer) {
+        synchronized (activeSourceLock) {
+            if (activeSource != null) {
+                safeClose(activeSource);
+            }
+            if (isShutdown) {
+                safeClose(synchronizer);
+                return true;
+            }
+            activeSource = synchronizer;
+        }
+        return false;
+    }
+
     private void runInitializers() {
         boolean anyDataReceived = false;
         for (InitializerFactory factory : initializers) {
             try {
                 Initializer initializer = factory.build();
-                synchronized (activeSourceLock) {
-                    if (isShutdown) {
-                        return;
-                    }
-                    activeSource = initializer;
-                }
+                if (setActiveSource(initializer)) return;
                 FDv2SourceResult res = initializer.run().get();
                 switch (res.getResultType()) {
                     case CHANGE_SET:
                         // TODO: Apply to the store.
                         anyDataReceived = true;
                         if (!res.getChangeSet().getSelector().isEmpty()) {
+                            // We received data with a selector, so we end the initialization process.
                             dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
                             startFuture.complete(true);
                             return;
                         }
-                        return;
+                        break;
                     case STATUS:
                         // TODO: Implement.
                         break;
@@ -230,7 +246,7 @@ class FDv2DataSource implements DataSource {
         synchronized (activeSourceLock) {
             isShutdown = true;
             if (activeSource != null) {
-                activeSource.shutdown();
+                activeSource.close();
             }
         }
 

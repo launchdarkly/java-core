@@ -25,7 +25,7 @@ class PollingInitializerImpl extends PollingBase implements Initializer {
     }
 
     @Override
-    public void shutdown() {
+    public void close() {
         shutdownFuture.complete(FDv2SourceResult.shutdown());
         internalShutdown();
     }

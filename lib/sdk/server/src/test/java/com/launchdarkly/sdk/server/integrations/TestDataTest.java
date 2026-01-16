@@ -11,6 +11,8 @@ import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.State;
 import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
+import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSinkV2;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
@@ -463,9 +465,10 @@ public class TestDataTest {
     }
   }
   
-  private static class CapturingDataSourceUpdates implements DataSourceUpdateSink {
+  private static class CapturingDataSourceUpdates implements DataSourceUpdateSink, DataSourceUpdateSinkV2 {
     BlockingQueue<FullDataSet<ItemDescriptor>> inits = new LinkedBlockingQueue<>();
     BlockingQueue<UpsertParams> upserts = new LinkedBlockingQueue<>();
+    BlockingQueue<ChangeSet<ItemDescriptor>> applies = new LinkedBlockingQueue<>();
     boolean valid;
     
     @Override
@@ -488,6 +491,12 @@ public class TestDataTest {
     @Override
     public void updateStatus(State newState, ErrorInfo newError) {
       valid = newState == State.VALID;
+    }
+    
+    @Override
+    public boolean apply(ChangeSet<ItemDescriptor> changeSet) {
+      applies.add(changeSet);
+      return true;
     }
   }
 }
