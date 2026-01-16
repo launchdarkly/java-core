@@ -180,7 +180,8 @@ class StreamingSynchronizerImpl implements Synchronizer {
 
     @Override
     public CompletableFuture<FDv2SourceResult> next() {
-        if (!started.getAndSet(true)) {
+        // If we are already closed, don't start the stream.
+        if (!started.getAndSet(true) && !closed.get()) {
             startStream();
         }
         return CompletableFuture.anyOf(shutdownFuture, resultQueue.take())
