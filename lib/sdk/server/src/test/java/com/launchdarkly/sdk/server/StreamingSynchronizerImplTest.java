@@ -11,6 +11,7 @@ import com.launchdarkly.testhelpers.httptest.RequestInfo;
 import org.junit.Test;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -18,6 +19,7 @@ import static com.launchdarkly.sdk.server.ComponentsImpl.toHttpProperties;
 import static com.launchdarkly.sdk.server.TestComponents.clientContext;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -63,7 +65,9 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     server.getUri(),
                     "/stream",
                     testLogger,
-                    selectorSource
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100)
             );
 
             // First changeset
@@ -97,7 +101,9 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     server.getUri(),
                     "/stream",
                     testLogger,
-                    selectorSource
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100)
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -123,7 +129,9 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     server.getUri(),
                     "/stream",
                     testLogger,
-                    selectorSource
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100)
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -149,7 +157,9 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                 URI.create("http://localhost:1"), // invalid port
                 "/stream",
                 testLogger,
-                selectorSource
+                selectorSource,
+                    null,
+                Duration.ofMillis(100)
         );
 
         CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -180,7 +190,9 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     server.getUri(),
                     "/stream",
                     testLogger,
-                    selectorSource
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100)
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -209,7 +221,9 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     server.getUri(),
                     "/stream",
                     testLogger,
-                    selectorSource
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100)
             );
 
             CompletableFuture<FDv2SourceResult> nextFuture = synchronizer.next();
@@ -246,7 +260,9 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     server.getUri(),
                     "/stream",
                     testLogger,
-                    selectorSource
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100)
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -263,11 +279,20 @@ public class StreamingSynchronizerImplTest extends BaseTest {
     @Test
     public void goodbyeEventInResponse() throws Exception {
         String goodbyeEvent = makeEvent("goodbye", "{\"reason\":\"service-unavailable\"}");
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
 
-        try (HttpServer server = HttpServer.start(Handlers.all(
-                Handlers.SSE.start(),
-                Handlers.SSE.event(goodbyeEvent),
-                Handlers.SSE.leaveOpen()))) {
+        // First connection: send goodbye, then second connection: send changeset to verify restart
+        try (HttpServer server = HttpServer.start(Handlers.sequential(
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(goodbyeEvent),
+                        Handlers.SSE.leaveOpen()),
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred),
+                        Handlers.SSE.leaveOpen())))) {
 
             HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
             SelectorSource selectorSource = mockSelectorSource();
@@ -277,15 +302,29 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     server.getUri(),
                     "/stream",
                     testLogger,
-                    selectorSource
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100)
             );
 
-            CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
-            FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+            // First result should be goodbye
+            CompletableFuture<FDv2SourceResult> result1Future = synchronizer.next();
+            FDv2SourceResult result1 = result1Future.get(5, TimeUnit.SECONDS);
 
-            assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-            assertEquals(FDv2SourceResult.State.GOODBYE, result.getStatus().getState());
+            assertNotNull(result1);
+            assertEquals(FDv2SourceResult.ResultType.STATUS, result1.getResultType());
+            assertEquals(FDv2SourceResult.State.GOODBYE, result1.getStatus().getState());
+
+            // Second result should be a changeset from the restarted stream
+            CompletableFuture<FDv2SourceResult> result2Future = synchronizer.next();
+            FDv2SourceResult result2 = result2Future.get(5, TimeUnit.SECONDS);
+
+            assertNotNull(result2);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result2.getResultType());
+            assertNotNull(result2.getChangeSet());
+
+            // Verify we made 2 requests (initial connection + reconnection after goodbye)
+            assertTrue("Should have made at least 2 requests", server.getRecorder().count() >= 2);
 
             synchronizer.close();
         }
@@ -312,7 +351,9 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     server.getUri(),
                     "/stream",
                     testLogger,
-                    selectorSource
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100)
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -348,7 +389,9 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     server.getUri(),
                     "/stream",
                     testLogger,
-                    selectorSource
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100)
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -402,7 +445,9 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     server.getUri(),
                     "/stream",
                     testLogger,
-                    selectorSource
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100)
             );
 
             // First result should be an error from the 503
@@ -460,7 +505,9 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     server.getUri(),
                     "/stream",
                     testLogger,
-                    selectorSource
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100)
             );
 
             // Error event should be logged but not queued, so we should get the changeset
@@ -496,7 +543,9 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     server.getUri(),
                     "/stream",
                     testLogger,
-                    selectorSource
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100)
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -536,7 +585,9 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     server.getUri(),
                     "/stream",
                     testLogger,
-                    selectorSource
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100)
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -568,7 +619,9 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     server.getUri(),
                     "/stream",
                     testLogger,
-                    selectorSource
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100)
             );
 
             // Call close multiple times - should not throw exceptions
@@ -602,7 +655,9 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     server.getUri(),
                     "/stream",
                     testLogger,
-                    selectorSource
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100)
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -611,6 +666,166 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             assertNotNull(result);
             assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
             assertEquals(FDv2SourceResult.State.INTERRUPTED, result.getStatus().getState());
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void payloadFilterIsAddedToRequest() throws Exception {
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.SSE.start(),
+                Handlers.SSE.event(serverIntent),
+                Handlers.SSE.event(payloadTransferred),
+                Handlers.SSE.leaveOpen()))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    "myFilter",
+                    Duration.ofMillis(100)
+            );
+
+            CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
+            FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+            assertNotNull(result);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+
+            // Verify the request had the filter parameter
+            assertEquals(1, server.getRecorder().count());
+            RequestInfo request = server.getRecorder().requireRequest();
+            assertThat(request.getQuery(), containsString("filter=myFilter"));
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void payloadFilterWithSelectorBothAddedToRequest() throws Exception {
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.SSE.start(),
+                Handlers.SSE.event(serverIntent),
+                Handlers.SSE.event(payloadTransferred),
+                Handlers.SSE.leaveOpen()))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+
+            SelectorSource selectorSource = mock(SelectorSource.class);
+            when(selectorSource.getSelector()).thenReturn(Selector.make(42, "(p:test:42)"));
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    "testFilter",
+                    Duration.ofMillis(100)
+            );
+
+            CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
+            FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+            assertNotNull(result);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+
+            // Verify the request had both filter and selector parameters
+            assertEquals(1, server.getRecorder().count());
+            RequestInfo request = server.getRecorder().requireRequest();
+            assertThat(request.getQuery(), containsString("filter=testFilter"));
+            assertThat(request.getQuery(), containsString("version=42"));
+            assertThat(request.getQuery(), containsString("state="));
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void emptyPayloadFilterNotAddedToRequest() throws Exception {
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.SSE.start(),
+                Handlers.SSE.event(serverIntent),
+                Handlers.SSE.event(payloadTransferred),
+                Handlers.SSE.leaveOpen()))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    "",
+                    Duration.ofMillis(100)
+            );
+
+            CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
+            FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+            assertNotNull(result);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+
+            // Verify the request did not have the filter parameter
+            assertEquals(1, server.getRecorder().count());
+            RequestInfo request = server.getRecorder().requireRequest();
+            assertThat(request.getQuery(), not(containsString("filter")));
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void nullPayloadFilterNotAddedToRequest() throws Exception {
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.SSE.start(),
+                Handlers.SSE.event(serverIntent),
+                Handlers.SSE.event(payloadTransferred),
+                Handlers.SSE.leaveOpen()))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100)
+            );
+
+            CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
+            FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+            assertNotNull(result);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+
+            // Verify the request did not have the filter parameter
+            assertEquals(1, server.getRecorder().count());
+            RequestInfo request = server.getRecorder().requireRequest();
+            assertThat(request.getQuery(), not(containsString("filter")));
 
             synchronizer.close();
         }
