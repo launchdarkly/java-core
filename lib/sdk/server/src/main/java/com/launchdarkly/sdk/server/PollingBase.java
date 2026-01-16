@@ -127,7 +127,6 @@ class PollingBase {
                         FDv2ProtocolHandler.FDv2ActionInternalError internalErrorAction = (FDv2ProtocolHandler.FDv2ActionInternalError) res;
                         DataSourceStatusProvider.ErrorKind kind = DataSourceStatusProvider.ErrorKind.UNKNOWN;
                         switch (internalErrorAction.getErrorType()) {
-
                             case MISSING_PAYLOAD:
                             case JSON_ERROR:
                                 kind = DataSourceStatusProvider.ErrorKind.INVALID_DATA;
