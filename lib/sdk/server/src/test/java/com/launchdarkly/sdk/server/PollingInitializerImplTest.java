@@ -339,7 +339,7 @@ public class PollingInitializerImplTest extends BaseTest {
 
         // Create a response with malformed payload-transferred event. `state->states`.
         // This will trigger JSON_ERROR internal error which maps to INVALID_DATA
-        String malformedPutObjectJson = "{\n" +
+        String malformedPayloadTransferred = "{\n" +
             "  \"events\": [\n" +
             "    {\n" +
             "      \"event\": \"server-intent\",\n" +
@@ -367,7 +367,7 @@ public class PollingInitializerImplTest extends BaseTest {
             "}";
 
         FDv2Requestor.FDv2PayloadResponse response = new FDv2Requestor.FDv2PayloadResponse(
-            com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(malformedPutObjectJson),
+            com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(malformedPayloadTransferred),
             okhttp3.Headers.of()
         );
 

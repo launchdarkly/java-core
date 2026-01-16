@@ -52,7 +52,8 @@ class StreamingSynchronizerImpl implements Synchronizer {
     private final String payloadFilter;
     private final IterableAsyncQueue<FDv2SourceResult> resultQueue = new IterableAsyncQueue<>();
     private final CompletableFuture<FDv2SourceResult> shutdownFuture = new CompletableFuture<>();
-    private final AtomicBoolean closed = new AtomicBoolean(false);
+    private boolean closed = false;
+    private final Object closeLock = new Object();
     private final FDv2ProtocolHandler protocolHandler = new FDv2ProtocolHandler();
     private volatile EventSource eventSource;
     final Duration initialReconnectDelay;
@@ -152,8 +153,10 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 // So we have to assume something is wrong that we can't recover from at this point,
                 // and just let the thread terminate. That's better than having the thread be killed
                 // by an uncaught exception.
-                if (closed.get()) {
-                    return; // ignore any exception that's just a side effect of stopping the EventSource
+                synchronized (closeLock) {
+                    if (closed) {
+                        return;
+                    }
                 }
                 logger.error("Stream thread ended with exception: {}", LogValues.exceptionSummary(e));
                 logger.debug(LogValues.exceptionTrace(e));
@@ -181,29 +184,34 @@ class StreamingSynchronizerImpl implements Synchronizer {
     @Override
     public CompletableFuture<FDv2SourceResult> next() {
         // If we are already closed, don't start the stream.
-        if (!started.getAndSet(true) && !closed.get()) {
-            startStream();
+        synchronized (closeLock) {
+            if (!closed) {
+                if (!started.getAndSet(true)) {
+                    startStream();
+                }
+            }
         }
+
         return CompletableFuture.anyOf(shutdownFuture, resultQueue.take())
                 .thenApply(result -> (FDv2SourceResult) result);
     }
 
     @Override
     public void close() {
-        if (closed.getAndSet(true)) {
-            return; // already shutdown
+        synchronized (closeLock){
+            closed = true;
+
+            // If the synchronizer was never started, then the event source could be null.
+            if (eventSource != null) {
+                try {
+                    eventSource.close();
+                } catch (Exception e) {
+                    logger.debug("Error closing event source during shutdown: {}", LogValues.exceptionSummary(e));
+                }
+            }
         }
 
         shutdownFuture.complete(FDv2SourceResult.shutdown());
-
-        // If the synchronizer was never started, then the event source could be null.
-        if (eventSource != null) {
-            try {
-                eventSource.close();
-            } catch (Exception e) {
-                logger.debug("Error closing event source during shutdown: {}", LogValues.exceptionSummary(e));
-            }
-        }
     }
 
     private boolean handleEvent(StreamEvent event) {
@@ -338,7 +346,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                     "will retry");
 
             if (!recoverable) {
-                resultQueue.put(FDv2SourceResult.terminalError(errorInfo));
+                shutdownFuture.complete(FDv2SourceResult.terminalError(errorInfo));
                 return false;
             } else {
                 // Queue as INTERRUPTED to indicate temporary failure

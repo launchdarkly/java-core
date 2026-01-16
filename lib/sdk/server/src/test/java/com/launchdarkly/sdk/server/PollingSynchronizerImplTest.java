@@ -733,8 +733,8 @@ public class PollingSynchronizerImplTest extends BaseTest {
         when(requestor.Poll(any(Selector.class))).thenAnswer(invocation -> {
             int count = callCount.incrementAndGet();
             if (count == 1) {
-                // First call returns response with malformed put-object which triggers INTERNAL_ERROR (INVALID_DATA)
-                String malformedPutObjectJson = "{\n" +
+                // First call returns response with malformed payload transfer. state->states
+                String malformedPayloadTransferred = "{\n" +
                     "  \"events\": [\n" +
                     "    {\n" +
                     "      \"event\": \"server-intent\",\n" +
@@ -750,7 +750,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
                     "    {\n" +
                     "      \"event\": \"payload-transferred\",\n" +
                     "      \"data\": {\n" +
-                    "        \"state\": \"(p:payload-1:100)\",\n" +
+                    "        \"states\": \"(p:payload-1:100)\",\n" +
                     "        \"version\": 100\n" +
                     "      }\n" +
                     "    },\n" +
@@ -762,7 +762,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
                     "}";
 
                 return CompletableFuture.completedFuture(new FDv2Requestor.FDv2PayloadResponse(
-                    com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(malformedPutObjectJson),
+                    com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(malformedPayloadTransferred),
                     okhttp3.Headers.of()
                 ));
             } else {
