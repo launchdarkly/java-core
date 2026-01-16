@@ -11,7 +11,7 @@ import java.util.concurrent.CompletableFuture;
 //     RUNNING --> TERMINAL_ERROR
 //     TERMINAL_ERROR --> [*]
 //     RUNNING --> GOODBYE
-//     GOODBYE --> [*]
+//     GOODBYE --> RUNNING
 //     RUNNING --> CHANGE_SET
 //     CHANGE_SET --> RUNNING
 //     RUNNING --> INTERRUPTED
@@ -34,17 +34,17 @@ import java.util.concurrent.CompletableFuture;
  *     ┌─►│   RUNNING   │──┐
  *     │  └─────────────┘  │
  *     │   │   │   │   │   │
- *     │   │   │   │   │   └──► SHUTDOWN ───► [END]
+ *     │   │   │   │   │   └──► SHUTDOWN ───────────► [END]
  *     │   │   │   │   │
- *     │   │   │   │   └──────► TERMINAL_ERROR ───► [END]
+ *     │   │   │   │   └──────► TERMINAL_ERROR ─────► [END]
  *     │   │   │   │
- *     │   │   │   └──────────► GOODBYE ───► [END]
- *     │   │   │
- *     │   │   └──────────────► CHANGE_SET ───┐
- *     │   │                                  │
- *     │   └──────────────────► INTERRUPTED ──┤
- *     │                                      │
- *     └──────────────────────────────────────┘
+ *     │   │   │   └──────────► GOODBYE ────────────┐
+ *     │   │   │                                    │
+ *     │   │   └──────────────► CHANGE_SET ─────────┤
+ *     │   │                                        │
+ *     │   └──────────────────► INTERRUPTED ────────┤
+ *     │                                            │
+ *     └────────────────────────────────────────────┘
  */
 public interface Synchronizer extends Closeable {
     /**
@@ -53,7 +53,7 @@ public interface Synchronizer extends Closeable {
      * This method is intended to be driven by a single thread, and for there to be a single outstanding call
      * at any given time.
      * <p>
-     *  Once SHUTDOWN, TERMINAL_ERROR, or GOODBYE has been produced, then no further calls to next() should be made.
+     *  Once SHUTDOWN or TERMINAL_ERROR, has been produced, then no further calls to next() should be made.
      * @return a future that will complete when the next result is available
      */
     CompletableFuture<FDv2SourceResult> next();
