@@ -3,14 +3,11 @@ package com.launchdarkly.sdk.server.integrations;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.internal.events.DiagnosticConfigProperty;
 import com.launchdarkly.sdk.server.StandardEndpoints;
-import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.interfaces.ServiceEndpoints;
 import com.launchdarkly.sdk.server.subsystems.ClientContext;
-import com.launchdarkly.sdk.server.subsystems.ComponentConfigurer;
 import com.launchdarkly.sdk.server.subsystems.DiagnosticDescription;
+import com.launchdarkly.sdk.server.subsystems.InitializerBuilder;
 
-import java.net.URI;
-import java.time.Duration;
 
 /**
  * Contains methods for configuring the polling initializer.
@@ -31,43 +28,8 @@ import java.time.Duration;
  *             .fDv1FallbackSynchronizer(DataSystemComponents.fDv1Polling()));
  * </code></pre>
  */
-public final class FDv2PollingInitializerBuilder implements ComponentConfigurer<Initializer>, DiagnosticDescription {
-  /**
-   * The default value for {@link #pollInterval(Duration)}: 30 seconds.
-   */
-  public static final Duration DEFAULT_POLL_INTERVAL = Duration.ofSeconds(30);
-
-  Duration pollInterval = DEFAULT_POLL_INTERVAL;
-
-  private ServiceEndpoints serviceEndpointsOverride;
-
-  /**
-   * Sets the interval at which the SDK will poll for feature flag updates.
-   * <p>
-   * The default and minimum value is {@link #DEFAULT_POLL_INTERVAL}. Values less than this will
-   * be set to the default.
-   * </p>
-   *
-   * @param pollInterval the polling interval
-   * @return the builder
-   */
-  public FDv2PollingInitializerBuilder pollInterval(Duration pollInterval) {
-    this.pollInterval = pollInterval != null && pollInterval.compareTo(DEFAULT_POLL_INTERVAL) >= 0
-        ? pollInterval
-        : DEFAULT_POLL_INTERVAL;
-    return this;
-  }
-
-  /**
-   * Exposed internally for testing.
-   *
-   * @param pollInterval the polling interval
-   * @return the builder
-   */
-  FDv2PollingInitializerBuilder pollIntervalNoMinimum(Duration pollInterval) {
-    this.pollInterval = pollInterval;
-    return this;
-  }
+public abstract class FDv2PollingInitializerBuilder implements InitializerBuilder, DiagnosticDescription {
+  protected ServiceEndpoints serviceEndpointsOverride;
 
   /**
    * Sets overrides for the service endpoints. In typical usage, the initializer will use the commonly defined
@@ -83,44 +45,18 @@ public final class FDv2PollingInitializerBuilder implements ComponentConfigurer<
   }
 
   @Override
-  public Initializer build(ClientContext context) {
-    ServiceEndpoints endpoints = serviceEndpointsOverride != null
-        ? serviceEndpointsOverride
-        : context.getServiceEndpoints();
-    URI configuredBaseUri = StandardEndpoints.selectBaseUri(
-        endpoints.getPollingBaseUri(),
-        StandardEndpoints.DEFAULT_POLLING_BASE_URI,
-        "Polling",
-        context.getBaseLogger());
-
-    // TODO: Implement FDv2Requestor
-    // var requestor = new FDv2RequestorImpl(context, configuredBaseUri);
-
-    // TODO: Implement PollingInitializer with FDv2Requestor
-    // return new PollingInitializerImpl(
-    //     requestor,
-    //     context.getBaseLogger(),
-    //     context.getSelectorSource()
-    // );
-
-    // Placeholder - this will not compile until FDv2Requestor is implemented
-    throw new UnsupportedOperationException("FDv2Requestor is not yet implemented");
-  }
-
-  @Override
   public LDValue describeConfiguration(ClientContext context) {
     ServiceEndpoints endpoints = serviceEndpointsOverride != null
-        ? serviceEndpointsOverride
-        : context.getServiceEndpoints();
+            ? serviceEndpointsOverride
+            : context.getServiceEndpoints();
 
     boolean customPollingBaseUri = StandardEndpoints.isCustomBaseUri(
-        endpoints.getPollingBaseUri(), StandardEndpoints.DEFAULT_POLLING_BASE_URI);
+            endpoints.getPollingBaseUri(), StandardEndpoints.DEFAULT_POLLING_BASE_URI);
 
     return LDValue.buildObject()
-        .put(DiagnosticConfigProperty.STREAMING_DISABLED.name, true)
-        .put(DiagnosticConfigProperty.CUSTOM_BASE_URI.name, customPollingBaseUri)
-        .put(DiagnosticConfigProperty.POLLING_INTERVAL_MILLIS.name, pollInterval.toMillis())
-        .put(DiagnosticConfigProperty.USING_RELAY_DAEMON.name, false)
-        .build();
+            .put(DiagnosticConfigProperty.STREAMING_DISABLED.name, true)
+            .put(DiagnosticConfigProperty.CUSTOM_BASE_URI.name, customPollingBaseUri)
+            .put(DiagnosticConfigProperty.USING_RELAY_DAEMON.name, false)
+            .build();
   }
 }

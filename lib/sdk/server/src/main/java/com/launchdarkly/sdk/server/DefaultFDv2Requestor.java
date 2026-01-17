@@ -31,8 +31,7 @@ import java.util.concurrent.CompletableFuture;
  * Implementation of FDv2Requestor for polling feature flag data via FDv2 protocol.
  */
 public class DefaultFDv2Requestor implements FDv2Requestor, Closeable {
-    private static final String VERSION_QUERY_PARAM = "version";
-    private static final String STATE_QUERY_PARAM = "state";
+    private static final String BASIS_QUERY_PARAM = "version";
 
     private final OkHttpClient httpClient;
     private final URI pollingUri;
@@ -67,11 +66,7 @@ public class DefaultFDv2Requestor implements FDv2Requestor, Closeable {
             URI requestUri = pollingUri;
 
             if (!selector.isEmpty()) {
-                requestUri = HttpHelpers.addQueryParam(requestUri, VERSION_QUERY_PARAM, String.valueOf(selector.getVersion()));
-            }
-
-            if (selector.getState() != null && !selector.getState().isEmpty()) {
-                requestUri = HttpHelpers.addQueryParam(requestUri, STATE_QUERY_PARAM, selector.getState());
+                requestUri = HttpHelpers.addQueryParam(requestUri, BASIS_QUERY_PARAM, selector.getState());
             }
 
             logger.debug("Making FDv2 polling request to: {}", requestUri);

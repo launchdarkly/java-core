@@ -1,7 +1,6 @@
 package com.launchdarkly.sdk.server;
 
 import com.launchdarkly.sdk.server.integrations.DataSystemBuilder;
-import com.launchdarkly.sdk.server.integrations.DataSystemComponents;
 import com.launchdarkly.sdk.server.integrations.DataSystemModes;
 import com.launchdarkly.sdk.server.integrations.FDv2PollingInitializerBuilder;
 import com.launchdarkly.sdk.server.integrations.FDv2PollingSynchronizerBuilder;
@@ -213,14 +212,12 @@ public class ConfigurationTest {
     DataSystemModes modes = new DataSystemModes();
     DataSystemBuilder builder = modes.custom()
         .synchronizers(DataSystemComponents.pollingSynchronizer())
-        .synchronizers(DataSystemComponents.streamingSynchronizer())
-        .synchronizers(DataSystemComponents.fDv1Polling());
+        .synchronizers(DataSystemComponents.streamingSynchronizer());
 
     DataSystemConfiguration dataSystemConfig = builder.build();
-    assertEquals(3, dataSystemConfig.getSynchronizers().size());
+    assertEquals(2, dataSystemConfig.getSynchronizers().size());
     assertTrue(dataSystemConfig.getSynchronizers().get(0) instanceof FDv2PollingSynchronizerBuilder);
     assertTrue(dataSystemConfig.getSynchronizers().get(1) instanceof FDv2StreamingSynchronizerBuilder);
-    assertTrue(dataSystemConfig.getSynchronizers().get(2) instanceof PollingDataSourceBuilder);
   }
 
   @Test

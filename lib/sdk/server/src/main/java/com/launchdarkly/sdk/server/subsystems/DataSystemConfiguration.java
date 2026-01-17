@@ -37,9 +37,9 @@ public final class DataSystemConfiguration {
     READ_WRITE
   }
 
-  private final ImmutableList<ComponentConfigurer<Initializer>> initializers;
-  private final ImmutableList<ComponentConfigurer<Synchronizer>> synchronizers;
-  private final ComponentConfigurer<Synchronizer> fDv1FallbackSynchronizer;
+  private final ImmutableList<InitializerBuilder> initializers;
+  private final ImmutableList<SynchronizerBuilder> synchronizers;
+  private final ComponentConfigurer<DataSource> fDv1FallbackSynchronizer;
   private final ComponentConfigurer<DataStore> persistentStore;
   private final DataStoreMode persistentDataStoreMode;
 
@@ -56,9 +56,9 @@ public final class DataSystemConfiguration {
    * @param persistentDataStoreMode see {@link #getPersistentDataStoreMode()}
    */
   public DataSystemConfiguration(
-      ImmutableList<ComponentConfigurer<Initializer>> initializers,
-      ImmutableList<ComponentConfigurer<Synchronizer>> synchronizers,
-      ComponentConfigurer<Synchronizer> fDv1FallbackSynchronizer,
+      ImmutableList<InitializerBuilder> initializers,
+      ImmutableList<SynchronizerBuilder> synchronizers,
+      ComponentConfigurer<DataSource> fDv1FallbackSynchronizer,
       ComponentConfigurer<DataStore> persistentStore,
       DataStoreMode persistentDataStoreMode) {
     this.initializers = initializers;
@@ -73,7 +73,7 @@ public final class DataSystemConfiguration {
    *
    * @return the list of initializer configurers
    */
-  public ImmutableList<ComponentConfigurer<Initializer>> getInitializers() {
+  public ImmutableList<InitializerBuilder> getInitializers() {
     return initializers;
   }
 
@@ -82,7 +82,7 @@ public final class DataSystemConfiguration {
    *
    * @return the list of synchronizer configurers
    */
-  public ImmutableList<ComponentConfigurer<Synchronizer>> getSynchronizers() {
+  public ImmutableList<SynchronizerBuilder> getSynchronizers() {
     return synchronizers;
   }
 
@@ -91,7 +91,7 @@ public final class DataSystemConfiguration {
    *
    * @return the FDv1 fallback synchronizer configurer, or null
    */
-  public ComponentConfigurer<Synchronizer> getFDv1FallbackSynchronizer() {
+  public ComponentConfigurer<DataSource> getFDv1FallbackSynchronizer() {
     return fDv1FallbackSynchronizer;
   }
 
@@ -100,7 +100,7 @@ public final class DataSystemConfiguration {
    * null.
    * <p>
    * The persistent store itself will implement {@link PersistentDataStore}, but we expect that to be wrapped by a factory which can
-   * operates at the {@link DataStore} level.
+   * operate at the {@link DataStore} level.
    * </p>
    * 
    * @return the persistent store configurer, or null

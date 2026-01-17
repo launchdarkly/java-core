@@ -1,14 +1,19 @@
 package com.launchdarkly.sdk.server;
 
+import com.google.common.collect.ImmutableList;
 import com.launchdarkly.logging.LDLogger;
+import com.launchdarkly.sdk.server.datasources.Initializer;
+import com.launchdarkly.sdk.server.datasources.SelectorSource;
+import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider;
-import com.launchdarkly.sdk.server.subsystems.DataSource;
-import com.launchdarkly.sdk.server.subsystems.DataStore;
-import com.launchdarkly.sdk.server.subsystems.LoggingConfiguration;
+import com.launchdarkly.sdk.server.interfaces.FlagChangeEvent;
+import com.launchdarkly.sdk.server.interfaces.FlagChangeListener;
+import com.launchdarkly.sdk.server.subsystems.*;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.LinkedList;
 import java.util.concurrent.Future;
 
 /**
@@ -28,11 +33,11 @@ final class FDv2DataSystem implements DataSystem, Closeable {
   private boolean disposed = false;
 
   private FDv2DataSystem(
-      DataStore store,
-      DataSource dataSource,
-      DataSourceStatusProvider dataSourceStatusProvider,
-      DataStoreStatusProvider dataStoreStatusProvider,
-      FlagChangeNotifier flagChanged
+    DataStore store,
+    DataSource dataSource,
+    DataSourceStatusProvider dataSourceStatusProvider,
+    DataStoreStatusProvider dataStoreStatusProvider,
+    FlagChangeNotifier flagChanged
   ) {
     this.store = store;
     this.dataSource = dataSource;
@@ -42,31 +47,117 @@ final class FDv2DataSystem implements DataSystem, Closeable {
     this.readOnlyStore = new ReadonlyStoreFacade(store);
   }
 
+  private static class SynchronizerFactoryWrapper implements FDv2DataSource.SynchronizerFactory {
+
+    private final SynchronizerBuilder builder;
+    private final ClientContext context;
+    private final SelectorSource selectorSource;
+
+    public SynchronizerFactoryWrapper(SynchronizerBuilder builder, ClientContext context, SelectorSource selectorSource) {
+      this.builder = builder;
+      this.context = context;
+      this.selectorSource = selectorSource;
+    }
+
+    @Override
+    public Synchronizer build() {
+      return builder.build(context, selectorSource);
+    }
+  }
+
+  private static class InitializerFactoryWrapper implements FDv2DataSource.InitializerFactory {
+
+    private final InitializerBuilder builder;
+    private final ClientContext context;
+    private final SelectorSource selectorSource;
+
+    public InitializerFactoryWrapper(InitializerBuilder builder, ClientContext context, SelectorSource selectorSource) {
+      this.builder = builder;
+      this.context = context;
+      this.selectorSource = selectorSource;
+    }
+
+    @Override
+    public Initializer build() {
+      return builder.build(context, selectorSource);
+    }
+  }
+
   /**
    * Creates a new FDv2DataSystem instance.
    * <p>
    * This is a placeholder implementation. Not all dependencies are yet implemented.
    *
-   * @param logger the logger
-   * @param config the SDK configuration
+   * @param logger        the logger
+   * @param config        the SDK configuration
    * @param clientContext the client context
-   * @param logConfig the logging configuration
+   * @param logConfig     the logging configuration
    * @return a new FDv2DataSystem instance
    * @throws UnsupportedOperationException since this is not yet fully implemented
    */
   static FDv2DataSystem create(
-      LDLogger logger,
-      LDConfig config,
-      ClientContextImpl clientContext,
-      LoggingConfiguration logConfig
+    LDLogger logger,
+    LDConfig config,
+    ClientContextImpl clientContext,
+    LoggingConfiguration logConfig
   ) {
     if (config.dataSystem == null) {
       throw new IllegalArgumentException("DataSystem configuration is required for FDv2DataSystem");
     }
-    
-    // TODO: Implement FDv2DataSystem once all dependencies are available
-    
-    throw new UnsupportedOperationException("FDv2DataSystem is not yet fully implemented");
+    DataStoreUpdatesImpl dataStoreUpdates = new DataStoreUpdatesImpl(
+      EventBroadcasterImpl.forDataStoreStatus(clientContext.sharedExecutor, logger));
+
+    InMemoryDataStore store = new InMemoryDataStore();
+
+    DataStoreStatusProvider dataStoreStatusProvider = new DataStoreStatusProviderImpl(store, dataStoreUpdates);
+
+    // Create a single flag change broadcaster to be shared between DataSourceUpdatesImpl and FlagTrackerImpl
+    EventBroadcasterImpl<FlagChangeListener, FlagChangeEvent> flagChangeBroadcaster =
+      EventBroadcasterImpl.forFlagChangeEvents(clientContext.sharedExecutor, logger);
+
+    // Create a single data source status broadcaster to be shared between DataSourceUpdatesImpl and DataSourceStatusProviderImpl
+    EventBroadcasterImpl<DataSourceStatusProvider.StatusListener, DataSourceStatusProvider.Status> dataSourceStatusBroadcaster =
+      EventBroadcasterImpl.forDataSourceStatus(clientContext.sharedExecutor, logger);
+
+    DataSourceUpdatesImpl dataSourceUpdates = new DataSourceUpdatesImpl(
+      store,
+      dataStoreStatusProvider,
+      flagChangeBroadcaster,
+      dataSourceStatusBroadcaster,
+      clientContext.sharedExecutor,
+      logConfig.getLogDataSourceOutageAsErrorAfter(),
+      logger
+    );
+
+    DataSystemConfiguration dataSystemConfiguration = config.dataSystem.build();
+    SelectorSource selectorSource = new SelectorSourceFacade(store);
+
+    ImmutableList<FDv2DataSource.InitializerFactory> initializerFactories = dataSystemConfiguration.getInitializers().stream()
+      .map(initializer -> new InitializerFactoryWrapper(initializer, clientContext, selectorSource))
+      .collect(ImmutableList.toImmutableList());
+
+    ImmutableList<FDv2DataSource.SynchronizerFactory> synchronizerFactories = dataSystemConfiguration.getSynchronizers().stream()
+      .map(synchronizer -> new SynchronizerFactoryWrapper(synchronizer, clientContext, selectorSource))
+      .collect(ImmutableList.toImmutableList());
+
+    DataSource dataSource = new FDv2DataSource(
+      initializerFactories,
+      synchronizerFactories,
+      dataSourceUpdates
+    );
+    DataSourceStatusProvider dataSourceStatusProvider = new DataSourceStatusProviderImpl(
+      dataSourceStatusBroadcaster,
+      dataSourceUpdates);
+
+    FlagChangeNotifier flagChanged = new FlagChangedFacade(dataSourceUpdates);
+
+    return new FDv2DataSystem(
+      store,
+      dataSource,
+      dataSourceStatusProvider,
+      dataStoreStatusProvider,
+      flagChanged
+    );
   }
 
   @Override
@@ -76,8 +167,7 @@ final class FDv2DataSystem implements DataSystem, Closeable {
 
   @Override
   public Future<Void> start() {
-    // TODO: Implement FDv2DataSystem.start() once all dependencies are available
-    throw new UnsupportedOperationException("FDv2DataSystem.start() is not yet implemented");
+    return dataSource.start();
   }
 
   @Override

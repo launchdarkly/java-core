@@ -8,6 +8,7 @@ import com.launchdarkly.sdk.server.interfaces.ServiceEndpoints;
 import com.launchdarkly.sdk.server.subsystems.ClientContext;
 import com.launchdarkly.sdk.server.subsystems.ComponentConfigurer;
 import com.launchdarkly.sdk.server.subsystems.DiagnosticDescription;
+import com.launchdarkly.sdk.server.subsystems.SynchronizerBuilder;
 
 import java.net.URI;
 import java.time.Duration;
@@ -31,15 +32,15 @@ import java.time.Duration;
  *             .fDv1FallbackSynchronizer(DataSystemComponents.fDv1Polling()));
  * </code></pre>
  */
-public final class FDv2StreamingSynchronizerBuilder implements ComponentConfigurer<Synchronizer>, DiagnosticDescription {
+public abstract class FDv2StreamingSynchronizerBuilder implements SynchronizerBuilder, DiagnosticDescription {
   /**
    * The default value for {@link #initialReconnectDelay(Duration)}: 1000 milliseconds.
    */
   public static final Duration DEFAULT_INITIAL_RECONNECT_DELAY = Duration.ofSeconds(1);
 
-  private Duration initialReconnectDelay = DEFAULT_INITIAL_RECONNECT_DELAY;
+  protected Duration initialReconnectDelay = DEFAULT_INITIAL_RECONNECT_DELAY;
 
-  private ServiceEndpoints serviceEndpointsOverride;
+  protected ServiceEndpoints serviceEndpointsOverride;
 
   /**
    * Sets the initial reconnect delay for the streaming connection.
@@ -71,30 +72,6 @@ public final class FDv2StreamingSynchronizerBuilder implements ComponentConfigur
   public FDv2StreamingSynchronizerBuilder serviceEndpointsOverride(ServiceEndpointsBuilder serviceEndpointsOverride) {
     this.serviceEndpointsOverride = serviceEndpointsOverride.createServiceEndpoints();
     return this;
-  }
-
-  @Override
-  public Synchronizer build(ClientContext context) {
-    ServiceEndpoints endpoints = serviceEndpointsOverride != null
-        ? serviceEndpointsOverride
-        : context.getServiceEndpoints();
-    URI configuredBaseUri = StandardEndpoints.selectBaseUri(
-        endpoints.getStreamingBaseUri(),
-        StandardEndpoints.DEFAULT_STREAMING_BASE_URI,
-        "Streaming",
-        context.getBaseLogger());
-
-    // TODO: Implement FDv2StreamingSynchronizer
-    // return new StreamingSynchronizerImpl(
-    //     context.getHttp(),
-    //     configuredBaseUri,
-    //     StandardEndpoints.FDV2_STREAMING_REQUEST_PATH,
-    //     context.getBaseLogger(),
-    //     context.getSelectorSource()
-    // );
-
-    // Placeholder - this will not compile until FDv2StreamingSynchronizer is fully integrated
-    throw new UnsupportedOperationException("FDv2StreamingSynchronizer is not yet implemented");
   }
 
   @Override

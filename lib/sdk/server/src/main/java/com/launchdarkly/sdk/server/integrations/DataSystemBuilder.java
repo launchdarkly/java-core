@@ -3,10 +3,7 @@ package com.launchdarkly.sdk.server.integrations;
 import com.google.common.collect.ImmutableList;
 import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
-import com.launchdarkly.sdk.server.subsystems.ComponentConfigurer;
-import com.launchdarkly.sdk.server.subsystems.DataSource;
-import com.launchdarkly.sdk.server.subsystems.DataStore;
-import com.launchdarkly.sdk.server.subsystems.DataSystemConfiguration;
+import com.launchdarkly.sdk.server.subsystems.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,22 +17,22 @@ import java.util.List;
  */
 public final class DataSystemBuilder {
 
-  private final List<ComponentConfigurer<Initializer>> initializers = new ArrayList<>();
-  private final List<ComponentConfigurer<Synchronizer>> synchronizers = new ArrayList<>();
-  private ComponentConfigurer<Synchronizer> fDv1FallbackSynchronizer;
+  private final List<InitializerBuilder> initializers = new ArrayList<>();
+  private final List<SynchronizerBuilder> synchronizers = new ArrayList<>();
+  private ComponentConfigurer<DataSource> fDv1FallbackSynchronizer;
   private ComponentConfigurer<DataStore> persistentStore;
   private DataSystemConfiguration.DataStoreMode persistentDataStoreMode;
 
   /**
    * Add one or more initializers to the builder.
-   * To replace initializers, please refer to {@link #replaceInitializers(ComponentConfigurer[])}.
+   * To replace initializers, please refer to {@link #replaceInitializers(InitializerBuilder[])}.
    *
    * @param initializers the initializers to add
    * @return a reference to the builder
    */
   @SafeVarargs
-  public final DataSystemBuilder initializers(ComponentConfigurer<Initializer>... initializers) {
-    for (ComponentConfigurer<Initializer> initializer : initializers) {
+  public final DataSystemBuilder initializers(InitializerBuilder... initializers) {
+    for (InitializerBuilder initializer : initializers) {
       this.initializers.add(initializer);
     }
     return this;
@@ -43,15 +40,15 @@ public final class DataSystemBuilder {
 
   /**
    * Replaces any existing initializers with the given initializers.
-   * To add initializers, please refer to {@link #initializers(ComponentConfigurer[])}.
+   * To add initializers, please refer to {@link #initializers(InitializerBuilder[])}.
    *
    * @param initializers the initializers to replace the current initializers with
    * @return a reference to this builder
    */
   @SafeVarargs
-  public final DataSystemBuilder replaceInitializers(ComponentConfigurer<Initializer>... initializers) {
+  public final DataSystemBuilder replaceInitializers(InitializerBuilder... initializers) {
     this.initializers.clear();
-    for (ComponentConfigurer<Initializer> initializer : initializers) {
+    for (InitializerBuilder initializer : initializers) {
       this.initializers.add(initializer);
     }
     return this;
@@ -59,14 +56,14 @@ public final class DataSystemBuilder {
 
   /**
    * Add one or more synchronizers to the builder.
-   * To replace synchronizers, please refer to {@link #replaceSynchronizers(ComponentConfigurer[])}.
+   * To replace synchronizers, please refer to {@link #replaceSynchronizers(SynchronizerBuilder[])}.
    *
    * @param synchronizers the synchronizers to add
    * @return a reference to the builder
    */
   @SafeVarargs
-  public final DataSystemBuilder synchronizers(ComponentConfigurer<Synchronizer>... synchronizers) {
-    for (ComponentConfigurer<Synchronizer> synchronizer : synchronizers) {
+  public final DataSystemBuilder synchronizers(SynchronizerBuilder... synchronizers) {
+    for (SynchronizerBuilder synchronizer : synchronizers) {
       this.synchronizers.add(synchronizer);
     }
     return this;
@@ -74,15 +71,15 @@ public final class DataSystemBuilder {
 
   /**
    * Replaces any existing synchronizers with the given synchronizers.
-   * To add synchronizers, please refer to {@link #synchronizers(ComponentConfigurer[])}.
+   * To add synchronizers, please refer to {@link #synchronizers(SynchronizerBuilder[])}.
    *
    * @param synchronizers the synchronizers to replace the current synchronizers with
    * @return a reference to this builder
    */
   @SafeVarargs
-  public final DataSystemBuilder replaceSynchronizers(ComponentConfigurer<Synchronizer>... synchronizers) {
+  public final DataSystemBuilder replaceSynchronizers(SynchronizerBuilder... synchronizers) {
     this.synchronizers.clear();
-    for (ComponentConfigurer<Synchronizer> synchronizer : synchronizers) {
+    for (SynchronizerBuilder synchronizer : synchronizers) {
       this.synchronizers.add(synchronizer);
     }
     return this;
@@ -101,7 +98,7 @@ public final class DataSystemBuilder {
   public DataSystemBuilder fDv1FallbackSynchronizer(ComponentConfigurer<DataSource> fDv1FallbackSynchronizer) {
     // Legacy DataSource configurers are used for FDv1 backward compatibility
     // This is safe because DataSource is only used in the fallback context
-    this.fDv1FallbackSynchronizer = (ComponentConfigurer<Synchronizer>) (ComponentConfigurer<?>) fDv1FallbackSynchronizer;
+    this.fDv1FallbackSynchronizer = fDv1FallbackSynchronizer;
     return this;
   }
 
