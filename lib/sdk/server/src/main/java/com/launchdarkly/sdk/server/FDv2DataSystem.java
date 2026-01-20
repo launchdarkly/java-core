@@ -86,10 +86,10 @@ final class FDv2DataSystem implements DataSystem, Closeable {
    * <p>
    * This is a placeholder implementation. Not all dependencies are yet implemented.
    *
-   * @param logger        the logger
-   * @param config        the SDK configuration
+   * @param logger the logger
+   * @param config the SDK configuration
    * @param clientContext the client context
-   * @param logConfig     the logging configuration
+   * @param logConfig the logging configuration
    * @return a new FDv2DataSystem instance
    * @throws UnsupportedOperationException since this is not yet fully implemented
    */
