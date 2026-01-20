@@ -403,11 +403,9 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             // Verify selector was fetched when connecting
             verify(selectorSource, atLeastOnce()).getSelector();
 
-            // Verify the request had the correct query parameters
             assertEquals(1, server.getRecorder().count());
             RequestInfo request = server.getRecorder().requireRequest();
-            assertThat(request.getQuery(), containsString("version=50"));
-            assertThat(request.getQuery(), containsString("state="));
+            assertThat(request.getQuery(), containsString("basis=%28p%3Aold%3A50%29"));
 
             synchronizer.close();
         }
@@ -536,7 +534,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
 
             SelectorSource selectorSource = mock(SelectorSource.class);
-            when(selectorSource.getSelector()).thenReturn(Selector.make(75, null));
+            when(selectorSource.getSelector()).thenReturn(Selector.make(75, "(p:test:75)"));
 
             StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
                     httpProperties,
@@ -554,11 +552,9 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             assertNotNull(result);
             assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
 
-            // Verify the request had version but not state parameter
             assertEquals(1, server.getRecorder().count());
             RequestInfo request = server.getRecorder().requireRequest();
-            assertThat(request.getQuery(), containsString("version=75"));
-            // State should not be present (or if present, not have an actual state value)
+            assertThat(request.getQuery(), containsString("basis=%28p%3Atest%3A75%29"));
 
             synchronizer.close();
         }
@@ -578,7 +574,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
 
             SelectorSource selectorSource = mock(SelectorSource.class);
-            when(selectorSource.getSelector()).thenReturn(Selector.make(80, ""));
+            when(selectorSource.getSelector()).thenReturn(Selector.make(80, "(p:empty-test:80)"));
 
             StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
                     httpProperties,
@@ -596,10 +592,9 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             assertNotNull(result);
             assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
 
-            // Verify the request had version but not state parameter (empty string shouldn't add state)
             assertEquals(1, server.getRecorder().count());
             RequestInfo request = server.getRecorder().requireRequest();
-            assertThat(request.getQuery(), containsString("version=80"));
+            assertThat(request.getQuery(), containsString("basis=%28p%3Aempty-test%3A80%29"));
 
             synchronizer.close();
         }
@@ -742,12 +737,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             assertNotNull(result);
             assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
 
-            // Verify the request had both filter and selector parameters
             assertEquals(1, server.getRecorder().count());
             RequestInfo request = server.getRecorder().requireRequest();
             assertThat(request.getQuery(), containsString("filter=testFilter"));
-            assertThat(request.getQuery(), containsString("version=42"));
-            assertThat(request.getQuery(), containsString("state="));
+            assertThat(request.getQuery(), containsString("basis=%28p%3Atest%3A42%29"));
 
             synchronizer.close();
         }
