@@ -6,7 +6,6 @@ import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
-import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSinkV2;
 
 import java.io.Closeable;
@@ -20,7 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 class FDv2DataSource implements DataSource {
-    private final List<InitializerFactory> initializers;
+    private final List<DataSourceFactory<Initializer>> initializers;
     private final List<SynchronizerFactoryWithState> synchronizers;
 
     private final DataSourceUpdateSinkV2 dataSourceUpdates;
@@ -48,12 +47,12 @@ class FDv2DataSource implements DataSource {
             Blocked
         }
 
-        private final SynchronizerFactory factory;
+        private final DataSourceFactory<Synchronizer> factory;
 
         private State state = State.Available;
 
 
-        public SynchronizerFactoryWithState(SynchronizerFactory factory) {
+        public SynchronizerFactoryWithState(DataSourceFactory<Synchronizer> factory) {
             this.factory = factory;
         }
 
@@ -70,18 +69,14 @@ class FDv2DataSource implements DataSource {
         }
     }
 
-    public interface InitializerFactory {
-        Initializer build();
-    }
-
-    public interface SynchronizerFactory {
-        Synchronizer build();
+    public interface DataSourceFactory<T> {
+        T build();
     }
 
 
     public FDv2DataSource(
-            ImmutableList<InitializerFactory> initializers,
-            ImmutableList<SynchronizerFactory> synchronizers,
+            ImmutableList<DataSourceFactory<Initializer>> initializers,
+            ImmutableList<DataSourceFactory<Synchronizer>> synchronizers,
             DataSourceUpdateSinkV2 dataSourceUpdates
     ) {
         this.initializers = initializers;
@@ -120,7 +115,7 @@ class FDv2DataSource implements DataSource {
 
     private void runInitializers() {
         boolean anyDataReceived = false;
-        for (InitializerFactory factory : initializers) {
+        for (DataSourceFactory<Initializer> factory : initializers) {
             try {
                 Initializer initializer = factory.build();
                 if (setActiveSource(initializer)) return;

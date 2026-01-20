@@ -3,10 +3,11 @@ package com.launchdarkly.sdk.server.integrations;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.internal.events.DiagnosticConfigProperty;
 import com.launchdarkly.sdk.server.StandardEndpoints;
+import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.interfaces.ServiceEndpoints;
 import com.launchdarkly.sdk.server.subsystems.ClientContext;
+import com.launchdarkly.sdk.server.subsystems.DataSourceBuilder;
 import com.launchdarkly.sdk.server.subsystems.DiagnosticDescription;
-import com.launchdarkly.sdk.server.subsystems.InitializerBuilder;
 
 
 /**
@@ -28,7 +29,7 @@ import com.launchdarkly.sdk.server.subsystems.InitializerBuilder;
  *             .fDv1FallbackSynchronizer(DataSystemComponents.fDv1Polling()));
  * </code></pre>
  */
-public abstract class FDv2PollingInitializerBuilder implements InitializerBuilder, DiagnosticDescription {
+public abstract class FDv2PollingInitializerBuilder implements DataSourceBuilder<Initializer>, DiagnosticDescription {
   protected ServiceEndpoints serviceEndpointsOverride;
 
   /**

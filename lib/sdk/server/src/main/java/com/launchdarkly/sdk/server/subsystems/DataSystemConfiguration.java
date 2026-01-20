@@ -37,8 +37,8 @@ public final class DataSystemConfiguration {
     READ_WRITE
   }
 
-  private final ImmutableList<InitializerBuilder> initializers;
-  private final ImmutableList<SynchronizerBuilder> synchronizers;
+  private final ImmutableList<DataSourceBuilder<Initializer>> initializers;
+  private final ImmutableList<DataSourceBuilder<Synchronizer>> synchronizers;
   private final ComponentConfigurer<DataSource> fDv1FallbackSynchronizer;
   private final ComponentConfigurer<DataStore> persistentStore;
   private final DataStoreMode persistentDataStoreMode;
@@ -56,8 +56,8 @@ public final class DataSystemConfiguration {
    * @param persistentDataStoreMode see {@link #getPersistentDataStoreMode()}
    */
   public DataSystemConfiguration(
-      ImmutableList<InitializerBuilder> initializers,
-      ImmutableList<SynchronizerBuilder> synchronizers,
+      ImmutableList<DataSourceBuilder<Initializer>> initializers,
+      ImmutableList<DataSourceBuilder<Synchronizer>> synchronizers,
       ComponentConfigurer<DataSource> fDv1FallbackSynchronizer,
       ComponentConfigurer<DataStore> persistentStore,
       DataStoreMode persistentDataStoreMode) {
@@ -73,7 +73,7 @@ public final class DataSystemConfiguration {
    *
    * @return the list of initializer configurers
    */
-  public ImmutableList<InitializerBuilder> getInitializers() {
+  public ImmutableList<DataSourceBuilder<Initializer>> getInitializers() {
     return initializers;
   }
 
@@ -82,7 +82,7 @@ public final class DataSystemConfiguration {
    *
    * @return the list of synchronizer configurers
    */
-  public ImmutableList<SynchronizerBuilder> getSynchronizers() {
+  public ImmutableList<DataSourceBuilder<Synchronizer>> getSynchronizers() {
     return synchronizers;
   }
 

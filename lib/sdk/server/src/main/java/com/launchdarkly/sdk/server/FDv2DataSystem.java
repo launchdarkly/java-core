@@ -13,10 +13,7 @@ import com.launchdarkly.sdk.server.subsystems.*;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.util.LinkedList;
 import java.util.concurrent.Future;
-
-import static com.launchdarkly.sdk.server.ComponentsImpl.toHttpProperties;
 
 /**
  * Internal implementation of the FDv2 data system.
@@ -49,34 +46,18 @@ final class FDv2DataSystem implements DataSystem, Closeable {
     this.readOnlyStore = new ReadonlyStoreFacade(store);
   }
 
-  private static class SynchronizerFactoryWrapper implements FDv2DataSource.SynchronizerFactory {
+  private static class FactoryWrapper<TDataSource> implements FDv2DataSource.DataSourceFactory<TDataSource> {
 
-    private final SynchronizerBuilder builder;
+    private final DataSourceBuilder<TDataSource> builder;
     private final DataSourceBuilderContext context;
 
-    public SynchronizerFactoryWrapper(SynchronizerBuilder builder, DataSourceBuilderContext context) {
+    public FactoryWrapper(DataSourceBuilder<TDataSource> builder, DataSourceBuilderContext context) {
       this.builder = builder;
       this.context = context;
     }
 
     @Override
-    public Synchronizer build() {
-      return builder.build(context);
-    }
-  }
-
-  private static class InitializerFactoryWrapper implements FDv2DataSource.InitializerFactory {
-
-    private final InitializerBuilder builder;
-    private final DataSourceBuilderContext context;
-
-    public InitializerFactoryWrapper(InitializerBuilder builder, DataSourceBuilderContext context) {
-      this.builder = builder;
-      this.context = context;
-    }
-
-    @Override
-    public Initializer build() {
+    public TDataSource build() {
       return builder.build(context);
     }
   }
@@ -141,12 +122,12 @@ final class FDv2DataSystem implements DataSystem, Closeable {
       selectorSource
     );
 
-    ImmutableList<FDv2DataSource.InitializerFactory> initializerFactories = dataSystemConfiguration.getInitializers().stream()
-      .map(initializer -> new InitializerFactoryWrapper(initializer, builderContext))
+    ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializerFactories = dataSystemConfiguration.getInitializers().stream()
+      .map(initializer -> new FactoryWrapper<>(initializer, builderContext))
       .collect(ImmutableList.toImmutableList());
 
-    ImmutableList<FDv2DataSource.SynchronizerFactory> synchronizerFactories = dataSystemConfiguration.getSynchronizers().stream()
-      .map(synchronizer -> new SynchronizerFactoryWrapper(synchronizer, builderContext))
+    ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizerFactories = dataSystemConfiguration.getSynchronizers().stream()
+      .map(synchronizer -> new FactoryWrapper<>(synchronizer, builderContext))
       .collect(ImmutableList.toImmutableList());
 
     DataSource dataSource = new FDv2DataSource(
@@ -205,12 +186,8 @@ final class FDv2DataSystem implements DataSystem, Closeable {
       return;
     }
     try {
-      if (dataSource instanceof Closeable) {
-        ((Closeable) dataSource).close();
-      }
-      if (store instanceof Closeable) {
-        ((Closeable) store).close();
-      }
+      dataSource.close();
+      store.close();
     } finally {
       disposed = true;
     }

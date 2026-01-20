@@ -17,22 +17,22 @@ import java.util.List;
  */
 public final class DataSystemBuilder {
 
-  private final List<InitializerBuilder> initializers = new ArrayList<>();
-  private final List<SynchronizerBuilder> synchronizers = new ArrayList<>();
+  private final List<DataSourceBuilder<Initializer>> initializers = new ArrayList<>();
+  private final List<DataSourceBuilder<Synchronizer>> synchronizers = new ArrayList<>();
   private ComponentConfigurer<DataSource> fDv1FallbackSynchronizer;
   private ComponentConfigurer<DataStore> persistentStore;
   private DataSystemConfiguration.DataStoreMode persistentDataStoreMode;
 
   /**
    * Add one or more initializers to the builder.
-   * To replace initializers, please refer to {@link #replaceInitializers(InitializerBuilder[])}.
+   * To replace initializers, please refer to {@link #replaceInitializers(DataSourceBuilder[])}.
    *
    * @param initializers the initializers to add
    * @return a reference to the builder
    */
   @SafeVarargs
-  public final DataSystemBuilder initializers(InitializerBuilder... initializers) {
-    for (InitializerBuilder initializer : initializers) {
+  public final DataSystemBuilder initializers(DataSourceBuilder<Initializer>... initializers) {
+    for (DataSourceBuilder<Initializer> initializer : initializers) {
       this.initializers.add(initializer);
     }
     return this;
@@ -46,9 +46,9 @@ public final class DataSystemBuilder {
    * @return a reference to this builder
    */
   @SafeVarargs
-  public final DataSystemBuilder replaceInitializers(InitializerBuilder... initializers) {
+  public final DataSystemBuilder replaceInitializers(DataSourceBuilder<Initializer>... initializers) {
     this.initializers.clear();
-    for (InitializerBuilder initializer : initializers) {
+    for (DataSourceBuilder<Initializer> initializer : initializers) {
       this.initializers.add(initializer);
     }
     return this;
@@ -62,8 +62,8 @@ public final class DataSystemBuilder {
    * @return a reference to the builder
    */
   @SafeVarargs
-  public final DataSystemBuilder synchronizers(SynchronizerBuilder... synchronizers) {
-    for (SynchronizerBuilder synchronizer : synchronizers) {
+  public final DataSystemBuilder synchronizers(DataSourceBuilder<Synchronizer>... synchronizers) {
+    for (DataSourceBuilder<Synchronizer> synchronizer : synchronizers) {
       this.synchronizers.add(synchronizer);
     }
     return this;
@@ -77,9 +77,9 @@ public final class DataSystemBuilder {
    * @return a reference to this builder
    */
   @SafeVarargs
-  public final DataSystemBuilder replaceSynchronizers(SynchronizerBuilder... synchronizers) {
+  public final DataSystemBuilder replaceSynchronizers(DataSourceBuilder<Synchronizer>... synchronizers) {
     this.synchronizers.clear();
-    for (SynchronizerBuilder synchronizer : synchronizers) {
+    for (DataSourceBuilder<Synchronizer> synchronizer : synchronizers) {
       this.synchronizers.add(synchronizer);
     }
     return this;

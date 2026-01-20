@@ -6,9 +6,8 @@ import com.launchdarkly.sdk.server.StandardEndpoints;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.interfaces.ServiceEndpoints;
 import com.launchdarkly.sdk.server.subsystems.ClientContext;
-import com.launchdarkly.sdk.server.subsystems.ComponentConfigurer;
+import com.launchdarkly.sdk.server.subsystems.DataSourceBuilder;
 import com.launchdarkly.sdk.server.subsystems.DiagnosticDescription;
-import com.launchdarkly.sdk.server.subsystems.SynchronizerBuilder;
 
 import java.net.URI;
 import java.time.Duration;
@@ -33,7 +32,7 @@ import java.time.Duration;
  *             .fDv1FallbackSynchronizer(DataSystemComponents.fDv1Polling()));
  * </code></pre>
  */
-public abstract class FDv2PollingSynchronizerBuilder implements SynchronizerBuilder, DiagnosticDescription {
+public abstract class FDv2PollingSynchronizerBuilder implements DataSourceBuilder<Synchronizer>, DiagnosticDescription {
   /**
    * The default value for {@link #pollInterval(Duration)}: 30 seconds.
    */
