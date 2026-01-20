@@ -6,6 +6,7 @@ import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.subsystems.*;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -32,15 +33,13 @@ public final class DataSystemBuilder {
    */
   @SafeVarargs
   public final DataSystemBuilder initializers(DataSourceBuilder<Initializer>... initializers) {
-    for (DataSourceBuilder<Initializer> initializer : initializers) {
-      this.initializers.add(initializer);
-    }
+    this.initializers.addAll(Arrays.asList(initializers));
     return this;
   }
 
   /**
    * Replaces any existing initializers with the given initializers.
-   * To add initializers, please refer to {@link #initializers(InitializerBuilder[])}.
+   * To add initializers, please refer to {@link #initializers(DataSourceBuilder[])}.
    *
    * @param initializers the initializers to replace the current initializers with
    * @return a reference to this builder
@@ -48,30 +47,26 @@ public final class DataSystemBuilder {
   @SafeVarargs
   public final DataSystemBuilder replaceInitializers(DataSourceBuilder<Initializer>... initializers) {
     this.initializers.clear();
-    for (DataSourceBuilder<Initializer> initializer : initializers) {
-      this.initializers.add(initializer);
-    }
+    this.initializers.addAll(Arrays.asList(initializers));
     return this;
   }
 
   /**
    * Add one or more synchronizers to the builder.
-   * To replace synchronizers, please refer to {@link #replaceSynchronizers(SynchronizerBuilder[])}.
+   * To replace synchronizers, please refer to {@link #replaceSynchronizers(DataSourceBuilder[])}.
    *
    * @param synchronizers the synchronizers to add
    * @return a reference to the builder
    */
   @SafeVarargs
   public final DataSystemBuilder synchronizers(DataSourceBuilder<Synchronizer>... synchronizers) {
-    for (DataSourceBuilder<Synchronizer> synchronizer : synchronizers) {
-      this.synchronizers.add(synchronizer);
-    }
+    this.synchronizers.addAll(Arrays.asList(synchronizers));
     return this;
   }
 
   /**
    * Replaces any existing synchronizers with the given synchronizers.
-   * To add synchronizers, please refer to {@link #synchronizers(SynchronizerBuilder[])}.
+   * To add synchronizers, please refer to {@link #synchronizers(DataSourceBuilder[])}.
    *
    * @param synchronizers the synchronizers to replace the current synchronizers with
    * @return a reference to this builder
@@ -79,9 +74,7 @@ public final class DataSystemBuilder {
   @SafeVarargs
   public final DataSystemBuilder replaceSynchronizers(DataSourceBuilder<Synchronizer>... synchronizers) {
     this.synchronizers.clear();
-    for (DataSourceBuilder<Synchronizer> synchronizer : synchronizers) {
-      this.synchronizers.add(synchronizer);
-    }
+    this.synchronizers.addAll(Arrays.asList(synchronizers));
     return this;
   }
 
