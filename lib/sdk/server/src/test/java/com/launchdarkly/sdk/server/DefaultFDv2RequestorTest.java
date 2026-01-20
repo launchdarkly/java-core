@@ -190,7 +190,7 @@ public class DefaultFDv2RequestorTest extends BaseTest {
 
                 RequestInfo req = server.getRecorder().requireRequest();
                 assertEquals(REQUEST_PATH, req.getPath());
-                assertThat(req.getQuery(), containsString("basis=%28p%3FindAmy-payload%3A200%29"));
+                assertThat(req.getQuery(), containsString("basis=%28p%3Amy-payload%3A200%29"));
             }
         }
     }

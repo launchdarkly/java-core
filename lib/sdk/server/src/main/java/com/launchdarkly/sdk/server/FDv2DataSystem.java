@@ -16,6 +16,8 @@ import java.io.IOException;
 import java.util.LinkedList;
 import java.util.concurrent.Future;
 
+import static com.launchdarkly.sdk.server.ComponentsImpl.toHttpProperties;
+
 /**
  * Internal implementation of the FDv2 data system.
  * <p>
@@ -50,36 +52,32 @@ final class FDv2DataSystem implements DataSystem, Closeable {
   private static class SynchronizerFactoryWrapper implements FDv2DataSource.SynchronizerFactory {
 
     private final SynchronizerBuilder builder;
-    private final ClientContext context;
-    private final SelectorSource selectorSource;
+    private final DataSourceBuilderContext context;
 
-    public SynchronizerFactoryWrapper(SynchronizerBuilder builder, ClientContext context, SelectorSource selectorSource) {
+    public SynchronizerFactoryWrapper(SynchronizerBuilder builder, DataSourceBuilderContext context) {
       this.builder = builder;
       this.context = context;
-      this.selectorSource = selectorSource;
     }
 
     @Override
     public Synchronizer build() {
-      return builder.build(context, selectorSource);
+      return builder.build(context);
     }
   }
 
   private static class InitializerFactoryWrapper implements FDv2DataSource.InitializerFactory {
 
     private final InitializerBuilder builder;
-    private final ClientContext context;
-    private final SelectorSource selectorSource;
+    private final DataSourceBuilderContext context;
 
-    public InitializerFactoryWrapper(InitializerBuilder builder, ClientContext context, SelectorSource selectorSource) {
+    public InitializerFactoryWrapper(InitializerBuilder builder, DataSourceBuilderContext context) {
       this.builder = builder;
       this.context = context;
-      this.selectorSource = selectorSource;
     }
 
     @Override
     public Initializer build() {
-      return builder.build(context, selectorSource);
+      return builder.build(context);
     }
   }
 
@@ -132,12 +130,23 @@ final class FDv2DataSystem implements DataSystem, Closeable {
     DataSystemConfiguration dataSystemConfiguration = config.dataSystem.build();
     SelectorSource selectorSource = new SelectorSourceFacade(store);
 
+    DataSourceBuilderContext builderContext = new DataSourceBuilderContext(
+      clientContext.getBaseLogger(),
+      clientContext.getThreadPriority(),
+      dataSourceUpdates,
+      clientContext.getServiceEndpoints(),
+      clientContext.getHttp(),
+      clientContext.sharedExecutor,
+      clientContext.diagnosticStore,
+      selectorSource
+    );
+
     ImmutableList<FDv2DataSource.InitializerFactory> initializerFactories = dataSystemConfiguration.getInitializers().stream()
-      .map(initializer -> new InitializerFactoryWrapper(initializer, clientContext, selectorSource))
+      .map(initializer -> new InitializerFactoryWrapper(initializer, builderContext))
       .collect(ImmutableList.toImmutableList());
 
     ImmutableList<FDv2DataSource.SynchronizerFactory> synchronizerFactories = dataSystemConfiguration.getSynchronizers().stream()
-      .map(synchronizer -> new SynchronizerFactoryWrapper(synchronizer, clientContext, selectorSource))
+      .map(synchronizer -> new SynchronizerFactoryWrapper(synchronizer, builderContext))
       .collect(ImmutableList.toImmutableList());
 
     DataSource dataSource = new FDv2DataSource(

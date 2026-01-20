@@ -1,14 +1,13 @@
 package com.launchdarkly.sdk.server;
 
 import com.launchdarkly.sdk.server.datasources.Initializer;
-import com.launchdarkly.sdk.server.datasources.SelectorSource;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.integrations.FDv2PollingInitializerBuilder;
 import com.launchdarkly.sdk.server.integrations.FDv2PollingSynchronizerBuilder;
 import com.launchdarkly.sdk.server.integrations.FDv2StreamingSynchronizerBuilder;
 import com.launchdarkly.sdk.server.integrations.PollingDataSourceBuilder;
 import com.launchdarkly.sdk.server.interfaces.ServiceEndpoints;
-import com.launchdarkly.sdk.server.subsystems.ClientContext;
+import com.launchdarkly.sdk.server.subsystems.DataSourceBuilderContext;
 
 import java.net.URI;
 
@@ -25,7 +24,7 @@ public final class DataSystemComponents {
 
   static class FDv2PollingInitializerBuilderImpl extends FDv2PollingInitializerBuilder {
     @Override
-    public Initializer build(ClientContext context, SelectorSource selectorSource) {
+    public Initializer build(DataSourceBuilderContext context) {
       ServiceEndpoints endpoints = serviceEndpointsOverride != null
               ? serviceEndpointsOverride
               : context.getServiceEndpoints();
@@ -44,14 +43,14 @@ public final class DataSystemComponents {
       return new PollingInitializerImpl(
               requestor,
               context.getBaseLogger(),
-              selectorSource
+              context.getSelectorSource()
       );
     }
   }
 
   static class FDv2PollingSynchronizerBuilderImpl extends FDv2PollingSynchronizerBuilder {
     @Override
-    public Synchronizer build(ClientContext context, SelectorSource selectorSource) {
+    public Synchronizer build(DataSourceBuilderContext context) {
       ServiceEndpoints endpoints = serviceEndpointsOverride != null
               ? serviceEndpointsOverride
               : context.getServiceEndpoints();
@@ -70,8 +69,8 @@ public final class DataSystemComponents {
       return new PollingSynchronizerImpl(
               requestor,
               context.getBaseLogger(),
-              selectorSource,
-              ClientContextImpl.get(context).sharedExecutor,
+              context.getSelectorSource(),
+              context.getSharedExecutor(),
               pollInterval
       );
     }
@@ -79,7 +78,7 @@ public final class DataSystemComponents {
 
   static class FDv2StreamingSynchronizerBuilderImpl extends FDv2StreamingSynchronizerBuilder {
     @Override
-    public Synchronizer build(ClientContext context, SelectorSource selectorSource) {
+    public Synchronizer build(DataSourceBuilderContext context) {
       ServiceEndpoints endpoints = serviceEndpointsOverride != null
               ? serviceEndpointsOverride
               : context.getServiceEndpoints();
@@ -94,7 +93,7 @@ public final class DataSystemComponents {
               configuredBaseUri,
               StandardEndpoints.FDV2_STREAMING_REQUEST_PATH,
               context.getBaseLogger(),
-              selectorSource,
+              context.getSelectorSource(),
               null,
               initialReconnectDelay
       );
