@@ -11,7 +11,7 @@ import com.launchdarkly.sdk.server.interfaces.FlagChangeEvent;
 import com.launchdarkly.sdk.server.interfaces.FlagChangeListener;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataSourceBuilder;
-import com.launchdarkly.sdk.server.subsystems.DataSourceBuilderContext;
+import com.launchdarkly.sdk.server.subsystems.DataSourceBuildInputs;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
 import com.launchdarkly.sdk.server.subsystems.LoggingConfiguration;
 import com.launchdarkly.sdk.server.subsystems.DataSystemConfiguration;
@@ -54,9 +54,9 @@ final class FDv2DataSystem implements DataSystem, Closeable {
   private static class FactoryWrapper<TDataSource> implements FDv2DataSource.DataSourceFactory<TDataSource> {
 
     private final DataSourceBuilder<TDataSource> builder;
-    private final DataSourceBuilderContext context;
+    private final DataSourceBuildInputs context;
 
-    public FactoryWrapper(DataSourceBuilder<TDataSource> builder, DataSourceBuilderContext context) {
+    public FactoryWrapper(DataSourceBuilder<TDataSource> builder, DataSourceBuildInputs context) {
       this.builder = builder;
       this.context = context;
     }
@@ -116,7 +116,7 @@ final class FDv2DataSystem implements DataSystem, Closeable {
     DataSystemConfiguration dataSystemConfiguration = config.dataSystem.build();
     SelectorSource selectorSource = new SelectorSourceFacade(store);
 
-    DataSourceBuilderContext builderContext = new DataSourceBuilderContext(
+    DataSourceBuildInputs builderContext = new DataSourceBuildInputs(
       clientContext.getBaseLogger(),
       clientContext.getThreadPriority(),
       dataSourceUpdates,
