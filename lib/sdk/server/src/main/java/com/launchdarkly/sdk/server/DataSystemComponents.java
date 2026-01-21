@@ -7,7 +7,7 @@ import com.launchdarkly.sdk.server.integrations.FDv2PollingSynchronizerBuilder;
 import com.launchdarkly.sdk.server.integrations.FDv2StreamingSynchronizerBuilder;
 import com.launchdarkly.sdk.server.integrations.PollingDataSourceBuilder;
 import com.launchdarkly.sdk.server.interfaces.ServiceEndpoints;
-import com.launchdarkly.sdk.server.subsystems.DataSourceBuilderContext;
+import com.launchdarkly.sdk.server.subsystems.DataSourceBuildInputs;
 
 import java.net.URI;
 
@@ -24,7 +24,7 @@ public final class DataSystemComponents {
 
   static class FDv2PollingInitializerBuilderImpl extends FDv2PollingInitializerBuilder {
     @Override
-    public Initializer build(DataSourceBuilderContext context) {
+    public Initializer build(DataSourceBuildInputs context) {
       ServiceEndpoints endpoints = serviceEndpointsOverride != null
               ? serviceEndpointsOverride
               : context.getServiceEndpoints();
@@ -50,7 +50,7 @@ public final class DataSystemComponents {
 
   static class FDv2PollingSynchronizerBuilderImpl extends FDv2PollingSynchronizerBuilder {
     @Override
-    public Synchronizer build(DataSourceBuilderContext context) {
+    public Synchronizer build(DataSourceBuildInputs context) {
       ServiceEndpoints endpoints = serviceEndpointsOverride != null
               ? serviceEndpointsOverride
               : context.getServiceEndpoints();
@@ -78,7 +78,7 @@ public final class DataSystemComponents {
 
   static class FDv2StreamingSynchronizerBuilderImpl extends FDv2StreamingSynchronizerBuilder {
     @Override
-    public Synchronizer build(DataSourceBuilderContext context) {
+    public Synchronizer build(DataSourceBuildInputs context) {
       ServiceEndpoints endpoints = serviceEndpointsOverride != null
               ? serviceEndpointsOverride
               : context.getServiceEndpoints();

@@ -8,7 +8,7 @@ import com.launchdarkly.sdk.server.interfaces.ServiceEndpoints;
 import java.util.concurrent.ScheduledExecutorService;
 
 /**
- * Context information provided to initializer and synchronizer builders.
+ * Build information (dependencies and configuration) provided to initializer and synchronizer builders.
  * <p>
  * This class is not stable, and not subject to any backwards compatibility guarantees or semantic versioning.
  * It is in early access. If you want access to this feature, please join the EAP. https://launchdarkly.com/docs/sdk/features/data-saving-mode
@@ -16,7 +16,7 @@ import java.util.concurrent.ScheduledExecutorService;
  * This consolidates all the parameters needed to construct data source components,
  * including HTTP configuration, logging, scheduling, and selector state.
  */
-public final class DataSourceBuilderContext {
+public final class DataSourceBuildInputs {
     private final LDLogger baseLogger;
     private final int threadPriority;
     private final DataSourceUpdateSink dataSourceUpdates;
@@ -38,7 +38,7 @@ public final class DataSourceBuilderContext {
      * @param diagnosticStore diagnostic data accumulator (may be null)
      * @param selectorSource source for obtaining selectors
      */
-    public DataSourceBuilderContext(
+    public DataSourceBuildInputs(
             LDLogger baseLogger,
             int threadPriority,
             DataSourceUpdateSink dataSourceUpdates,

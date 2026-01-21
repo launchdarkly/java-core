@@ -15,5 +15,5 @@ public interface DataSourceBuilder<TDataSource> {
    * @param context the context for building the data source
    * @return the built data source instance
    */
-  TDataSource build(DataSourceBuilderContext context);
+  TDataSource build(DataSourceBuildInputs context);
 }
