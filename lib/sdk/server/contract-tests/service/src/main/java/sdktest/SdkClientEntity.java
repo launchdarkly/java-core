@@ -25,7 +25,16 @@ import com.launchdarkly.sdk.server.integrations.EventProcessorBuilder;
 import com.launchdarkly.sdk.server.integrations.HooksConfigurationBuilder;
 import com.launchdarkly.sdk.server.integrations.ServiceEndpointsBuilder;
 import com.launchdarkly.sdk.server.integrations.StreamingDataSourceBuilder;
+import com.launchdarkly.sdk.server.integrations.DataSystemBuilder;
+import com.launchdarkly.sdk.server.DataSystemComponents;
+import com.launchdarkly.sdk.server.integrations.FDv2PollingInitializerBuilder;
+import com.launchdarkly.sdk.server.integrations.FDv2PollingSynchronizerBuilder;
+import com.launchdarkly.sdk.server.integrations.FDv2StreamingSynchronizerBuilder;
 import com.launchdarkly.sdk.server.interfaces.BigSegmentStoreStatusProvider;
+import com.launchdarkly.sdk.server.subsystems.DataSourceBuilder;
+import com.launchdarkly.sdk.server.datasources.Initializer;
+import com.launchdarkly.sdk.server.datasources.Synchronizer;
+import com.launchdarkly.sdk.server.subsystems.DataSystemConfiguration;
 
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
@@ -55,6 +64,12 @@ import sdktest.Representations.IdentifyEventParams;
 import sdktest.Representations.HookConfig;
 import sdktest.Representations.SdkConfigHookParams;
 import sdktest.Representations.SdkConfigParams;
+import sdktest.Representations.SdkConfigDataSystemParams;
+import sdktest.Representations.SdkConfigDataInitializerParams;
+import sdktest.Representations.SdkConfigSynchronizersParams;
+import sdktest.Representations.SdkConfigSynchronizerParams;
+import sdktest.Representations.SdkConfigPollingParams;
+import sdktest.Representations.SdkConfigStreamingParams;
 import sdktest.Representations.SecureModeHashParams;
 import sdktest.Representations.SecureModeHashResponse;
 
@@ -465,6 +480,125 @@ public class SdkClientEntity {
       builder.hooks(Components.hooks().setHooks(hookList));
     }
 
+    if (params.dataSystem != null) {
+      DataSystemBuilder dataSystemBuilder = Components.dataSystem().custom();
+
+      // TODO: enable this code in the future and determine which dependencies on persistent stores need to be added to contract test build process
+      // Configure persistent store if provided
+      // if (params.dataSystem.store != null && params.dataSystem.store.persistentDataStore != null) {
+      //   var storeConfig = params.dataSystem.store.persistentDataStore;
+      //   var storeType = storeConfig.store.type.toLowerCase();
+      //   ComponentConfigurer<DataStore> persistentStore = null;
+      //
+      //   switch (storeType) {
+      //     case "redis":
+      //       // Redis store configuration
+      //       break;
+      //     case "dynamodb":
+      //       // DynamoDB store configuration
+      //       break;
+      //     case "consul":
+      //       // Consul store configuration
+      //       break;
+      //   }
+      //
+      //   if (persistentStore != null) {
+      //     // Configure cache
+      //     var cacheMode = storeConfig.cache != null ? storeConfig.cache.mode.toLowerCase() : null;
+      //     // ... cache configuration ...
+      //
+      //     // Determine store mode
+      //     var storeMode = params.dataSystem.storeMode == 0
+      //         ? DataSystemConfiguration.DataStoreMode.READ_ONLY
+      //         : DataSystemConfiguration.DataStoreMode.READ_WRITE;
+      //
+      //     dataSystemBuilder.persistentStore(persistentStore, storeMode);
+      //   }
+      // }
+
+      // Configure initializers
+      if (params.dataSystem.initializers != null && params.dataSystem.initializers.length > 0) {
+        List<DataSourceBuilder<Initializer>> initializers = new ArrayList<>();
+        for (SdkConfigDataInitializerParams initializer : params.dataSystem.initializers) {
+          if (initializer.polling != null) {
+            FDv2PollingInitializerBuilder pollingBuilder = DataSystemComponents.pollingInitializer();
+            if (initializer.polling.baseUri != null) {
+              ServiceEndpointsBuilder endpointOverride = Components.serviceEndpoints().polling(initializer.polling.baseUri);
+              pollingBuilder.serviceEndpointsOverride(endpointOverride);
+            }
+            // Note: pollInterval is not available for initializers, only for synchronizers
+            if (params.dataSystem.payloadFilter != null && !params.dataSystem.payloadFilter.isEmpty()) {
+              pollingBuilder.payloadFilter(params.dataSystem.payloadFilter);
+            }
+            initializers.add(pollingBuilder);
+          }
+        }
+        if (!initializers.isEmpty()) {
+          dataSystemBuilder.initializers(initializers.toArray(new DataSourceBuilder[0]));
+        }
+      }
+
+      // Configure synchronizers
+      if (params.dataSystem.synchronizers != null) {
+        List<DataSourceBuilder<Synchronizer>> synchronizers = new ArrayList<>();
+
+        // Primary synchronizer
+        if (params.dataSystem.synchronizers.primary != null) {
+          DataSourceBuilder<Synchronizer> primary = createSynchronizer(params.dataSystem.synchronizers.primary, params.dataSystem.payloadFilter);
+          if (primary != null) {
+            synchronizers.add(primary);
+          }
+        }
+
+        // Secondary synchronizer (optional)
+        if (params.dataSystem.synchronizers.secondary != null) {
+          DataSourceBuilder<Synchronizer> secondary = createSynchronizer(params.dataSystem.synchronizers.secondary, params.dataSystem.payloadFilter);
+          if (secondary != null) {
+            synchronizers.add(secondary);
+          }
+        }
+
+        if (!synchronizers.isEmpty()) {
+          dataSystemBuilder.synchronizers(synchronizers.toArray(new DataSourceBuilder[0]));
+        }
+      }
+
+      builder.dataSystem(dataSystemBuilder);
+    }
+
     return builder.build();
+  }
+
+  private DataSourceBuilder<Synchronizer> createSynchronizer(
+      SdkConfigSynchronizerParams synchronizer,
+      String payloadFilter) {
+    if (synchronizer.polling != null) {
+      FDv2PollingSynchronizerBuilder pollingBuilder = DataSystemComponents.pollingSynchronizer();
+      if (synchronizer.polling.baseUri != null) {
+        ServiceEndpointsBuilder endpointOverride = Components.serviceEndpoints().polling(synchronizer.polling.baseUri);
+        pollingBuilder.serviceEndpointsOverride(endpointOverride);
+      }
+      if (synchronizer.polling.pollIntervalMs != null) {
+        pollingBuilder.pollInterval(Duration.ofMillis(synchronizer.polling.pollIntervalMs));
+      }
+      if (payloadFilter != null && !payloadFilter.isEmpty()) {
+        pollingBuilder.payloadFilter(payloadFilter);
+      }
+      return pollingBuilder;
+    } else if (synchronizer.streaming != null) {
+      FDv2StreamingSynchronizerBuilder streamingBuilder = DataSystemComponents.streamingSynchronizer();
+      if (synchronizer.streaming.baseUri != null) {
+        ServiceEndpointsBuilder endpointOverride = Components.serviceEndpoints().streaming(synchronizer.streaming.baseUri);
+        streamingBuilder.serviceEndpointsOverride(endpointOverride);
+      }
+      if (synchronizer.streaming.initialRetryDelayMs != null) {
+        streamingBuilder.initialReconnectDelay(Duration.ofMillis(synchronizer.streaming.initialRetryDelayMs));
+      }
+      if (payloadFilter != null && !payloadFilter.isEmpty()) {
+        streamingBuilder.payloadFilter(payloadFilter);
+      }
+      return streamingBuilder;
+    }
+    return null;
   }
 }

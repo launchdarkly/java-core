@@ -32,6 +32,8 @@ import com.launchdarkly.sdk.server.subsystems.DiagnosticDescription;
 public abstract class FDv2PollingInitializerBuilder implements DataSourceBuilder<Initializer>, DiagnosticDescription {
   protected ServiceEndpoints serviceEndpointsOverride;
 
+  protected String payloadFilter;
+
   /**
    * Sets overrides for the service endpoints. In typical usage, the initializer will use the commonly defined
    * service endpoints, but for cases where they need to be controlled at the source level, this method can
@@ -42,6 +44,18 @@ public abstract class FDv2PollingInitializerBuilder implements DataSourceBuilder
    */
   public FDv2PollingInitializerBuilder serviceEndpointsOverride(ServiceEndpointsBuilder serviceEndpointsOverride) {
     this.serviceEndpointsOverride = serviceEndpointsOverride.createServiceEndpoints();
+    return this;
+  }
+
+  /**
+   * Sets the Payload Filter that will be used to filter the objects (flags, segments, etc.)
+   * from this initializer.
+   * 
+   * @param payloadFilter the filter to be used
+   * @return the builder
+   */
+  public FDv2PollingInitializerBuilder payloadFilter(String payloadFilter) {
+    this.payloadFilter = payloadFilter;
     return this;
   }
 

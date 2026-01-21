@@ -19,6 +19,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -84,7 +85,11 @@ public class DefaultFDv2RequestorTest extends BaseTest {
     }
 
     private DefaultFDv2Requestor makeRequestor(HttpServer server, LDConfig config) {
-        return new DefaultFDv2Requestor(makeHttpConfig(config), server.getUri(), REQUEST_PATH, testLogger);
+        return new DefaultFDv2Requestor(makeHttpConfig(config), server.getUri(), REQUEST_PATH, null, testLogger);
+    }
+
+    private DefaultFDv2Requestor makeRequestorWithFilter(HttpServer server, String payloadFilter) {
+        return new DefaultFDv2Requestor(makeHttpConfig(LDConfig.DEFAULT), server.getUri(), REQUEST_PATH, payloadFilter, testLogger);
     }
 
     private HttpProperties makeHttpConfig(LDConfig config) {
@@ -380,7 +385,7 @@ public class DefaultFDv2RequestorTest extends BaseTest {
             URI uri = server.getUri().resolve("/context/path");
 
             try (DefaultFDv2Requestor requestor = new DefaultFDv2Requestor(
-                    makeHttpConfig(LDConfig.DEFAULT), uri, REQUEST_PATH, testLogger)) {
+                    makeHttpConfig(LDConfig.DEFAULT), uri, REQUEST_PATH, null, testLogger)) {
 
                 CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
                     requestor.Poll(Selector.EMPTY);
@@ -440,6 +445,77 @@ public class DefaultFDv2RequestorTest extends BaseTest {
                 assertNotNull(response);
                 assertNotNull(response.getHeaders());
                 assertEquals("custom-value", response.getHeaders().get("X-Custom-Header"));
+            }
+        }
+    }
+
+    @Test
+    public void payloadFilterIsAddedToRequest() throws Exception {
+        Handler resp = Handlers.bodyJson(EMPTY_EVENTS_JSON);
+
+        try (HttpServer server = HttpServer.start(resp)) {
+            try (DefaultFDv2Requestor requestor = makeRequestorWithFilter(server, "myFilter")) {
+                CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
+                    requestor.Poll(Selector.EMPTY);
+
+                future.get(5, TimeUnit.SECONDS);
+
+                RequestInfo req = server.getRecorder().requireRequest();
+                assertThat(req.getQuery(), containsString("filter=myFilter"));
+            }
+        }
+    }
+
+    @Test
+    public void payloadFilterWithSelectorBothAddedToRequest() throws Exception {
+        Handler resp = Handlers.bodyJson(EMPTY_EVENTS_JSON);
+
+        try (HttpServer server = HttpServer.start(resp)) {
+            try (DefaultFDv2Requestor requestor = makeRequestorWithFilter(server, "myFilter")) {
+                Selector selector = Selector.make(42, "test-state");
+
+                CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
+                    requestor.Poll(selector);
+
+                future.get(5, TimeUnit.SECONDS);
+
+                RequestInfo req = server.getRecorder().requireRequest();
+                assertThat(req.getQuery(), containsString("basis=test-state"));
+                assertThat(req.getQuery(), containsString("filter=myFilter"));
+            }
+        }
+    }
+
+    @Test
+    public void payloadFilterNotAddedWhenNull() throws Exception {
+        Handler resp = Handlers.bodyJson(EMPTY_EVENTS_JSON);
+
+        try (HttpServer server = HttpServer.start(resp)) {
+            try (DefaultFDv2Requestor requestor = makeRequestor(server)) {
+                CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
+                    requestor.Poll(Selector.EMPTY);
+
+                future.get(5, TimeUnit.SECONDS);
+
+                RequestInfo req = server.getRecorder().requireRequest();
+                assertThat(req.getQuery(), not(containsString("filter=")));
+            }
+        }
+    }
+
+    @Test
+    public void payloadFilterNotAddedWhenEmpty() throws Exception {
+        Handler resp = Handlers.bodyJson(EMPTY_EVENTS_JSON);
+
+        try (HttpServer server = HttpServer.start(resp)) {
+            try (DefaultFDv2Requestor requestor = makeRequestorWithFilter(server, "")) {
+                CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
+                    requestor.Poll(Selector.EMPTY);
+
+                future.get(5, TimeUnit.SECONDS);
+
+                RequestInfo req = server.getRecorder().requireRequest();
+                assertThat(req.getQuery(), not(containsString("filter=")));
             }
         }
     }
