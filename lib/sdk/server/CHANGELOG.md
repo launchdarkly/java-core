@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.11.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.10.2...launchdarkly-java-server-sdk-7.11.0) (2026-01-21)
+
+
+### Features
+
+* Add FDv2 Streaming Synchronizer ([#106](https://github.com/launchdarkly/java-core/issues/106)) ([211783a](https://github.com/launchdarkly/java-core/commit/211783a54643ab37e1254803a0c1dd34be1433bf))
+
 ## [7.10.2](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.10.1...launchdarkly-java-server-sdk-7.10.2) (2025-08-26)
 
 
