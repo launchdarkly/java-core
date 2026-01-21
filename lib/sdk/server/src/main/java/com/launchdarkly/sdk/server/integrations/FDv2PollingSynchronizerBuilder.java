@@ -42,6 +42,8 @@ public abstract class FDv2PollingSynchronizerBuilder implements DataSourceBuilde
 
   protected ServiceEndpoints serviceEndpointsOverride;
 
+  protected String payloadFilter;
+
   /**
    * Sets the interval at which the SDK will poll for feature flag updates.
    * <p>
@@ -80,6 +82,18 @@ public abstract class FDv2PollingSynchronizerBuilder implements DataSourceBuilde
    */
   public FDv2PollingSynchronizerBuilder serviceEndpointsOverride(ServiceEndpointsBuilder serviceEndpointsOverride) {
     this.serviceEndpointsOverride = serviceEndpointsOverride.createServiceEndpoints();
+    return this;
+  }
+
+  /**
+   * Sets the Payload Filter that will be used to filter the objects (flags, segments, etc.)
+   * from this synchronizer.
+   * 
+   * @param payloadFilter the filter to be used
+   * @return the builder
+   */
+  public FDv2PollingSynchronizerBuilder payloadFilter(String payloadFilter) {
+    this.payloadFilter = payloadFilter;
     return this;
   }
 

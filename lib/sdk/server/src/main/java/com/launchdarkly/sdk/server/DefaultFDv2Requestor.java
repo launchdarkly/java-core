@@ -30,12 +30,14 @@ import java.util.concurrent.CompletableFuture;
  */
 public class DefaultFDv2Requestor implements FDv2Requestor, Closeable {
     private static final String BASIS_QUERY_PARAM = "basis";
+    private static final String FILTER_QUERY_PARAM = "filter";
 
     private final OkHttpClient httpClient;
     private final URI pollingUri;
     private final Headers headers;
     private final LDLogger logger;
     private final Map<URI, String> etags;
+    private final String payloadFilter;
 
     /**
      * Creates a DefaultFDv2Requestor.
@@ -43,12 +45,14 @@ public class DefaultFDv2Requestor implements FDv2Requestor, Closeable {
      * @param httpProperties HTTP configuration properties
      * @param baseUri base URI for the FDv2 polling endpoint
      * @param requestPath the request path to append to the base URI (e.g., "/sdk/poll")
+     * @param payloadFilter optional payload filter to add as a query parameter 
      * @param logger logger for diagnostic output
      */
-    public DefaultFDv2Requestor(HttpProperties httpProperties, URI baseUri, String requestPath, LDLogger logger) {
+    public DefaultFDv2Requestor(HttpProperties httpProperties, URI baseUri, String requestPath, String payloadFilter, LDLogger logger) {
         this.logger = logger;
         this.pollingUri = HttpHelpers.concatenateUriPath(baseUri, requestPath);
         this.etags = new HashMap<>();
+        this.payloadFilter = payloadFilter;
 
         OkHttpClient.Builder httpBuilder = httpProperties.toHttpClientBuilder();
         this.headers = httpProperties.toHeadersBuilder().build();
@@ -65,6 +69,11 @@ public class DefaultFDv2Requestor implements FDv2Requestor, Closeable {
 
             if (!selector.isEmpty()) {
                 requestUri = HttpHelpers.addQueryParam(requestUri, BASIS_QUERY_PARAM, selector.getState());
+            }
+
+            // Add payload filter query parameter if present
+            if (payloadFilter != null && !payloadFilter.isEmpty()) {
+                requestUri = HttpHelpers.addQueryParam(requestUri, FILTER_QUERY_PARAM, payloadFilter);
             }
 
             logger.debug("Making FDv2 polling request to: {}", requestUri);

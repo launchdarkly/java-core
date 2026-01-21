@@ -32,6 +32,7 @@ public abstract class Representations {
     SdkConfigTagParams tags;
     SdkConfigServiceEndpointParams serviceEndpoints;
     SdkConfigHookParams hooks;
+    SdkConfigDataSystemParams dataSystem;
   }
   
   public static class SdkConfigStreamParams {
@@ -71,6 +72,113 @@ public abstract class Representations {
 
   public static class SdkConfigHookParams {
     List<HookConfig> hooks;
+  }
+
+  /**
+   * Constants for store mode values.
+   */
+  public static class StoreMode {
+    /**
+     * Read-only mode - the data system will only read from the persistent store.
+     */
+    public static final int READ = 0;
+
+    /**
+     * Read-write mode - the data system can read from, and write to, the persistent store.
+     */
+    public static final int READ_WRITE = 1;
+  }
+
+  /**
+   * Constants for persistent store type values.
+   */
+  public static class PersistentStoreType {
+    /**
+     * Redis persistent store type.
+     */
+    public static final String REDIS = "redis";
+
+    /**
+     * DynamoDB persistent store type.
+     */
+    public static final String DYNAMODB = "dynamodb";
+
+    /**
+     * Consul persistent store type.
+     */
+    public static final String CONSUL = "consul";
+  }
+
+  /**
+   * Constants for persistent cache mode values.
+   */
+  public static class PersistentCacheMode {
+    /**
+     * Cache disabled mode.
+     */
+    public static final String OFF = "off";
+
+    /**
+     * Time-to-live cache mode with a specified TTL.
+     */
+    public static final String TTL = "ttl";
+
+    /**
+     * Infinite cache mode - cache forever.
+     */
+    public static final String INFINITE = "infinite";
+  }
+
+  public static class SdkConfigDataSystemParams {
+    SdkConfigDataStoreParams store;
+    Integer storeMode;
+    SdkConfigDataInitializerParams[] initializers;
+    SdkConfigSynchronizersParams synchronizers;
+    String payloadFilter;
+  }
+
+  public static class SdkConfigDataStoreParams {
+    SdkConfigPersistentDataStoreParams persistentDataStore;
+  }
+
+  public static class SdkConfigPersistentDataStoreParams {
+    SdkConfigPersistentStoreParams store;
+    SdkConfigPersistentCacheParams cache;
+  }
+
+  public static class SdkConfigPersistentStoreParams {
+    String type;
+    String prefix;
+    String dsn;
+  }
+
+  public static class SdkConfigPersistentCacheParams {
+    String mode;
+    Integer ttl;
+  }
+
+  public static class SdkConfigDataInitializerParams {
+    SdkConfigPollingParams polling;
+  }
+
+  public static class SdkConfigSynchronizersParams {
+    SdkConfigSynchronizerParams primary;
+    SdkConfigSynchronizerParams secondary;
+  }
+
+  public static class SdkConfigSynchronizerParams {
+    SdkConfigStreamingParams streaming;
+    SdkConfigPollingParams polling;
+  }
+
+  public static class SdkConfigPollingParams {
+    URI baseUri;
+    Long pollIntervalMs;
+  }
+
+  public static class SdkConfigStreamingParams {
+    URI baseUri;
+    Long initialRetryDelayMs;
   }
 
   public static class HookConfig {
