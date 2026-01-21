@@ -111,7 +111,7 @@ public class DefaultFDv2Requestor implements FDv2Requestor, Closeable {
                 @Override
                 public void onResponse(@Nonnull Call call, @Nonnull Response response) {
                     try {
-                        // Handle 304 Not Modified - no new data, but return response with headers
+                        // Handle 304 Not Modified - no new data
                         if (response.code() == 304) {
                             logger.debug("FDv2 polling request returned 304: not modified");
                             future.complete(FDv2PayloadResponse.none(response.code()));

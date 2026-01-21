@@ -4,7 +4,6 @@ import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event;
 import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ProtocolHandler;
 import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
-import com.launchdarkly.sdk.internal.http.HttpErrors;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes;
@@ -34,11 +33,6 @@ class PollingBase {
             String headerValue = response.getHeaders().get(HeaderConstants.FDV1_FALLBACK.getHeaderName());
             return headerValue != null && headerValue.equalsIgnoreCase("true");
         }
-//        if(ex != null) {
-//            if(ex instanceof HttpErrorException) {
-//                ((HttpErrors.HttpErrorException) ex).
-//            }
-//        }
 
         return false;
     }
