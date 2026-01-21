@@ -38,11 +38,12 @@ class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
     private void doPoll() {
         try {
             FDv2SourceResult res = poll(selectorSource.getSelector(), false).get();
-            switch(res.getResultType()) {
+            boolean shouldShutdown = false;
+            switch (res.getResultType()) {
                 case CHANGE_SET:
                     break;
                 case STATUS:
-                    switch(res.getStatus().getState()) {
+                    switch (res.getStatus().getState()) {
                         case INTERRUPTED:
                             break;
                         case SHUTDOWN:
@@ -54,6 +55,7 @@ class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
                                 task.cancel(true);
                             }
                             internalShutdown();
+                            shouldShutdown = true;
                             break;
                         case GOODBYE:
                             // We don't need to take any action, as the connection for the poll
@@ -63,7 +65,11 @@ class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
                     }
                     break;
             }
-            resultQueue.put(res);
+            if (shouldShutdown) {
+                shutdownFuture.complete(res);
+            } else {
+                resultQueue.put(res);
+            }
         } catch (InterruptedException | ExecutionException e) {
             // TODO: Determine if handling is needed.
         }
