@@ -67,9 +67,10 @@ public class PollingSynchronizerImplTest extends BaseTest {
                 "}";
 
         try {
-            return new FDv2Requestor.FDv2PayloadResponse(
+            return FDv2Requestor.FDv2PayloadResponse.success(
                     com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(json),
-                    okhttp3.Headers.of()
+                    okhttp3.Headers.of(),
+                    200
             );
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -535,7 +536,8 @@ public class PollingSynchronizerImplTest extends BaseTest {
             int count = callCount.incrementAndGet();
             // First call returns 401 (non-recoverable)
             if (count == 1) {
-                return failedFuture(new com.launchdarkly.sdk.internal.http.HttpErrors.HttpErrorException(401));
+                return CompletableFuture.completedFuture(
+                    FDv2Requestor.FDv2PayloadResponse.failure(401, okhttp3.Headers.of()));
             } else {
                 // Subsequent calls should not happen, but return success if they do
                 return CompletableFuture.completedFuture(makeSuccessResponse());
@@ -583,7 +585,8 @@ public class PollingSynchronizerImplTest extends BaseTest {
             int count = callCount.incrementAndGet();
             // First call returns 429 (recoverable - too many requests)
             if (count == 1) {
-                return failedFuture(new com.launchdarkly.sdk.internal.http.HttpErrors.HttpErrorException(429));
+                return CompletableFuture.completedFuture(
+                    FDv2Requestor.FDv2PayloadResponse.failure(429, okhttp3.Headers.of()));
             } else {
                 // Subsequent calls succeed
                 successCount.incrementAndGet();
@@ -635,9 +638,11 @@ public class PollingSynchronizerImplTest extends BaseTest {
             int count = callCount.incrementAndGet();
             // Multiple recoverable errors: 408, 429, network error, success pattern
             if (count == 1) {
-                return failedFuture(new com.launchdarkly.sdk.internal.http.HttpErrors.HttpErrorException(408));
+                return CompletableFuture.completedFuture(
+                    FDv2Requestor.FDv2PayloadResponse.failure(408, okhttp3.Headers.of()));
             } else if (count == 2) {
-                return failedFuture(new com.launchdarkly.sdk.internal.http.HttpErrors.HttpErrorException(429));
+                return CompletableFuture.completedFuture(
+                    FDv2Requestor.FDv2PayloadResponse.failure(429, okhttp3.Headers.of()));
             } else if (count == 3) {
                 return failedFuture(new IOException("Connection timeout"));
             } else {
@@ -691,7 +696,8 @@ public class PollingSynchronizerImplTest extends BaseTest {
             int count = callCount.incrementAndGet();
             // First call returns 403 (non-recoverable)
             if (count == 1) {
-                return failedFuture(new com.launchdarkly.sdk.internal.http.HttpErrors.HttpErrorException(403));
+                return CompletableFuture.completedFuture(
+                    FDv2Requestor.FDv2PayloadResponse.failure(403, okhttp3.Headers.of()));
             } else {
                 // Any subsequent calls should not happen
                 return failedFuture(new IOException("Network error"));
@@ -761,9 +767,10 @@ public class PollingSynchronizerImplTest extends BaseTest {
                     "  ]\n" +
                     "}";
 
-                return CompletableFuture.completedFuture(new FDv2Requestor.FDv2PayloadResponse(
+                return CompletableFuture.completedFuture(FDv2Requestor.FDv2PayloadResponse.success(
                     com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(malformedPayloadTransferred),
-                    okhttp3.Headers.of()
+                    okhttp3.Headers.of(),
+                    200
                 ));
             } else {
                 // Subsequent calls succeed
@@ -824,9 +831,10 @@ public class PollingSynchronizerImplTest extends BaseTest {
                     "  ]\n" +
                     "}";
 
-                return CompletableFuture.completedFuture(new FDv2Requestor.FDv2PayloadResponse(
+                return CompletableFuture.completedFuture(FDv2Requestor.FDv2PayloadResponse.success(
                     com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(unknownEventJson),
-                    okhttp3.Headers.of()
+                    okhttp3.Headers.of(),
+                    200
                 ));
             } else {
                 // Subsequent calls succeed
@@ -860,6 +868,203 @@ public class PollingSynchronizerImplTest extends BaseTest {
 
             // Verify polling continued after internal error
             assertTrue("Should have made at least 2 calls", callCount.get() >= 2);
+
+            synchronizer.close();
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    public void fdv1FallbackFlagSetToTrueInSuccessResponse() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+
+        okhttp3.Headers headers = new okhttp3.Headers.Builder()
+            .add("x-ld-fd-fallback", "true")
+            .build();
+
+        FDv2Requestor.FDv2PayloadResponse response = FDv2Requestor.FDv2PayloadResponse.success(
+            com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(
+                "{\"events\": [{\"event\": \"server-intent\", \"data\": {\"payloads\": [{\"id\": \"payload-1\", \"target\": 100, \"intentCode\": \"xfer-full\", \"reason\": \"payload-missing\"}]}}, {\"event\": \"payload-transferred\", \"data\": {\"state\": \"(p:payload-1:100)\", \"version\": 100}}]}"
+            ),
+            headers,
+            200
+        );
+
+        when(requestor.Poll(any(Selector.class)))
+            .thenReturn(CompletableFuture.completedFuture(response));
+
+        try {
+            PollingSynchronizerImpl synchronizer = new PollingSynchronizerImpl(
+                    requestor,
+                    testLogger,
+                    selectorSource,
+                    executor,
+                    Duration.ofMillis(100)
+            );
+
+            FDv2SourceResult result = synchronizer.next().get(1, TimeUnit.SECONDS);
+
+            assertNotNull(result);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(true, result.isFdv1Fallback());
+
+            synchronizer.close();
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    public void fdv1FallbackFlagSetToFalseWhenHeaderNotPresent() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+
+        when(requestor.Poll(any(Selector.class)))
+            .thenReturn(CompletableFuture.completedFuture(makeSuccessResponse()));
+
+        try {
+            PollingSynchronizerImpl synchronizer = new PollingSynchronizerImpl(
+                    requestor,
+                    testLogger,
+                    selectorSource,
+                    executor,
+                    Duration.ofMillis(100)
+            );
+
+            FDv2SourceResult result = synchronizer.next().get(1, TimeUnit.SECONDS);
+
+            assertNotNull(result);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(false, result.isFdv1Fallback());
+
+            synchronizer.close();
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    public void fdv1FallbackFlagSetToTrueInErrorResponse() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+
+        okhttp3.Headers headers = new okhttp3.Headers.Builder()
+            .add("x-ld-fd-fallback", "true")
+            .build();
+
+        FDv2Requestor.FDv2PayloadResponse errorResponse =
+            FDv2Requestor.FDv2PayloadResponse.failure(503, headers);
+        when(requestor.Poll(any(Selector.class)))
+            .thenReturn(CompletableFuture.completedFuture(errorResponse));
+
+        try {
+            PollingSynchronizerImpl synchronizer = new PollingSynchronizerImpl(
+                    requestor,
+                    testLogger,
+                    selectorSource,
+                    executor,
+                    Duration.ofMillis(100)
+            );
+
+            FDv2SourceResult result = synchronizer.next().get(1, TimeUnit.SECONDS);
+
+            assertNotNull(result);
+            assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
+            assertEquals(FDv2SourceResult.State.INTERRUPTED, result.getStatus().getState());
+            assertEquals(true, result.isFdv1Fallback());
+
+            synchronizer.close();
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    public void environmentIdExtractedFromHeaders() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+
+        okhttp3.Headers headers = new okhttp3.Headers.Builder()
+            .add("x-ld-envid", "test-env-789")
+            .build();
+
+        FDv2Requestor.FDv2PayloadResponse response = FDv2Requestor.FDv2PayloadResponse.success(
+            com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(
+                "{\"events\": [{\"event\": \"server-intent\", \"data\": {\"payloads\": [{\"id\": \"payload-1\", \"target\": 100, \"intentCode\": \"xfer-full\", \"reason\": \"payload-missing\"}]}}, {\"event\": \"payload-transferred\", \"data\": {\"state\": \"(p:payload-1:100)\", \"version\": 100}}]}"
+            ),
+            headers,
+            200
+        );
+
+        when(requestor.Poll(any(Selector.class)))
+            .thenReturn(CompletableFuture.completedFuture(response));
+
+        try {
+            PollingSynchronizerImpl synchronizer = new PollingSynchronizerImpl(
+                    requestor,
+                    testLogger,
+                    selectorSource,
+                    executor,
+                    Duration.ofMillis(100)
+            );
+
+            FDv2SourceResult result = synchronizer.next().get(1, TimeUnit.SECONDS);
+
+            assertNotNull(result);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertNotNull(result.getChangeSet());
+            assertEquals("test-env-789", result.getChangeSet().getEnvironmentId());
+
+            synchronizer.close();
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    public void bothFdv1FallbackAndEnvironmentIdExtractedFromHeaders() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+
+        okhttp3.Headers headers = new okhttp3.Headers.Builder()
+            .add("x-ld-fd-fallback", "true")
+            .add("x-ld-envid", "test-env-combined")
+            .build();
+
+        FDv2Requestor.FDv2PayloadResponse response = FDv2Requestor.FDv2PayloadResponse.success(
+            com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(
+                "{\"events\": [{\"event\": \"server-intent\", \"data\": {\"payloads\": [{\"id\": \"payload-1\", \"target\": 100, \"intentCode\": \"xfer-full\", \"reason\": \"payload-missing\"}]}}, {\"event\": \"payload-transferred\", \"data\": {\"state\": \"(p:payload-1:100)\", \"version\": 100}}]}"
+            ),
+            headers,
+            200
+        );
+
+        when(requestor.Poll(any(Selector.class)))
+            .thenReturn(CompletableFuture.completedFuture(response));
+
+        try {
+            PollingSynchronizerImpl synchronizer = new PollingSynchronizerImpl(
+                    requestor,
+                    testLogger,
+                    selectorSource,
+                    executor,
+                    Duration.ofMillis(100)
+            );
+
+            FDv2SourceResult result = synchronizer.next().get(1, TimeUnit.SECONDS);
+
+            assertNotNull(result);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(true, result.isFdv1Fallback());
+            assertNotNull(result.getChangeSet());
+            assertEquals("test-env-combined", result.getChangeSet().getEnvironmentId());
 
             synchronizer.close();
         } finally {

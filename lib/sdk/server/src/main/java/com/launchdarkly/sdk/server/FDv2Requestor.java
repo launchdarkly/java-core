@@ -18,13 +18,31 @@ interface FDv2Requestor {
      * to get from one payload version to another.
      * This isn't intended for use for implementations which may require multiple executions to get an entire payload.
      */
-    public static class FDv2PayloadResponse {
+public static class FDv2PayloadResponse {
         private final List<FDv2Event> events;
         private final Headers headers;
 
-        public FDv2PayloadResponse(List<FDv2Event> events, Headers headers) {
+        private final boolean successful;
+
+        private final int statusCode;
+
+        private FDv2PayloadResponse(List<FDv2Event> events, Headers headers, boolean success, int statusCode) {
             this.events = events;
             this.headers = headers;
+            this.successful = success;
+            this.statusCode = statusCode;
+        }
+
+        public static FDv2PayloadResponse failure(int statusCode, Headers headers) {
+          return new FDv2PayloadResponse(null, headers, false, statusCode);
+        }
+
+        public static FDv2PayloadResponse success(List<FDv2Event> events, Headers headers, int statusCode) {
+          return new FDv2PayloadResponse(events, headers, true, statusCode);
+        }
+
+        public static FDv2PayloadResponse none(int statusCode) {
+          return new FDv2PayloadResponse(null, null, true, statusCode);
         }
 
         public List<FDv2Event> getEvents() {
@@ -33,6 +51,14 @@ interface FDv2Requestor {
 
         public Headers getHeaders() {
             return headers;
+        }
+
+        public boolean isSuccess() {
+            return successful;
+        }
+
+        public int getStatusCode() {
+          return statusCode;
         }
     }
     CompletableFuture<FDv2PayloadResponse> Poll(Selector selector);

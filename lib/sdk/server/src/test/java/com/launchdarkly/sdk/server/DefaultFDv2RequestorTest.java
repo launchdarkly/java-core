@@ -2,6 +2,7 @@ package com.launchdarkly.sdk.server;
 
 import com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event;
 import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.internal.http.HttpErrors;
 import com.launchdarkly.sdk.internal.http.HttpProperties;
 import com.launchdarkly.sdk.server.subsystems.ClientContext;
 import com.launchdarkly.testhelpers.httptest.Handler;
@@ -18,12 +19,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.hamcrest.Matchers.*;
+import static org.junit.Assert.*;
 
 @SuppressWarnings("javadoc")
 public class DefaultFDv2RequestorTest extends BaseTest {
@@ -216,14 +213,14 @@ public class DefaultFDv2RequestorTest extends BaseTest {
 
                 RequestInfo req1 = server.getRecorder().requireRequest();
                 assertEquals(REQUEST_PATH, req1.getPath());
-                assertEquals(null, req1.getHeader("If-None-Match"));
+                assertNull(req1.getHeader("If-None-Match"));
 
                 // Second request should send If-None-Match and receive 304
                 CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future2 =
                     requestor.Poll(Selector.EMPTY);
 
                 FDv2Requestor.FDv2PayloadResponse response2 = future2.get(5, TimeUnit.SECONDS);
-                assertEquals(null, response2);
+                assertEquals(304, response2.getStatusCode());
 
                 RequestInfo req2 = server.getRecorder().requireRequest();
                 assertEquals(REQUEST_PATH, req2.getPath());
@@ -250,7 +247,7 @@ public class DefaultFDv2RequestorTest extends BaseTest {
                 // First request
                 requestor.Poll(Selector.EMPTY).get(5, TimeUnit.SECONDS);
                 RequestInfo req1 = server.getRecorder().requireRequest();
-                assertEquals(null, req1.getHeader("If-None-Match"));
+                assertNull(req1.getHeader("If-None-Match"));
 
                 // Second request should use etag-1
                 requestor.Poll(Selector.EMPTY).get(5, TimeUnit.SECONDS);
@@ -289,13 +286,13 @@ public class DefaultFDv2RequestorTest extends BaseTest {
                 // Third request should not send ETag (was removed)
                 requestor.Poll(Selector.EMPTY).get(5, TimeUnit.SECONDS);
                 RequestInfo req3 = server.getRecorder().requireRequest();
-                assertEquals(null, req3.getHeader("If-None-Match"));
+                assertNull(req3.getHeader("If-None-Match"));
             }
         }
     }
 
     @Test
-    public void httpErrorCodeThrowsException() throws Exception {
+    public void httpErrorCodeReturnsFailureResponse() throws Exception {
         Handler resp = Handlers.status(500);
 
         try (HttpServer server = HttpServer.start(resp)) {
@@ -303,19 +300,17 @@ public class DefaultFDv2RequestorTest extends BaseTest {
                 CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
                     requestor.Poll(Selector.EMPTY);
 
-                try {
-                    future.get(5, TimeUnit.SECONDS);
-                    fail("Expected ExecutionException");
-                } catch (ExecutionException e) {
-                    assertThat(e.getCause(), notNullValue());
-                    assertThat(e.getCause().getMessage(), containsString("500"));
-                }
+                FDv2Requestor.FDv2PayloadResponse response = future.get(5, TimeUnit.SECONDS);
+
+                assertNotNull(response);
+                assertEquals(500, response.getStatusCode());
+                assertFalse(response.isSuccess());
             }
         }
     }
 
     @Test
-    public void http404ThrowsException() throws Exception {
+    public void http404ReturnsFailureResponse() throws Exception {
         Handler resp = Handlers.status(404);
 
         try (HttpServer server = HttpServer.start(resp)) {
@@ -323,13 +318,11 @@ public class DefaultFDv2RequestorTest extends BaseTest {
                 CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
                     requestor.Poll(Selector.EMPTY);
 
-                try {
-                    future.get(5, TimeUnit.SECONDS);
-                    fail("Expected ExecutionException");
-                } catch (ExecutionException e) {
-                    assertThat(e.getCause(), notNullValue());
-                    assertThat(e.getCause().getMessage(), containsString("404"));
-                }
+                FDv2Requestor.FDv2PayloadResponse response = future.get(5, TimeUnit.SECONDS);
+
+                assertNotNull(response);
+                assertEquals(404, response.getStatusCode());
+                assertFalse(response.isSuccess());
             }
         }
     }
@@ -408,7 +401,7 @@ public class DefaultFDv2RequestorTest extends BaseTest {
                 // First request with selector1
                 requestor.Poll(selector1).get(5, TimeUnit.SECONDS);
                 RequestInfo req1 = server.getRecorder().requireRequest();
-                assertEquals(null, req1.getHeader("If-None-Match"));
+                assertNull(req1.getHeader("If-None-Match"));
 
                 // Second request with selector1 should use cached ETag
                 requestor.Poll(selector1).get(5, TimeUnit.SECONDS);
@@ -418,7 +411,7 @@ public class DefaultFDv2RequestorTest extends BaseTest {
                 // Request with selector2 should not have ETag (different URI)
                 requestor.Poll(selector2).get(5, TimeUnit.SECONDS);
                 RequestInfo req3 = server.getRecorder().requireRequest();
-                assertEquals(null, req3.getHeader("If-None-Match"));
+                assertNull(req3.getHeader("If-None-Match"));
             }
         }
     }
