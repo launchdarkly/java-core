@@ -1,6 +1,8 @@
 package com.launchdarkly.sdk.server.subsystems;
 
 import com.google.common.collect.ImmutableList;
+import com.launchdarkly.sdk.server.datasources.Initializer;
+import com.launchdarkly.sdk.server.datasources.Synchronizer;
 
 /**
  * Configuration for the SDK's data acquisition and storage strategy.
@@ -35,8 +37,8 @@ public final class DataSystemConfiguration {
     READ_WRITE
   }
 
-  private final ImmutableList<ComponentConfigurer<DataSource>> initializers;
-  private final ImmutableList<ComponentConfigurer<DataSource>> synchronizers;
+  private final ImmutableList<DataSourceBuilder<Initializer>> initializers;
+  private final ImmutableList<DataSourceBuilder<Synchronizer>> synchronizers;
   private final ComponentConfigurer<DataSource> fDv1FallbackSynchronizer;
   private final ComponentConfigurer<DataStore> persistentStore;
   private final DataStoreMode persistentDataStoreMode;
@@ -54,8 +56,8 @@ public final class DataSystemConfiguration {
    * @param persistentDataStoreMode see {@link #getPersistentDataStoreMode()}
    */
   public DataSystemConfiguration(
-      ImmutableList<ComponentConfigurer<DataSource>> initializers,
-      ImmutableList<ComponentConfigurer<DataSource>> synchronizers,
+      ImmutableList<DataSourceBuilder<Initializer>> initializers,
+      ImmutableList<DataSourceBuilder<Synchronizer>> synchronizers,
       ComponentConfigurer<DataSource> fDv1FallbackSynchronizer,
       ComponentConfigurer<DataStore> persistentStore,
       DataStoreMode persistentDataStoreMode) {
@@ -67,26 +69,26 @@ public final class DataSystemConfiguration {
   }
 
   /**
-   * A list of factories for creating data sources for initialization.
-   * 
+   * A list of factories for creating initializers for initialization.
+   *
    * @return the list of initializer configurers
    */
-  public ImmutableList<ComponentConfigurer<DataSource>> getInitializers() {
+  public ImmutableList<DataSourceBuilder<Initializer>> getInitializers() {
     return initializers;
   }
 
   /**
-   * A list of factories for creating data sources for synchronization.
-   * 
+   * A list of factories for creating synchronizers for synchronization.
+   *
    * @return the list of synchronizer configurers
    */
-  public ImmutableList<ComponentConfigurer<DataSource>> getSynchronizers() {
+  public ImmutableList<DataSourceBuilder<Synchronizer>> getSynchronizers() {
     return synchronizers;
   }
 
   /**
    * A synchronizer to fall back to when FDv1 fallback has been requested.
-   * 
+   *
    * @return the FDv1 fallback synchronizer configurer, or null
    */
   public ComponentConfigurer<DataSource> getFDv1FallbackSynchronizer() {
@@ -98,7 +100,7 @@ public final class DataSystemConfiguration {
    * null.
    * <p>
    * The persistent store itself will implement {@link PersistentDataStore}, but we expect that to be wrapped by a factory which can
-   * operates at the {@link DataStore} level.
+   * operate at the {@link DataStore} level.
    * </p>
    * 
    * @return the persistent store configurer, or null

@@ -136,12 +136,12 @@ public class DefaultFDv2RequestorTest extends BaseTest {
     }
 
     @Test
-    public void requestWithVersionQueryParameter() throws Exception {
+    public void requestWithBasisQueryParameter() throws Exception {
         Handler resp = Handlers.bodyJson(EMPTY_EVENTS_JSON);
 
         try (HttpServer server = HttpServer.start(resp)) {
             try (DefaultFDv2Requestor requestor = makeRequestor(server)) {
-                Selector selector = Selector.make(42, null);
+                Selector selector = Selector.make(42, "test-state");
 
                 CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
                     requestor.Poll(selector);
@@ -150,18 +150,18 @@ public class DefaultFDv2RequestorTest extends BaseTest {
 
                 RequestInfo req = server.getRecorder().requireRequest();
                 assertEquals(REQUEST_PATH, req.getPath());
-                assertThat(req.getQuery(), containsString("version=42"));
+                assertThat(req.getQuery(), containsString("basis=test-state"));
             }
         }
     }
 
     @Test
-    public void requestWithStateQueryParameter() throws Exception {
+    public void requestWithBasisContainingState() throws Exception {
         Handler resp = Handlers.bodyJson(EMPTY_EVENTS_JSON);
 
         try (HttpServer server = HttpServer.start(resp)) {
             try (DefaultFDv2Requestor requestor = makeRequestor(server)) {
-                Selector selector = Selector.make(0, "test-state");
+                Selector selector = Selector.make(0, "(p:payload-1:100)");
 
                 CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
                     requestor.Poll(selector);
@@ -170,18 +170,18 @@ public class DefaultFDv2RequestorTest extends BaseTest {
 
                 RequestInfo req = server.getRecorder().requireRequest();
                 assertEquals(REQUEST_PATH, req.getPath());
-                assertThat(req.getQuery(), containsString("state=test-state"));
+                assertThat(req.getQuery(), containsString("basis=%28p%3Apayload-1%3A100%29"));
             }
         }
     }
 
     @Test
-    public void requestWithBothQueryParameters() throws Exception {
+    public void requestWithComplexBasisState() throws Exception {
         Handler resp = Handlers.bodyJson(EMPTY_EVENTS_JSON);
 
         try (HttpServer server = HttpServer.start(resp)) {
             try (DefaultFDv2Requestor requestor = makeRequestor(server)) {
-                Selector selector = Selector.make(100, "my-state");
+                Selector selector = Selector.make(100, "(p:my-payload:200)");
 
                 CompletableFuture<FDv2Requestor.FDv2PayloadResponse> future =
                     requestor.Poll(selector);
@@ -190,8 +190,7 @@ public class DefaultFDv2RequestorTest extends BaseTest {
 
                 RequestInfo req = server.getRecorder().requireRequest();
                 assertEquals(REQUEST_PATH, req.getPath());
-                assertThat(req.getQuery(), containsString("version=100"));
-                assertThat(req.getQuery(), containsString("state=my-state"));
+                assertThat(req.getQuery(), containsString("basis=%28p%3Amy-payload%3A200%29"));
             }
         }
     }
@@ -403,8 +402,8 @@ public class DefaultFDv2RequestorTest extends BaseTest {
 
         try (HttpServer server = HttpServer.start(resp)) {
             try (DefaultFDv2Requestor requestor = makeRequestor(server)) {
-                Selector selector1 = Selector.make(100, "state1");
-                Selector selector2 = Selector.make(200, "state2");
+                Selector selector1 = Selector.make(100, "(p:payload-1:100)");
+                Selector selector2 = Selector.make(200, "(p:payload-2:200)");
 
                 // First request with selector1
                 requestor.Poll(selector1).get(5, TimeUnit.SECONDS);

@@ -1,11 +1,12 @@
 package com.launchdarkly.sdk.server;
 
+import com.google.common.collect.ImmutableList;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
-import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
+import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSinkV2;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -18,10 +19,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 class FDv2DataSource implements DataSource {
-    private final List<InitializerFactory> initializers;
+    private final List<DataSourceFactory<Initializer>> initializers;
     private final List<SynchronizerFactoryWithState> synchronizers;
 
-    private final DataSourceUpdateSink dataSourceUpdates;
+    private final DataSourceUpdateSinkV2 dataSourceUpdates;
 
     private final CompletableFuture<Boolean> startFuture = new CompletableFuture<>();
     private final AtomicBoolean started = new AtomicBoolean(false);
@@ -46,12 +47,12 @@ class FDv2DataSource implements DataSource {
             Blocked
         }
 
-        private final SynchronizerFactory factory;
+        private final DataSourceFactory<Synchronizer> factory;
 
         private State state = State.Available;
 
 
-        public SynchronizerFactoryWithState(SynchronizerFactory factory) {
+        public SynchronizerFactoryWithState(DataSourceFactory<Synchronizer> factory) {
             this.factory = factory;
         }
 
@@ -68,19 +69,15 @@ class FDv2DataSource implements DataSource {
         }
     }
 
-    public interface InitializerFactory {
-        Initializer build();
-    }
-
-    public interface SynchronizerFactory {
-        Synchronizer build();
+    public interface DataSourceFactory<T> {
+        T build();
     }
 
 
     public FDv2DataSource(
-            List<InitializerFactory> initializers,
-            List<SynchronizerFactory> synchronizers,
-            DataSourceUpdateSink dataSourceUpdates
+            ImmutableList<DataSourceFactory<Initializer>> initializers,
+            ImmutableList<DataSourceFactory<Synchronizer>> synchronizers,
+            DataSourceUpdateSinkV2 dataSourceUpdates
     ) {
         this.initializers = initializers;
         this.synchronizers = synchronizers
@@ -116,6 +113,40 @@ class FDv2DataSource implements DataSource {
         }
     }
 
+    private void runInitializers() {
+        boolean anyDataReceived = false;
+        for (DataSourceFactory<Initializer> factory : initializers) {
+            try {
+                Initializer initializer = factory.build();
+                if (setActiveSource(initializer)) return;
+                FDv2SourceResult result = initializer.run().get();
+                switch (result.getResultType()) {
+                    case CHANGE_SET:
+                        dataSourceUpdates.apply(result.getChangeSet());
+                        anyDataReceived = true;
+                        if (!result.getChangeSet().getSelector().isEmpty()) {
+                            // We received data with a selector, so we end the initialization process.
+                            dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
+                            startFuture.complete(true);
+                            return;
+                        }
+                        break;
+                    case STATUS:
+                        // TODO: Implement.
+                        break;
+                }
+            } catch (ExecutionException | InterruptedException | CancellationException e) {
+                // TODO: Log.
+            }
+        }
+        // We received data without a selector, and we have exhausted initializers, so we are going to
+        // consider ourselves initialized.
+        if (anyDataReceived) {
+            dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
+            startFuture.complete(true);
+        }
+    }
+
     private void runSynchronizers() {
         SynchronizerFactoryWithState availableSynchronizer = getFirstAvailableSynchronizer();
         // TODO: Add recovery handling. If there are no available synchronizers, but there are
@@ -130,7 +161,7 @@ class FDv2DataSource implements DataSource {
                     FDv2SourceResult result = synchronizer.next().get();
                     switch (result.getResultType()) {
                         case CHANGE_SET:
-                            // TODO: Apply to the store.
+                            dataSourceUpdates.apply(result.getChangeSet());
                             // This could have been completed by any data source. But if it has not been completed before
                             // now, then we complete it.
                             startFuture.complete(true);
@@ -184,40 +215,6 @@ class FDv2DataSource implements DataSource {
             activeSource = synchronizer;
         }
         return false;
-    }
-
-    private void runInitializers() {
-        boolean anyDataReceived = false;
-        for (InitializerFactory factory : initializers) {
-            try {
-                Initializer initializer = factory.build();
-                if (setActiveSource(initializer)) return;
-                FDv2SourceResult res = initializer.run().get();
-                switch (res.getResultType()) {
-                    case CHANGE_SET:
-                        // TODO: Apply to the store.
-                        anyDataReceived = true;
-                        if (!res.getChangeSet().getSelector().isEmpty()) {
-                            // We received data with a selector, so we end the initialization process.
-                            dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
-                            startFuture.complete(true);
-                            return;
-                        }
-                        break;
-                    case STATUS:
-                        // TODO: Implement.
-                        break;
-                }
-            } catch (ExecutionException | InterruptedException | CancellationException e) {
-                // TODO: Log.
-            }
-        }
-        // We received data without a selector, and we have exhausted initializers, so we are going to
-        // consider ourselves initialized.
-        if (anyDataReceived) {
-            dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
-            startFuture.complete(true);
-        }
     }
 
     @Override

@@ -98,10 +98,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
 
                         // Add selector query parameters if the selector is not empty
                         if (!selector.isEmpty()) {
-                            updatedUri = HttpHelpers.addQueryParam(updatedUri, "version", String.valueOf(selector.getVersion()));
-                            if (selector.getState() != null && !selector.getState().isEmpty()) {
-                                updatedUri = HttpHelpers.addQueryParam(updatedUri, "state", selector.getState());
-                            }
+                            updatedUri = HttpHelpers.addQueryParam(updatedUri, "basis", selector.getState());
                         }
 
                         // Add the payloadFilter query parameter if present and non-empty

@@ -1,5 +1,6 @@
 package com.launchdarkly.sdk.server.integrations;
 
+import com.launchdarkly.sdk.server.DataSystemComponents;
 import com.launchdarkly.sdk.server.subsystems.ComponentConfigurer;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
 import com.launchdarkly.sdk.server.subsystems.DataSystemConfiguration;
@@ -39,8 +40,8 @@ public final class DataSystemModes {
    */
   public DataSystemBuilder defaultMode() {
     return custom()
-        .initializers(DataSystemComponents.polling())
-        .synchronizers(DataSystemComponents.streaming(), DataSystemComponents.polling())
+        .initializers(DataSystemComponents.pollingInitializer())
+        .synchronizers(DataSystemComponents.streamingSynchronizer(), DataSystemComponents.pollingSynchronizer())
         .fDv1FallbackSynchronizer(DataSystemComponents.fDv1Polling());
   }
 
@@ -66,7 +67,7 @@ public final class DataSystemModes {
    */
   public DataSystemBuilder streaming() {
     return custom()
-        .synchronizers(DataSystemComponents.streaming())
+        .synchronizers(DataSystemComponents.streamingSynchronizer())
         .fDv1FallbackSynchronizer(DataSystemComponents.fDv1Polling());
   }
 
@@ -88,7 +89,7 @@ public final class DataSystemModes {
    */
   public DataSystemBuilder polling() {
     return custom()
-        .synchronizers(DataSystemComponents.polling())
+        .synchronizers(DataSystemComponents.pollingSynchronizer())
         .fDv1FallbackSynchronizer(DataSystemComponents.fDv1Polling());
   }
 
@@ -144,8 +145,8 @@ public final class DataSystemModes {
    * <pre><code>
    *     LDConfig config = new LDConfig.Builder("my-sdk-key")
    *       .dataSystem(Components.dataSystem().custom()
-   *         .initializers(DataSystemComponents.polling())
-   *         .synchronizers(DataSystemComponents.streaming(), DataSystemComponents.polling())
+   *         .initializers(DataSystemComponents.pollingInitializer())
+   *         .synchronizers(DataSystemComponents.streamingSynchronizer(), DataSystemComponents.pollingSynchronizer())
    *         .fDv1FallbackSynchronizer(DataSystemComponents.fDv1Polling()));
    * </code></pre>
    * 
