@@ -38,6 +38,7 @@ public final class DataSystemComponents {
               toHttpProperties(context.getHttp()),
               configuredBaseUri,
               StandardEndpoints.FDV2_POLLING_REQUEST_PATH,
+              payloadFilter,
               context.getBaseLogger());
 
       return new PollingInitializerImpl(
@@ -64,6 +65,7 @@ public final class DataSystemComponents {
               toHttpProperties(context.getHttp()),
               configuredBaseUri,
               StandardEndpoints.FDV2_POLLING_REQUEST_PATH,
+              payloadFilter,
               context.getBaseLogger());
 
       return new PollingSynchronizerImpl(
@@ -94,7 +96,7 @@ public final class DataSystemComponents {
               StandardEndpoints.FDV2_STREAMING_REQUEST_PATH,
               context.getBaseLogger(),
               context.getSelectorSource(),
-              null,
+              payloadFilter,
               initialReconnectDelay
       );
     }

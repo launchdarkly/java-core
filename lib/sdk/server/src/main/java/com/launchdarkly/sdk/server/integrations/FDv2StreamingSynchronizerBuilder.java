@@ -41,6 +41,8 @@ public abstract class FDv2StreamingSynchronizerBuilder implements DataSourceBuil
 
   protected ServiceEndpoints serviceEndpointsOverride;
 
+  protected String payloadFilter;
+
   /**
    * Sets the initial reconnect delay for the streaming connection.
    * <p>
@@ -70,6 +72,18 @@ public abstract class FDv2StreamingSynchronizerBuilder implements DataSourceBuil
    */
   public FDv2StreamingSynchronizerBuilder serviceEndpointsOverride(ServiceEndpointsBuilder serviceEndpointsOverride) {
     this.serviceEndpointsOverride = serviceEndpointsOverride.createServiceEndpoints();
+    return this;
+  }
+
+  /**
+   * Sets the Payload Filter that will be used to filter the objects (flags, segments, etc.)
+   * from this synchronizer.
+   * 
+   * @param payloadFilter the filter to be used
+   * @return the builder
+   */
+  public FDv2StreamingSynchronizerBuilder payloadFilter(String payloadFilter) {
+    this.payloadFilter = payloadFilter;
     return this;
   }
 
