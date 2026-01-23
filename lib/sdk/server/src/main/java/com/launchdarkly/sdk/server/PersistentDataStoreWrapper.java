@@ -43,7 +43,7 @@ import static com.google.common.collect.Iterables.isEmpty;
  * <p>
  * This class is only constructed by {@link PersistentDataStoreBuilder}.
  */
-final class PersistentDataStoreWrapper implements DataStore {
+final class PersistentDataStoreWrapper implements DataStore, SettableCache {
   private final PersistentDataStore core;
   private final LoadingCache<CacheKey, Optional<ItemDescriptor>> itemCache;
   private final LoadingCache<DataKind, KeyedItems<ItemDescriptor>> allCache;
@@ -54,6 +54,9 @@ final class PersistentDataStoreWrapper implements DataStore {
   private final AtomicBoolean inited = new AtomicBoolean(false);
   private final ListeningExecutorService cacheExecutor;
   private final LDLogger logger;
+  
+  private final Object externalStoreLock = new Object();
+  private volatile CacheExporter externalCache;
   
   PersistentDataStoreWrapper(
       final PersistentDataStore core,
@@ -180,7 +183,7 @@ final class PersistentDataStoreWrapper implements DataStore {
     ImmutableList.Builder<Map.Entry<DataKind, KeyedItems<SerializedItemDescriptor>>> allBuilder = ImmutableList.builder();
     for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> e0: allData.getData()) {
       DataKind kind = e0.getKey();
-      KeyedItems<SerializedItemDescriptor> items = serializeAll(kind, e0.getValue());
+      KeyedItems<SerializedItemDescriptor> items = PersistentDataStoreConverter.serializeAll(kind, e0.getValue());
       allBuilder.add(new AbstractMap.SimpleEntry<>(kind, items));
     }
     RuntimeException failure = initCore(new FullDataSet<>(allBuilder.build()));
@@ -260,7 +263,7 @@ final class PersistentDataStoreWrapper implements DataStore {
     synchronized (cachedDataKinds) {
       cachedDataKinds.add(kind);
     }
-    SerializedItemDescriptor serializedItem = serialize(kind, item);
+    SerializedItemDescriptor serializedItem = PersistentDataStoreConverter.serialize(kind, item);
     boolean updated = false;
     RuntimeException failure = null;
     try {
@@ -317,6 +320,24 @@ final class PersistentDataStoreWrapper implements DataStore {
     return true;
   }
 
+  /**
+   * Sets an external data source for recovery synchronization.
+   * <p>
+   * This should be called during initialization if the wrapper is being used
+   * in a write-through architecture where an external store maintains authoritative data.
+   * <p>
+   * When we remove FDv1 support, we should remove this functionality and instead handle it at a higher
+   * layer.
+   * 
+   * @param externalDataSource The external data source to sync from during recovery
+   */
+  @Override
+  public void setCacheExporter(CacheExporter externalDataSource) {
+    synchronized (externalStoreLock) {
+      externalCache = externalDataSource;
+    }
+  }
+
   @Override
   public CacheStats getCacheStats() {
     if (itemCache == null || allCache == null) {
@@ -335,7 +356,7 @@ final class PersistentDataStoreWrapper implements DataStore {
 
   private ItemDescriptor getAndDeserializeItem(DataKind kind, String key) {
     SerializedItemDescriptor maybeSerializedItem = core.get(kind, key);
-    return maybeSerializedItem == null ? null : deserialize(kind, maybeSerializedItem);
+    return maybeSerializedItem == null ? null : PersistentDataStoreConverter.deserialize(kind, maybeSerializedItem);
   }
   
   private KeyedItems<ItemDescriptor> getAllAndDeserialize(DataKind kind) {
@@ -345,36 +366,11 @@ final class PersistentDataStoreWrapper implements DataStore {
     }
     ImmutableList.Builder<Map.Entry<String, ItemDescriptor>> b = ImmutableList.builder();
     for (Map.Entry<String, SerializedItemDescriptor> e: allItems.getItems()) {
-      b.add(new AbstractMap.SimpleEntry<>(e.getKey(), deserialize(kind, e.getValue())));
+      b.add(new AbstractMap.SimpleEntry<>(e.getKey(), PersistentDataStoreConverter.deserialize(kind, e.getValue())));
     }
     return new KeyedItems<>(b.build());
   }
   
-  private SerializedItemDescriptor serialize(DataKind kind, ItemDescriptor itemDesc) {
-    boolean isDeleted = itemDesc.getItem() == null;
-    return new SerializedItemDescriptor(itemDesc.getVersion(), isDeleted, kind.serialize(itemDesc));
-  }
-  
-  private KeyedItems<SerializedItemDescriptor> serializeAll(DataKind kind, KeyedItems<ItemDescriptor> items) {
-    ImmutableList.Builder<Map.Entry<String, SerializedItemDescriptor>> itemsBuilder = ImmutableList.builder();
-    for (Map.Entry<String, ItemDescriptor> e: items.getItems()) {
-      itemsBuilder.add(new AbstractMap.SimpleEntry<>(e.getKey(), serialize(kind, e.getValue())));
-    }
-    return new KeyedItems<>(itemsBuilder.build());
-  }
-  
-  private ItemDescriptor deserialize(DataKind kind, SerializedItemDescriptor serializedItemDesc) {
-    if (serializedItemDesc.isDeleted() || serializedItemDesc.getSerializedItem() == null) {
-      return ItemDescriptor.deletedItem(serializedItemDesc.getVersion());
-    }
-    ItemDescriptor deserializedItem = kind.deserialize(serializedItemDesc.getSerializedItem());
-    if (serializedItemDesc.getVersion() == 0 || serializedItemDesc.getVersion() == deserializedItem.getVersion()
-        || deserializedItem.getItem() == null) {
-      return deserializedItem;
-    }
-    // If the store gave us a version number that isn't what was encoded in the object, trust it
-    return new ItemDescriptor(serializedItemDesc.getVersion(), deserializedItem.getItem());
-  }
 
   private KeyedItems<ItemDescriptor> updateSingleItem(KeyedItems<ItemDescriptor> items, String key, ItemDescriptor item) {
     // This is somewhat inefficient but it's preferable to use immutable data structures in the cache.
@@ -401,7 +397,47 @@ final class PersistentDataStoreWrapper implements DataStore {
     if (!core.isStoreAvailable()) {
       return false;
     }
-    
+
+    CacheExporter externalCacheSnapshot;
+    synchronized (externalStoreLock) {
+      externalCacheSnapshot = externalCache;
+    }
+
+    // If we have an external data source (e.g., WriteThroughStore's memory store) that is initialized,
+    // use that as the authoritative source. Otherwise, fall back to our internal cache if it's configured
+    // to cache indefinitely.
+    if (externalCacheSnapshot != null) {
+      if (externalCacheSnapshot.isInitialized()) {
+        try {
+          FullDataSet<ItemDescriptor> externalData = externalCacheSnapshot.exportAll();
+          FullDataSet<SerializedItemDescriptor> serializedData = 
+              PersistentDataStoreConverter.toSerializedFormat(externalData);
+          RuntimeException e = initCore(serializedData);
+
+          if (e == null) {
+            logger.warn("Successfully updated persistent store from external data source");
+          } else {
+            // We failed to write the data to the underlying store. In this case, we should not
+            // return to a recovered state, but just try this all again next time the poll task runs.
+            logger.error("Tried to write external data to persistent store after outage, but failed: {}",
+                LogValues.exceptionSummary(e));
+            logger.debug(LogValues.exceptionTrace(e));
+            return false;
+          }
+        } catch (Exception ex) {
+          // If we can't export from the external source, don't recover yet
+          logger.error("Failed to export data from external source during persistent store recovery: {}",
+              LogValues.exceptionSummary(ex));
+          logger.debug(LogValues.exceptionTrace(ex));
+          return false;
+        }
+
+        return true;
+      }
+    }
+
+    // Fall back to cache-based recovery if external store is not available/initialized
+    // and we're in infinite cache mode
     if (cacheIndefinitely && allCache != null) {
       // If we're in infinite cache mode, then we can assume the cache has a full set of current
       // flag data (since presumably the data source has still been running) and we can just
@@ -414,7 +450,7 @@ final class PersistentDataStoreWrapper implements DataStore {
       for (DataKind kind: allKinds) {
         KeyedItems<ItemDescriptor> items = allCache.getIfPresent(kind);
         if (items != null) {
-          builder.add(new AbstractMap.SimpleEntry<>(kind, serializeAll(kind, items)));
+          builder.add(new AbstractMap.SimpleEntry<>(kind, PersistentDataStoreConverter.serializeAll(kind, items)));
         }
       }
       RuntimeException e = initCore(new FullDataSet<>(builder.build()));
