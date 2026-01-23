@@ -1,8 +1,8 @@
 package com.launchdarkly.sdk.server;
 
 import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
-import com.launchdarkly.sdk.server.FDv2DataSource.Condition;
-import com.launchdarkly.sdk.server.FDv2DataSource.FallbackCondition;
+import com.launchdarkly.sdk.server.FDv2DataSourceConditions.Condition;
+import com.launchdarkly.sdk.server.FDv2DataSourceConditions.FallbackCondition;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes;
