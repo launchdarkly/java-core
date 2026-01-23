@@ -138,7 +138,10 @@ final class FDv2DataSystem implements DataSystem, Closeable {
     DataSource dataSource = new FDv2DataSource(
       initializerFactories,
       synchronizerFactories,
-      dataSourceUpdates
+      dataSourceUpdates,
+      config.threadPriority,
+      clientContext.getBaseLogger().subLogger(Loggers.DATA_SOURCE_LOGGER_NAME),
+      clientContext.sharedExecutor
     );
     DataSourceStatusProvider dataSourceStatusProvider = new DataSourceStatusProviderImpl(
       dataSourceStatusBroadcaster,

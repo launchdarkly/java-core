@@ -1,6 +1,7 @@
 package com.launchdarkly.sdk.server;
 
 import com.google.common.collect.ImmutableList;
+import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
@@ -10,17 +11,28 @@ import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSinkV2;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.CancellationException;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 class FDv2DataSource implements DataSource {
+    /**
+     * Default fallback timeout of 2 minutes. The timeout is only configurable for testing.
+     */
+    private static final int defaultFallbackTimeout = 2 * 60;
+
+    /**
+     * Default recovery timeout of 5 minutes. The timeout is only configurable for testing.
+     */
+    private static final long defaultRecoveryTimeout = 5 * 60;
+
     private final List<DataSourceFactory<Initializer>> initializers;
     private final List<SynchronizerFactoryWithState> synchronizers;
+
+    private final List<ConditionFactory> conditionFactories;
 
     private final DataSourceUpdateSinkV2 dataSourceUpdates;
 
@@ -33,6 +45,168 @@ class FDv2DataSource implements DataSource {
     private final Object activeSourceLock = new Object();
     private Closeable activeSource;
     private boolean isShutdown = false;
+
+    private final int threadPriority;
+
+    private final LDLogger logger;
+
+    /**
+     * Package-private for testing.
+     */
+    interface Condition {
+        enum ConditionType {
+            FALLBACK,
+            RECOVERY,
+        }
+        CompletableFuture<Condition> execute();
+
+        void inform(FDv2SourceResult sourceResult);
+
+        void close() throws IOException;
+
+        ConditionType getType();
+    }
+
+    interface ConditionFactory {
+        Condition build();
+
+        Condition.ConditionType getType();
+    }
+
+
+    static abstract class TimedCondition implements Condition {
+        protected final CompletableFuture<Condition> resultFuture = new CompletableFuture<>();
+
+        protected final ScheduledExecutorService sharedExecutor;
+
+        /**
+         * Future for the timeout task, if any. Will be null when no timeout is active.
+         */
+        protected ScheduledFuture<Void> timerFuture;
+
+        /**
+         * Timeout duration for the fallback operation.
+         */
+        protected final long timeoutSeconds;
+
+        public TimedCondition(ScheduledExecutorService sharedExecutor, long timeoutSeconds) {
+            this.sharedExecutor = sharedExecutor;
+            this.timeoutSeconds = timeoutSeconds;
+        }
+
+        @Override
+        public CompletableFuture<Condition> execute() {
+            return resultFuture;
+        }
+
+        @Override
+        public void close() throws IOException {
+            if (timerFuture != null) {
+                timerFuture.cancel(false);
+                timerFuture = null;
+            }
+        }
+
+        static abstract class Factory implements ConditionFactory {
+            protected final ScheduledExecutorService sharedExecutor;
+            protected final long timeoutSeconds;
+
+            public Factory(ScheduledExecutorService sharedExecutor, long timeout) {
+                this.sharedExecutor = sharedExecutor;
+                this.timeoutSeconds = timeout;
+            }
+        }
+    }
+
+    /**
+     * This condition is used to determine if a fallback should be performed. It is informed of each data source result
+     * via {@link #inform(FDv2SourceResult)}. Based on the results, it updates its internal state. When the fallback
+     * condition is met, then the {@link Future} returned by {@link #execute()} will complete.
+     * <p>
+     * This is package-private, instead of private, for ease of testing.
+     */
+    static class FallbackCondition extends TimedCondition {
+        static class Factory extends TimedCondition.Factory {
+            public Factory(ScheduledExecutorService sharedExecutor, long timeout) {
+                super(sharedExecutor, timeout);
+            }
+            @Override
+            public Condition build() {
+                return new FallbackCondition(sharedExecutor, timeoutSeconds);
+            }
+
+            @Override
+            public ConditionType getType() {
+                return ConditionType.FALLBACK;
+            }
+        }
+
+        public FallbackCondition(ScheduledExecutorService sharedExecutor, long timeoutSeconds) {
+            super(sharedExecutor, timeoutSeconds);
+        }
+
+        @Override
+        public void inform(FDv2SourceResult sourceResult) {
+            if(sourceResult == null) {
+                return;
+            }
+            if(sourceResult.getResultType() == FDv2SourceResult.ResultType.CHANGE_SET) {
+                if(timerFuture != null) {
+                    timerFuture.cancel(false);
+                    timerFuture = null;
+                }
+            }
+            if(sourceResult.getResultType() == FDv2SourceResult.ResultType.STATUS && sourceResult.getStatus().getState() == FDv2SourceResult.State.INTERRUPTED) {
+                if (timerFuture == null) {
+                    timerFuture = sharedExecutor.schedule(() -> {
+                        resultFuture.complete(this);
+                        return null;
+                    }, timeoutSeconds, TimeUnit.SECONDS);
+                }
+            }
+        }
+
+        @Override
+        public ConditionType getType() {
+            return ConditionType.FALLBACK;
+        }
+    }
+
+    static class RecoveryCondition extends TimedCondition {
+
+         static class Factory extends TimedCondition.Factory {
+            public Factory(ScheduledExecutorService sharedExecutor, long timeout) {
+                super(sharedExecutor, timeout);
+            }
+            @Override
+            public Condition build() {
+                return new RecoveryCondition(sharedExecutor, timeoutSeconds);
+            }
+
+            @Override
+            public ConditionType getType() {
+                return ConditionType.RECOVERY;
+            }
+        }
+
+        public RecoveryCondition(ScheduledExecutorService sharedExecutor, long timeoutSeconds) {
+            super(sharedExecutor, timeoutSeconds);
+            timerFuture = sharedExecutor.schedule(() -> {
+                resultFuture.complete(this);
+                return null;
+            }, timeoutSeconds, TimeUnit.SECONDS);
+        }
+
+        @Override
+        public void inform(FDv2SourceResult sourceResult) {
+            // Time-based recovery.
+        }
+
+        @Override
+        public ConditionType getType() {
+            return ConditionType.RECOVERY;
+        }
+    }
 
     private static class SynchronizerFactoryWithState {
         public enum State {
@@ -73,18 +247,39 @@ class FDv2DataSource implements DataSource {
         T build();
     }
 
+    public FDv2DataSource(
+        ImmutableList<DataSourceFactory<Initializer>> initializers,
+        ImmutableList<DataSourceFactory<Synchronizer>> synchronizers,
+        DataSourceUpdateSinkV2 dataSourceUpdates,
+        int threadPriority,
+        LDLogger logger,
+        ScheduledExecutorService sharedExecutor
+    ) {
+        this(initializers, synchronizers, dataSourceUpdates, threadPriority, logger, sharedExecutor, defaultFallbackTimeout, defaultRecoveryTimeout);
+    }
+
 
     public FDv2DataSource(
-            ImmutableList<DataSourceFactory<Initializer>> initializers,
-            ImmutableList<DataSourceFactory<Synchronizer>> synchronizers,
-            DataSourceUpdateSinkV2 dataSourceUpdates
+        ImmutableList<DataSourceFactory<Initializer>> initializers,
+        ImmutableList<DataSourceFactory<Synchronizer>> synchronizers,
+        DataSourceUpdateSinkV2 dataSourceUpdates,
+        int threadPriority,
+        LDLogger logger,
+        ScheduledExecutorService sharedExecutor,
+        long fallbackTimeout,
+        long recoveryTimeout
     ) {
         this.initializers = initializers;
         this.synchronizers = synchronizers
-                .stream()
-                .map(SynchronizerFactoryWithState::new)
-                .collect(Collectors.toList());
+            .stream()
+            .map(SynchronizerFactoryWithState::new)
+            .collect(Collectors.toList());
         this.dataSourceUpdates = dataSourceUpdates;
+        this.threadPriority = threadPriority;
+        this.logger = logger;
+        this.conditionFactories = new ArrayList<>();
+        this.conditionFactories.add(new FallbackCondition.Factory(sharedExecutor, fallbackTimeout));
+        this.conditionFactories.add(new RecoveryCondition.Factory(sharedExecutor, recoveryTimeout));
     }
 
     private void run() {
@@ -92,24 +287,64 @@ class FDv2DataSource implements DataSource {
             if (!initializers.isEmpty()) {
                 runInitializers();
             }
-            runSynchronizers();
+            boolean fdv1Fallback = runSynchronizers();
+            if (fdv1Fallback) {
+                // TODO: Run FDv1 fallback.
+            }
             // TODO: Handle. We have ran out of sources or we are shutting down.
         });
         runThread.setDaemon(true);
-        // TODO: Thread priority.
-        //thread.setPriority(threadPriority);
+        runThread.setPriority(threadPriority);
         runThread.start();
     }
 
-    private SynchronizerFactoryWithState getFirstAvailableSynchronizer() {
+    /**
+     * We start at -1, so finding the next synchronizer can non-conditionally increment the index.
+     */
+    private int sourceIndex = -1;
+
+    /**
+     * Reset the source index to -1, indicating that we should start from the first synchronizer when looking for
+     * the next one to use. This is used when recovering from a non-primary synchronizer.
+     */
+    private void resetSynchronizerSourceIndex() {
+        synchronized (activeSourceLock) {
+            sourceIndex = -1;
+        }
+    }
+
+    /**
+     * Get the next synchronizer to use. This operates based on tracking the index of the currently active synchronizer,
+     * which will loop through all available synchronizers handling interruptions. Then a non-prime synchronizer recovers
+     * the source index will be reset, and we start at the beginning.
+     * <p>
+     * Any given synchronizer can be marked as blocked, in which case that synchronizer is not eligible to be used again.
+     * Synchronizers that are not blocked are available, and this function will only return available synchronizers.
+     * @return the next synchronizer factory to use, or null if there are no more available synchronizers.
+     */
+    private SynchronizerFactoryWithState getNextAvailableSynchronizer() {
         synchronized (synchronizers) {
-            for (SynchronizerFactoryWithState synchronizer : synchronizers) {
-                if (synchronizer.getState() == SynchronizerFactoryWithState.State.Available) {
-                    return synchronizer;
+            SynchronizerFactoryWithState factory = null;
+
+            // There is at least one available factory.
+            if(synchronizers.stream().anyMatch(s -> s.getState() == SynchronizerFactoryWithState.State.Available)) {
+                // Look for the next synchronizer starting at the position after the current one. (avoiding just re-using the same synchronizer.)
+                while(factory == null) {
+                    sourceIndex++;
+                    // We aren't using module here because we want to keep the stored index within range instead
+                    // of increasing indefinitely.
+                    if(sourceIndex >= synchronizers.size()) {
+                        sourceIndex = 0;
+                    }
+                    SynchronizerFactoryWithState candidate = synchronizers.get(sourceIndex);
+                    if (candidate.getState() == SynchronizerFactoryWithState.State.Available) {
+                        factory = candidate;
+                    }
+
                 }
             }
 
-            return null;
+            return factory;
         }
     }
 
@@ -136,7 +371,9 @@ class FDv2DataSource implements DataSource {
                         break;
                 }
             } catch (ExecutionException | InterruptedException | CancellationException e) {
-                // TODO: Log.
+                // TODO: Better messaging?
+                // TODO: Data source status?
+                logger.warn("Error running initializer: {}", e.toString());
             }
         }
         // We received data without a selector, and we have exhausted initializers, so we are going to
@@ -147,18 +384,88 @@ class FDv2DataSource implements DataSource {
         }
     }
 
-    private void runSynchronizers() {
-        SynchronizerFactoryWithState availableSynchronizer = getFirstAvailableSynchronizer();
-        // TODO: Add recovery handling. If there are no available synchronizers, but there are
-        // recovering ones, then we likely will want to wait for them to be available (or bypass recovery).
+    /**
+     * Determine conditions for the current synchronizer. Synchronizers require different conditions depending on if
+     * they are the 'prime' synchronizer or if there are other available synchronizers to use.
+     * @return a list of conditions to apply to the synchronizer
+     */
+    private List<Condition> getConditions() {
+        boolean isPrimeSynchronizer = false;
+        int availableSynchronizers = 0;
+        boolean firstAvailableSynchronizer = true;
+
+        synchronized (activeSourceLock) {
+            for (int index = 0; index < synchronizers.size(); index++) {
+
+                if (synchronizers.get(index).getState() == SynchronizerFactoryWithState.State.Available) {
+                    if (firstAvailableSynchronizer && sourceIndex == index) {
+                        // This is the first synchronizer that is available, and it also is the current one.
+                        isPrimeSynchronizer = true;
+                    }
+                    // Subsequently encountered synchronizers that are available are not the first one.
+                    firstAvailableSynchronizer = false;
+                    availableSynchronizers++;
+                }
+            }
+        }
+        if(availableSynchronizers == 1) {
+            // If there is only 1 synchronizer, then we cannot fall back or recover, so we don't need any conditions.
+            return Collections.emptyList();
+        }
+        if(isPrimeSynchronizer) {
+            // If there isn't a synchronizer to recover to, then don't add and recovery conditions.
+            return conditionFactories.stream()
+                .filter((ConditionFactory factory) -> factory.getType() != Condition.ConditionType.RECOVERY)
+                .map(ConditionFactory::build).collect(Collectors.toList());
+        }
+        // The synchronizer can both fall back and recover.
+        return conditionFactories.stream().map(ConditionFactory::build).collect(Collectors.toList());
+    }
+
+    private boolean runSynchronizers() {
+        SynchronizerFactoryWithState availableSynchronizer = getNextAvailableSynchronizer();
         while (availableSynchronizer != null) {
             Synchronizer synchronizer = availableSynchronizer.build();
+
             // Returns true if shutdown.
-            if (setActiveSource(synchronizer)) return;
+            if (setActiveSource(synchronizer)) return false;
+
             try {
                 boolean running = true;
+                // Conditions run once for the life of the synchronizer.
+                List<Condition> conditions = getConditions();
+                CompletableFuture<Object> conditionFutures = CompletableFuture.anyOf(
+                    conditions.stream().map(Condition::execute).toArray(CompletableFuture[]::new));
+
                 while (running) {
-                    FDv2SourceResult result = synchronizer.next().get();
+                    CompletableFuture<FDv2SourceResult> nextResultFuture = synchronizer.next();
+
+                    Object res = CompletableFuture.anyOf(conditionFutures, nextResultFuture).get();
+
+                    if(res instanceof Condition) {
+                        Condition c = (Condition) res;
+                        switch (c.getType()) {
+                            case FALLBACK:
+                                // For fallback, we will move to the next available synchronizer, which may loop.
+                                // This is the default behavior of exiting the run loop, so we don't need to take
+                                // any action.
+                                break;
+                            case RECOVERY:
+                                // For recovery, we will start at the first available synchronizer.
+                                // So we reset the source index, and finding the source will start at the beginning.
+                                resetSynchronizerSourceIndex();
+                                break;
+                        }
+                        // A running synchronizer will only have fallback and recovery conditions that it can act on.
+                        // So, if there are no synchronizers to recover to or fallback to, then we will not have
+                        // those conditions.
+                        break;
+                    }
+
+
+                    FDv2SourceResult result = (FDv2SourceResult) res;
+                    conditions.forEach(c -> c.inform(result));
+
                     switch (result.getResultType()) {
                         case CHANGE_SET:
                             dataSourceUpdates.apply(result.getChangeSet());
@@ -175,7 +482,7 @@ class FDv2DataSource implements DataSource {
                                 case SHUTDOWN:
                                     // We should be overall shutting down.
                                     // TODO: We may need logging or to do a little more.
-                                    return;
+                                    return false;
                                 case TERMINAL_ERROR:
                                     availableSynchronizer.block();
                                     running = false;
@@ -186,13 +493,20 @@ class FDv2DataSource implements DataSource {
                             }
                             break;
                     }
+                    // We have been requested to fall back to FDv1. We handle whatever message was associated,
+                    // close the synchronizer, and then fallback.
+                    if(result.isFdv1Fallback()) {
+                        safeClose(synchronizer);
+                        return true;
+                    }
                 }
             } catch (ExecutionException | InterruptedException | CancellationException e) {
                 // TODO: Log.
                 // Move to next synchronizer.
             }
-            availableSynchronizer = getFirstAvailableSynchronizer();
+            availableSynchronizer = getNextAvailableSynchronizer();
         }
+        return false;
     }
 
     private void safeClose(Closeable synchronizer) {
@@ -239,7 +553,7 @@ class FDv2DataSource implements DataSource {
         // If there is an active source, we will shut it down, and that will result in the loop handling that source
         // exiting.
         // If we do not have an active source, then the loop will check isShutdown when attempting to set one. When
-        // it detects shutdown it will exit the loop.
+        // it detects shutdown, it will exit the loop.
         synchronized (activeSourceLock) {
             isShutdown = true;
             if (activeSource != null) {
