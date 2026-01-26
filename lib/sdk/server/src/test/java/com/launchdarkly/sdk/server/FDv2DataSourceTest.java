@@ -460,19 +460,24 @@ public class FDv2DataSourceTest extends BaseTest {
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
-        startFuture.get(5, TimeUnit.SECONDS);
+        startFuture.get(2, TimeUnit.SECONDS);
 
         assertTrue(dataSource.isInitialized());
 
-        // Wait for recovery timeout to trigger by waiting for multiple synchronizer calls
-        // Recovery brings us back to first, so we should see multiple calls eventually
-        for (int i = 0; i < 3; i++) {
-            sink.awaitApplyCount(i + 1, 5, TimeUnit.SECONDS);
-        }
+        // Expected sequence:
+        // 1. First sync sends apply (1)
+        // 2. First sync sends INTERRUPTED, fallback timer starts (1 second)
+        // 3. After fallback, second sync sends apply (2)
+        // 4. Recovery timer starts (2 seconds)
+        // 5. After recovery, first sync sends apply again (3)
+        // Total time: ~3-4 seconds (1s fallback + 2s recovery + processing)
 
-        // Recovery should have brought us back to the first synchronizer multiple times
-        assertTrue(firstSyncCallCount.get() >= 1);
-        assertTrue(secondSyncCallCount.get() >= 1);
+        // Wait for 3 applies with enough time for fallback (1s) + recovery (2s) + overhead
+        sink.awaitApplyCount(3, 5, TimeUnit.SECONDS);
+
+        // Both synchronizers should have been called due to fallback and recovery
+        assertTrue(firstSyncCallCount.get() >= 2); // Called initially and after recovery
+        assertTrue(secondSyncCallCount.get() >= 1); // Called after fallback
         // TODO: Verify status transitions when data source status is implemented
     }
 
