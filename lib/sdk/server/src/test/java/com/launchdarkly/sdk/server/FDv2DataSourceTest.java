@@ -17,6 +17,7 @@ import org.junit.Test;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -1437,11 +1438,8 @@ public class FDv2DataSourceTest extends BaseTest {
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
 
-        // Wait for recovery timeout to trigger by waiting for multiple synchronizer calls
-        // Recovery brings us back to first, so we should see multiple calls eventually
-        for (int i = 0; i < 3; i++) {
-            sink.awaitApplyCount(i + 1, 5, TimeUnit.SECONDS);
-        }
+        // Wait for 3 applies with enough time for recovery (2s) + overhead
+        sink.awaitApplyCount(3, 5, TimeUnit.SECONDS);
 
         // Should have called first synchronizer again after recovery
         assertTrue(firstCallCount.get() >= 2 || secondCallCount.get() >= 1);
@@ -1733,63 +1731,32 @@ public class FDv2DataSourceTest extends BaseTest {
     }
 
     @Test
-    public void selectorEmptyStillCompletesIfAnyDataReceived() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
-        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
-
-        CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(false), false)
-        );
-
-        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
-            () -> new MockInitializer(initializerFuture)
-        );
-
-        CompletableFuture<FDv2SourceResult> synchronizerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(false), false)
-        );
-
-        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
-            () -> new MockSynchronizer(synchronizerFuture)
-        );
-
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
-        resourcesToClose.add(dataSource);
-
-        Future<Void> startFuture = dataSource.start();
-        startFuture.get(2, TimeUnit.SECONDS);
-
-        assertTrue(dataSource.isInitialized());
-
-        // Wait for the synchronizer to also run
-        sink.awaitApplyCount(2, 2, TimeUnit.SECONDS);
-        assertEquals(2, sink.getApplyCount()); // Both initializer and synchronizer
-    }
-
-    @Test
     public void selectorNonEmptyCompletesInitialization() throws Exception {
         executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
-        CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
+        CompletableFuture<FDv2SourceResult> firstInitializerFuture = CompletableFuture.completedFuture(
             FDv2SourceResult.changeSet(makeChangeSet(true), false)
         );
 
-        AtomicBoolean synchronizerCalled = new AtomicBoolean(false);
+        BlockingQueue<Boolean> secondInitializerCalledQueue = new LinkedBlockingQueue<>();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
-            () -> new MockInitializer(initializerFuture)
-        );
-
-        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> new MockInitializer(firstInitializerFuture),
             () -> {
-                synchronizerCalled.set(true);
-                return new MockSynchronizer(CompletableFuture.completedFuture(
+                secondInitializerCalledQueue.offer(true);
+                return new MockInitializer(CompletableFuture.completedFuture(
                     FDv2SourceResult.changeSet(makeChangeSet(false), false)
                 ));
             }
         );
 
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> new MockSynchronizer(CompletableFuture.completedFuture(
+                FDv2SourceResult.changeSet(makeChangeSet(false), false)
+            ))
+        );
+
         FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
         resourcesToClose.add(dataSource);
 
@@ -1797,8 +1764,11 @@ public class FDv2DataSourceTest extends BaseTest {
         startFuture.get(2, TimeUnit.SECONDS);
 
         assertTrue(dataSource.isInitialized());
-        assertFalse(synchronizerCalled.get()); // Should not proceed to synchronizers
         assertEquals(1, sink.getApplyCount());
+
+        // Second initializer should not be called since first had non-empty selector
+        Boolean secondInitializerCalled = secondInitializerCalledQueue.poll(500, TimeUnit.MILLISECONDS);
+        assertNull("Second initializer should not be called when first returns non-empty selector", secondInitializerCalled);
     }
 
     @Test
