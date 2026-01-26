@@ -1,7 +1,6 @@
 package com.launchdarkly.sdk.server;
 
 import com.launchdarkly.logging.LDLogger;
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.datasources.SelectorSource;

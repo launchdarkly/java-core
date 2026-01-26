@@ -166,7 +166,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 );
                 // We aren't restarting the event source here. We aren't going to automatically recover, so the
                 // data system will move to the next source when it determined this source is unhealthy.
-                resultQueue.put(FDv2SourceResult.interrupted(errorInfo));
+                resultQueue.put(FDv2SourceResult.interrupted(errorInfo, getFallback(e)));
             } finally {
                 eventSource.close();
             }
@@ -229,7 +229,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
             fdv2Event = parseFDv2Event(eventName, event.getDataReader());
         } catch (SerializationException e) {
             logger.error("Failed to parse FDv2 event: {}", LogValues.exceptionSummary(e));
-            interruptedWithException(e, DataSourceStatusProvider.ErrorKind.INVALID_DATA);
+            interruptedWithException(e, DataSourceStatusProvider.ErrorKind.INVALID_DATA, event);
             return;
         }
 
@@ -240,7 +240,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
         } catch (Exception e) {
             // Protocol handler threw exception processing the event - treat as invalid data
             logger.error("FDv2 protocol handler error: {}", LogValues.exceptionSummary(e));
-            interruptedWithException(e, DataSourceStatusProvider.ErrorKind.INVALID_DATA);
+            interruptedWithException(e, DataSourceStatusProvider.ErrorKind.INVALID_DATA, event);
             return;
         }
 
@@ -249,10 +249,12 @@ class StreamingSynchronizerImpl implements Synchronizer {
             case CHANGESET:
                 FDv2ProtocolHandler.FDv2ActionChangeset changeset = (FDv2ProtocolHandler.FDv2ActionChangeset) action;
                 try {
-                    // TODO: Environment ID.
                     DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> converted =
-                            FDv2ChangeSetTranslator.toChangeSet(changeset.getChangeset(), logger, null);
-                    result = FDv2SourceResult.changeSet(converted);
+                            FDv2ChangeSetTranslator.toChangeSet(
+                              changeset.getChangeset(),
+                              logger,
+                              event.getHeaders().value(HeaderConstants.ENVIRONMENT_ID.getHeaderName()));
+                    result = FDv2SourceResult.changeSet(converted, getFallback(event));
                 } catch (Exception e) {
                     logger.error("Failed to convert FDv2 changeset: {}", LogValues.exceptionSummary(e));
                     logger.debug(LogValues.exceptionTrace(e));
@@ -262,7 +264,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                             e.toString(),
                             Instant.now()
                     );
-                    result = FDv2SourceResult.interrupted(conversionError);
+                    result = FDv2SourceResult.interrupted(conversionError, getFallback(event));
                     restartStream();
                 }
                 break;
@@ -276,7 +278,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
 
             case GOODBYE:
                 FDv2ProtocolHandler.FDv2ActionGoodbye goodbye = (FDv2ProtocolHandler.FDv2ActionGoodbye) action;
-                result = FDv2SourceResult.goodbye(goodbye.getReason());
+                result = FDv2SourceResult.goodbye(goodbye.getReason(), getFallback(event));
                 // We drop this current connection and attempt to restart the stream.
                 restartStream();
                 break;
@@ -300,7 +302,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                         "Internal error during FDv2 event processing",
                         Instant.now()
                 );
-                result = FDv2SourceResult.interrupted(internalError);
+                result = FDv2SourceResult.interrupted(internalError, getFallback(event));
                 restartStream();
                 break;
 
@@ -314,7 +316,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
         }
     }
 
-    private void interruptedWithException(Exception e, DataSourceStatusProvider.ErrorKind kind) {
+    private void interruptedWithException(Exception e, DataSourceStatusProvider.ErrorKind kind, MessageEvent event) {
         logger.debug(LogValues.exceptionTrace(e));
         DataSourceStatusProvider.ErrorInfo errorInfo = new DataSourceStatusProvider.ErrorInfo(
                 kind,
@@ -322,7 +324,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 e.toString(),
                 Instant.now()
         );
-        resultQueue.put(FDv2SourceResult.interrupted(errorInfo));
+        resultQueue.put(FDv2SourceResult.interrupted(errorInfo, getFallback(event)));
         restartStream();
     }
 
@@ -343,11 +345,11 @@ class StreamingSynchronizerImpl implements Synchronizer {
                     "will retry");
 
             if (!recoverable) {
-                shutdownFuture.complete(FDv2SourceResult.terminalError(errorInfo));
+                shutdownFuture.complete(FDv2SourceResult.terminalError(errorInfo, getFallback(e)));
                 return false;
             } else {
                 // Queue as INTERRUPTED to indicate temporary failure
-                resultQueue.put(FDv2SourceResult.interrupted(errorInfo));
+                resultQueue.put(FDv2SourceResult.interrupted(errorInfo, getFallback(e)));
                 return true; // allow reconnect
             }
         }
@@ -361,7 +363,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 e.toString(),
                 Instant.now()
         );
-        resultQueue.put(FDv2SourceResult.interrupted(errorInfo));
+        resultQueue.put(FDv2SourceResult.interrupted(errorInfo, getFallback(e)));
         return true; // allow reconnect
     }
 
@@ -384,5 +386,25 @@ class StreamingSynchronizerImpl implements Synchronizer {
         } catch (Exception e) {
             throw new SerializationException(e);
         }
+    }
+
+    private static boolean getFallback(Exception ex) {
+        if(ex instanceof StreamHttpErrorException) {
+            String headerValue = ((StreamHttpErrorException) ex).getHeaders()
+              .value(HeaderConstants.FDV1_FALLBACK.getHeaderName());
+            return headerValue != null && headerValue.equalsIgnoreCase("true");
+        }
+        return false;
+    }
+
+    private static boolean getFallback(StreamEvent event) {
+        String headerName = HeaderConstants.FDV1_FALLBACK.getHeaderName();
+        String headerValue = null;
+        if(event instanceof FaultEvent) {
+            headerValue = ((FaultEvent) event).getHeaders().value(headerName);
+        } else if (event instanceof MessageEvent) {
+            headerValue = ((MessageEvent) event).getHeaders().value(headerName);
+        }
+        return headerValue != null && headerValue.equalsIgnoreCase("true");
     }
 }
