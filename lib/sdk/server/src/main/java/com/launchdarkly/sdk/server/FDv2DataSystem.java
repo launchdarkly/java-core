@@ -15,6 +15,7 @@ import com.launchdarkly.sdk.server.subsystems.DataSourceBuildInputs;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
 import com.launchdarkly.sdk.server.subsystems.LoggingConfiguration;
 import com.launchdarkly.sdk.server.subsystems.DataSystemConfiguration;
+import com.launchdarkly.sdk.server.subsystems.ComponentConfigurer;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -91,7 +92,26 @@ final class FDv2DataSystem implements DataSystem, Closeable {
     DataStoreUpdatesImpl dataStoreUpdates = new DataStoreUpdatesImpl(
       EventBroadcasterImpl.forDataStoreStatus(clientContext.sharedExecutor, logger));
 
-    InMemoryDataStore store = new InMemoryDataStore();
+    DataSystemConfiguration dataSystemConfiguration = config.dataSystem.build();
+    
+    InMemoryDataStore memoryStore = new InMemoryDataStore();
+    
+    DataStore persistentStore = null;
+    if (dataSystemConfiguration.getPersistentStore() != null) {
+      persistentStore = dataSystemConfiguration.getPersistentStore().build(clientContext.withDataStoreUpdateSink(dataStoreUpdates));
+      
+      // Configure persistent store to sync from memory store during recovery (ReadWrite mode only)
+      if (persistentStore != null && dataSystemConfiguration.getPersistentDataStoreMode() == DataSystemConfiguration.DataStoreMode.READ_WRITE) {
+        if (persistentStore instanceof SettableCache) {
+          ((SettableCache) persistentStore).setCacheExporter(memoryStore);
+        }
+      }
+    }
+    
+    WriteThroughStore store = new WriteThroughStore(
+        memoryStore,
+        persistentStore,
+        dataSystemConfiguration.getPersistentDataStoreMode());
 
     DataStoreStatusProvider dataStoreStatusProvider = new DataStoreStatusProviderImpl(store, dataStoreUpdates);
 
@@ -113,7 +133,6 @@ final class FDv2DataSystem implements DataSystem, Closeable {
       logger
     );
 
-    DataSystemConfiguration dataSystemConfiguration = config.dataSystem.build();
     SelectorSource selectorSource = new SelectorSourceFacade(store);
 
     DataSourceBuildInputs builderContext = new DataSourceBuildInputs(
