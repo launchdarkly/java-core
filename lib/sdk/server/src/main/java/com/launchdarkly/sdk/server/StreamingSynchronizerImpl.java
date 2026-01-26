@@ -229,7 +229,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
             fdv2Event = parseFDv2Event(eventName, event.getDataReader());
         } catch (SerializationException e) {
             logger.error("Failed to parse FDv2 event: {}", LogValues.exceptionSummary(e));
-            interruptedWithException(e, DataSourceStatusProvider.ErrorKind.INVALID_DATA);
+            interruptedWithException(e, DataSourceStatusProvider.ErrorKind.INVALID_DATA, event);
             return;
         }
 
@@ -240,7 +240,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
         } catch (Exception e) {
             // Protocol handler threw exception processing the event - treat as invalid data
             logger.error("FDv2 protocol handler error: {}", LogValues.exceptionSummary(e));
-            interruptedWithException(e, DataSourceStatusProvider.ErrorKind.INVALID_DATA);
+            interruptedWithException(e, DataSourceStatusProvider.ErrorKind.INVALID_DATA, event);
             return;
         }
 
@@ -316,7 +316,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
         }
     }
 
-    private void interruptedWithException(Exception e, DataSourceStatusProvider.ErrorKind kind) {
+    private void interruptedWithException(Exception e, DataSourceStatusProvider.ErrorKind kind, MessageEvent event) {
         logger.debug(LogValues.exceptionTrace(e));
         DataSourceStatusProvider.ErrorInfo errorInfo = new DataSourceStatusProvider.ErrorInfo(
                 kind,
@@ -324,7 +324,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 e.toString(),
                 Instant.now()
         );
-        resultQueue.put(FDv2SourceResult.interrupted(errorInfo, getFallback(e)));
+        resultQueue.put(FDv2SourceResult.interrupted(errorInfo, getFallback(event)));
         restartStream();
     }
 

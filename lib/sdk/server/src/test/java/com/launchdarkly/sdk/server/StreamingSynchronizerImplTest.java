@@ -1001,4 +1001,80 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             synchronizer.close();
         }
     }
+
+    @Test
+    public void serializationExceptionWithoutFallbackHeader() throws Exception {
+        // Verify that fallback is false when header is not present
+        // Use malformed JSON that will cause parsing to fail
+        String badEvent = makeEvent("server-intent", "{");
+
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.SSE.start(),
+                Handlers.SSE.event(badEvent),
+                Handlers.SSE.leaveOpen()))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100)
+            );
+
+            CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
+            FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+            assertNotNull(result);
+            assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
+            assertEquals(FDv2SourceResult.State.INTERRUPTED, result.getStatus().getState());
+            assertEquals(DataSourceStatusProvider.ErrorKind.INVALID_DATA, result.getStatus().getErrorInfo().getKind());
+            assertEquals(false, result.isFdv1Fallback());
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void serializationExceptionPreservesFallbackHeader() throws Exception {
+        // Test that when SerializationException occurs, the fallback header from the event is preserved
+        // Use definitely malformed JSON that will cause parsing to fail
+        String badEvent = makeEvent("server-intent", "{");
+
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.header("x-ld-fd-fallback", "true"),
+                Handlers.SSE.start(),
+                Handlers.SSE.event(badEvent),
+                Handlers.SSE.leaveOpen()))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100)
+            );
+
+            CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
+            FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+            assertNotNull(result);
+            assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
+            assertEquals(FDv2SourceResult.State.INTERRUPTED, result.getStatus().getState());
+            assertEquals(DataSourceStatusProvider.ErrorKind.INVALID_DATA, result.getStatus().getErrorInfo().getKind());
+            assertEquals(true, result.isFdv1Fallback());
+
+            synchronizer.close();
+        }
+    }
+
 }
