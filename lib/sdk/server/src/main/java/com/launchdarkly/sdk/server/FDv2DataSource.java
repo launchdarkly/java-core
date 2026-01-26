@@ -9,7 +9,6 @@ import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSinkV2;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -154,17 +153,18 @@ class FDv2DataSource implements DataSource {
     /**
      * Determine conditions for the current synchronizer. Synchronizers require different conditions depending on if
      * they are the 'prime' synchronizer or if there are other available synchronizers to use.
+     *
      * @return a list of conditions to apply to the synchronizer
      */
     private List<Condition> getConditions() {
         int availableSynchronizers = synchronizerStateManager.getAvailableSynchronizerCount();
         boolean isPrimeSynchronizer = synchronizerStateManager.isPrimeSynchronizer();
 
-        if(availableSynchronizers == 1) {
+        if (availableSynchronizers == 1) {
             // If there is only 1 synchronizer, then we cannot fall back or recover, so we don't need any conditions.
             return Collections.emptyList();
         }
-        if(isPrimeSynchronizer) {
+        if (isPrimeSynchronizer) {
             // If there isn't a synchronizer to recover to, then don't add and recovery conditions.
             return conditionFactories.stream()
                 .filter((ConditionFactory factory) -> factory.getType() != Condition.ConditionType.RECOVERY)
@@ -175,111 +175,96 @@ class FDv2DataSource implements DataSource {
     }
 
     private boolean runSynchronizers() {
-        SynchronizerFactoryWithState availableSynchronizer = synchronizerStateManager.getNextAvailableSynchronizer();
-        while (availableSynchronizer != null) {
-            Synchronizer synchronizer = availableSynchronizer.build();
+        // When runSynchronizers exists, no matter how it exits, the synchronizerStateManager will be closed.
+        try {
+            SynchronizerFactoryWithState availableSynchronizer = synchronizerStateManager.getNextAvailableSynchronizer();
 
-            // Returns true if shutdown.
-            if (synchronizerStateManager.setActiveSource(synchronizer)) return false;
+            // We want to continue running synchronizers for as long as any are available.
+            while (availableSynchronizer != null) {
+                Synchronizer synchronizer = availableSynchronizer.build();
 
-            try {
-                boolean running = true;
-                boolean fdv1Fallback = false;
+                // Returns true if shutdown.
+                if (synchronizerStateManager.setActiveSource(synchronizer)) return false;
 
-                // Conditions run once for the life of the synchronizer.
-                List<Condition> conditions = getConditions();
+                try {
+                    boolean running = true;
 
-                // The conditionsFuture will complete if any condition is met. Meeting any condition means we will
-                // switch to a different synchronizer.
-                CompletableFuture<Object> conditionsFuture = CompletableFuture.anyOf(
-                    conditions.stream().map(Condition::execute).toArray(CompletableFuture[]::new));
+                    try (Conditions conditions = new Conditions(getConditions())) {
+                        while (running) {
+                            CompletableFuture<FDv2SourceResult> nextResultFuture = synchronizer.next();
 
-                while (running) {
-                    // If the loop needs to be exited, then running should be set to false, and the loop broken.
-                    // We don't want to return within the loop because that would bypass cleanup.
+                            // The conditionsFuture will complete if any condition is met. Meeting any condition means we will
+                            // switch to a different synchronizer.
+                            Object res = CompletableFuture.anyOf(conditions.getFuture(), nextResultFuture).get();
 
-                    CompletableFuture<FDv2SourceResult> nextResultFuture = synchronizer.next();
-
-                    Object res = CompletableFuture.anyOf(conditionsFuture, nextResultFuture).get();
-
-                    if(res instanceof Condition) {
-                        Condition c = (Condition) res;
-                        switch (c.getType()) {
-                            case FALLBACK:
-                                // For fallback, we will move to the next available synchronizer, which may loop.
-                                // This is the default behavior of exiting the run loop, so we don't need to take
-                                // any action.
+                            if (res instanceof Condition) {
+                                Condition c = (Condition) res;
+                                switch (c.getType()) {
+                                    case FALLBACK:
+                                        // For fallback, we will move to the next available synchronizer, which may loop.
+                                        // This is the default behavior of exiting the run loop, so we don't need to take
+                                        // any action.
+                                        break;
+                                    case RECOVERY:
+                                        // For recovery, we will start at the first available synchronizer.
+                                        // So we reset the source index, and finding the source will start at the beginning.
+                                        synchronizerStateManager.resetSourceIndex();
+                                        break;
+                                }
+                                // A running synchronizer will only have fallback and recovery conditions that it can act on.
+                                // So, if there are no synchronizers to recover to or fallback to, then we will not have
+                                // those conditions.
                                 break;
-                            case RECOVERY:
-                                // For recovery, we will start at the first available synchronizer.
-                                // So we reset the source index, and finding the source will start at the beginning.
-                                synchronizerStateManager.resetSourceIndex();
-                                break;
-                        }
-                        // A running synchronizer will only have fallback and recovery conditions that it can act on.
-                        // So, if there are no synchronizers to recover to or fallback to, then we will not have
-                        // those conditions.
-                        break;
-                    }
+                            }
 
 
-                    FDv2SourceResult result = (FDv2SourceResult) res;
-                    conditions.forEach(c -> c.inform(result));
+                            FDv2SourceResult result = (FDv2SourceResult) res;
+                            conditions.inform(result);
 
-                    switch (result.getResultType()) {
-                        case CHANGE_SET:
-                            dataSourceUpdates.apply(result.getChangeSet());
-                            // This could have been completed by any data source. But if it has not been completed before
-                            // now, then we complete it.
-                            startFuture.complete(true);
-                            break;
-                        case STATUS:
-                            FDv2SourceResult.Status status = result.getStatus();
-                            switch (status.getState()) {
-                                case INTERRUPTED:
-                                    // TODO: Track how long we are interrupted.
+                            switch (result.getResultType()) {
+                                case CHANGE_SET:
+                                    dataSourceUpdates.apply(result.getChangeSet());
+                                    // This could have been completed by any data source. But if it has not been completed before
+                                    // now, then we complete it.
+                                    startFuture.complete(true);
                                     break;
-                                case SHUTDOWN:
-                                    // We should be overall shutting down.
-                                    // TODO: We may need logging or to do a little more.
-                                    running = false;
-                                    break;
-                                case TERMINAL_ERROR:
-                                    availableSynchronizer.block();
-                                    running = false;
-                                    break;
-                                case GOODBYE:
-                                    // We let the synchronizer handle this internally.
+                                case STATUS:
+                                    FDv2SourceResult.Status status = result.getStatus();
+                                    switch (status.getState()) {
+                                        case INTERRUPTED:
+                                            // TODO: Track how long we are interrupted.
+                                            break;
+                                        case SHUTDOWN:
+                                            // We should be overall shutting down.
+                                            // TODO: We may need logging or to do a little more.
+                                            return false;
+                                        case TERMINAL_ERROR:
+                                            availableSynchronizer.block();
+                                            running = false;
+                                            break;
+                                        case GOODBYE:
+                                            // We let the synchronizer handle this internally.
+                                            break;
+                                    }
                                     break;
                             }
-                            break;
+                            // We have been requested to fall back to FDv1. We handle whatever message was associated,
+                            // close the synchronizer, and then fallback.
+                            if (result.isFdv1Fallback()) {
+                                return true;
+                            }
+                        }
                     }
-                    // We have been requested to fall back to FDv1. We handle whatever message was associated,
-                    // close the synchronizer, and then fallback.
-                    if(result.isFdv1Fallback()) {
-                        fdv1Fallback = true;
-                        running = false;
-                    }
+                } catch (ExecutionException | InterruptedException | CancellationException e) {
+                    // TODO: Log.
+                    // Move to next synchronizer.
                 }
-                // We are going to move to the next synchronizer or exit the synchronization loop, so we can close any
-                // conditions for this synchronizer.
-                conditions.forEach(Condition::close);
-                // If we are falling back, then we exit the synchronization process.
-                if(fdv1Fallback) {
-                    // When falling back to FDv1, we are done with any FDv2 synchronizers.
-                    synchronizerStateManager.close();
-                    return true;
-                }
-
-            } catch (ExecutionException | InterruptedException | CancellationException e) {
-                // TODO: Log.
-                // Move to next synchronizer.
+                availableSynchronizer = synchronizerStateManager.getNextAvailableSynchronizer();
             }
-            availableSynchronizer = synchronizerStateManager.getNextAvailableSynchronizer();
+            return false;
+        } finally {
+            synchronizerStateManager.close();
         }
-
-        synchronizerStateManager.close();
-        return false;
     }
 
     @Override
@@ -309,5 +294,34 @@ class FDv2DataSource implements DataSource {
 
         // If this is already set, then this has no impact.
         startFuture.complete(false);
+    }
+
+    /**
+     * Helper class to manage the lifecycle of conditions with automatic cleanup.
+     */
+    private static class Conditions implements AutoCloseable {
+        private final List<Condition> conditions;
+        private final CompletableFuture<Object> conditionsFuture;
+
+        public Conditions(List<Condition> conditions) {
+            this.conditions = conditions;
+            this.conditionsFuture = conditions.isEmpty()
+                ? new CompletableFuture<>() // Never completes if no conditions
+                : CompletableFuture.anyOf(
+                conditions.stream().map(Condition::execute).toArray(CompletableFuture[]::new));
+        }
+
+        public CompletableFuture<Object> getFuture() {
+            return conditionsFuture;
+        }
+
+        public void inform(FDv2SourceResult result) {
+            conditions.forEach(c -> c.inform(result));
+        }
+
+        @Override
+        public void close() {
+            conditions.forEach(Condition::close);
+        }
     }
 }
