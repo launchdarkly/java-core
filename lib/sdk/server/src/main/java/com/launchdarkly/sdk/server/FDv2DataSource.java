@@ -232,7 +232,8 @@ class FDv2DataSource implements DataSource {
                                     FDv2SourceResult.Status status = result.getStatus();
                                     switch (status.getState()) {
                                         case INTERRUPTED:
-                                            // TODO: Track how long we are interrupted.
+                                            // Handled by conditions.
+                                            // TODO: Data source status.
                                             break;
                                         case SHUTDOWN:
                                             // We should be overall shutting down.
