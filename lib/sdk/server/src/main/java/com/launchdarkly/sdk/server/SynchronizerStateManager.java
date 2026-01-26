@@ -10,7 +10,7 @@ import java.util.List;
  * <p>
  * Package-private for internal use.
  */
-class SynchronizerStateManager {
+class SynchronizerStateManager implements Closeable {
     private final List<SynchronizerFactoryWithState> synchronizers;
 
     /**
@@ -132,10 +132,11 @@ class SynchronizerStateManager {
     }
 
     /**
-     * Initiate shutdown of the state manager. This will close any active source.
-     * @throws IOException if an error occurs closing the active source
+     * Close the state manager and shut down any active source.
+     * Implements AutoCloseable to enable try-with-resources usage.
      */
-    public void shutdown() {
+    @Override
+    public void close() {
         synchronized (activeSourceLock) {
             isShutdown = true;
             if (activeSource != null) {

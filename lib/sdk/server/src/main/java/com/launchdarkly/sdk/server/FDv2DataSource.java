@@ -105,6 +105,9 @@ class FDv2DataSource implements DataSource {
                 // TODO: Run FDv1 fallback.
             }
             // TODO: Handle. We have ran out of sources or we are shutting down.
+
+            // If we had initialized at some point, then the future will already be complete and this will be ignored.
+            startFuture.complete(false);
         });
         runThread.setDaemon(true);
         runThread.setPriority(threadPriority);
@@ -181,6 +184,8 @@ class FDv2DataSource implements DataSource {
 
             try {
                 boolean running = true;
+                boolean fdv1Fallback = false;
+
                 // Conditions run once for the life of the synchronizer.
                 List<Condition> conditions = getConditions();
 
@@ -190,6 +195,9 @@ class FDv2DataSource implements DataSource {
                     conditions.stream().map(Condition::execute).toArray(CompletableFuture[]::new));
 
                 while (running) {
+                    // If the loop needs to be exited, then running should be set to false, and the loop broken.
+                    // We don't want to return within the loop because that would bypass cleanup.
+
                     CompletableFuture<FDv2SourceResult> nextResultFuture = synchronizer.next();
 
                     Object res = CompletableFuture.anyOf(conditionsFuture, nextResultFuture).get();
@@ -234,7 +242,8 @@ class FDv2DataSource implements DataSource {
                                 case SHUTDOWN:
                                     // We should be overall shutting down.
                                     // TODO: We may need logging or to do a little more.
-                                    return false;
+                                    running = false;
+                                    break;
                                 case TERMINAL_ERROR:
                                     availableSynchronizer.block();
                                     running = false;
@@ -248,17 +257,28 @@ class FDv2DataSource implements DataSource {
                     // We have been requested to fall back to FDv1. We handle whatever message was associated,
                     // close the synchronizer, and then fallback.
                     if(result.isFdv1Fallback()) {
-                        // When falling back to FDv1, we are done with any FDv2 synchronizers.
-                        synchronizerStateManager.shutdown();
-                        return true;
+                        fdv1Fallback = true;
+                        running = false;
                     }
                 }
+                // We are going to move to the next synchronizer or exit the synchronization loop, so we can close any
+                // conditions for this synchronizer.
+                conditions.forEach(Condition::close);
+                // If we are falling back, then we exit the synchronization process.
+                if(fdv1Fallback) {
+                    // When falling back to FDv1, we are done with any FDv2 synchronizers.
+                    synchronizerStateManager.close();
+                    return true;
+                }
+
             } catch (ExecutionException | InterruptedException | CancellationException e) {
                 // TODO: Log.
                 // Move to next synchronizer.
             }
             availableSynchronizer = synchronizerStateManager.getNextAvailableSynchronizer();
         }
+
+        synchronizerStateManager.close();
         return false;
     }
 
@@ -285,7 +305,7 @@ class FDv2DataSource implements DataSource {
         // exiting.
         // If we do not have an active source, then the loop will check isShutdown when attempting to set one. When
         // it detects shutdown, it will exit the loop.
-        synchronizerStateManager.shutdown();
+        synchronizerStateManager.close();
 
         // If this is already set, then this has no impact.
         startFuture.complete(false);

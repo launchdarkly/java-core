@@ -35,7 +35,7 @@ class FDv2DataSourceConditions {
 
         void inform(FDv2SourceResult sourceResult);
 
-        void close() throws IOException;
+        void close();
 
         ConditionType getType();
     }
@@ -72,7 +72,7 @@ class FDv2DataSourceConditions {
         }
 
         @Override
-        public void close() throws IOException {
+        public void close() {
             if (timerFuture != null) {
                 timerFuture.cancel(false);
                 timerFuture = null;
