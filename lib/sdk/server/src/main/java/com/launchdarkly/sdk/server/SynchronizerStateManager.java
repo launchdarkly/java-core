@@ -39,6 +39,28 @@ class SynchronizerStateManager implements Closeable {
         }
     }
 
+    public boolean hasFDv1Fallback() {
+        for (SynchronizerFactoryWithState factory : synchronizers) {
+            if (factory.isFDv1Fallback()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Block all synchronizers aside from the fdv1 fallback and unblock the fdv1 fallback.
+     */
+    public void fdv1Fallback() {
+        for (SynchronizerFactoryWithState factory : synchronizers) {
+            if(factory.isFDv1Fallback()) {
+                factory.unblock();
+            } else {
+                factory.block();
+            }
+        }
+    }
+
     /**
      * Get the next synchronizer to use. This operates based on tracking the index of the currently active synchronizer,
      * which will loop through all available synchronizers handling interruptions. Then a non-prime synchronizer recovers
@@ -82,12 +104,7 @@ class SynchronizerStateManager implements Closeable {
         synchronized (activeSourceLock) {
             for (int index = 0; index < synchronizers.size(); index++) {
                 if (synchronizers.get(index).getState() == SynchronizerFactoryWithState.State.Available) {
-                    if (sourceIndex == index) {
-                        // This is the first synchronizer that is available, and it also is the current one.
-                        return true;
-                    }
-                    break;
-                    // Subsequently encountered synchronizers that are available are not the first one.
+                    return sourceIndex == index;
                 }
             }
         }
