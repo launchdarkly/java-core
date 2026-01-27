@@ -9,8 +9,10 @@ import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSinkV2;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -46,6 +48,8 @@ class FDv2DataSource implements DataSource {
 
     private final LDLogger logger;
 
+    private final DataSourceFactory<Synchronizer> fdv1DataSourceFactory;
+
     public interface DataSourceFactory<T> {
         T build();
     }
@@ -53,6 +57,7 @@ class FDv2DataSource implements DataSource {
     public FDv2DataSource(
         ImmutableList<DataSourceFactory<Initializer>> initializers,
         ImmutableList<DataSourceFactory<Synchronizer>> synchronizers,
+        DataSourceFactory<Synchronizer> fdv1DataSourceFactory,
         DataSourceUpdateSinkV2 dataSourceUpdates,
         int threadPriority,
         LDLogger logger,
@@ -60,6 +65,7 @@ class FDv2DataSource implements DataSource {
     ) {
         this(initializers,
             synchronizers,
+            fdv1DataSourceFactory,
             dataSourceUpdates,
             threadPriority,
             logger,
@@ -73,6 +79,7 @@ class FDv2DataSource implements DataSource {
     public FDv2DataSource(
         ImmutableList<DataSourceFactory<Initializer>> initializers,
         ImmutableList<DataSourceFactory<Synchronizer>> synchronizers,
+        DataSourceFactory<Synchronizer> fdv1DataSourceFactory,
         DataSourceUpdateSinkV2 dataSourceUpdates,
         int threadPriority,
         LDLogger logger,
@@ -85,6 +92,7 @@ class FDv2DataSource implements DataSource {
             .stream()
             .map(SynchronizerFactoryWithState::new)
             .collect(Collectors.toList());
+        this.fdv1DataSourceFactory = fdv1DataSourceFactory;
         this.synchronizerStateManager = new SynchronizerStateManager(synchronizerFactories);
         this.dataSourceUpdates = dataSourceUpdates;
         this.threadPriority = threadPriority;
@@ -99,16 +107,20 @@ class FDv2DataSource implements DataSource {
             if (!initializers.isEmpty()) {
                 runInitializers();
             }
-            boolean fdv1Fallback = runSynchronizers();
-            if (fdv1Fallback) {
-                runFdv1Fallback();
-            }
-            // TODO: Handle. We have ran out of sources or we are shutting down.
-            dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.OFF, new DataSourceStatusProvider.ErrorInfo(DataSourceStatusProvider.ErrorKind.UNKNOWN, 0, "", new Date().instant()));
+            runSynchronizers();
+            dataSourceUpdates.updateStatus(
+                DataSourceStatusProvider.State.OFF,
+                new DataSourceStatusProvider.ErrorInfo(
+                    DataSourceStatusProvider.ErrorKind.UNKNOWN,
+                    0,
+                    "",
+                    new Date().toInstant())
+            );
 
             // If we had initialized at some point, then the future will already be complete and this will be ignored.
             startFuture.complete(false);
         });
+        runThread.setName("LaunchDarkly-SDK-Server-FDv2DataSource");
         runThread.setDaemon(true);
         runThread.setPriority(threadPriority);
         runThread.start();
@@ -175,7 +187,7 @@ class FDv2DataSource implements DataSource {
         return conditionFactories.stream().map(ConditionFactory::build).collect(Collectors.toList());
     }
 
-    private boolean runSynchronizers() {
+    private void runSynchronizers() {
         // When runSynchronizers exists, no matter how it exits, the synchronizerStateManager will be closed.
         try {
             SynchronizerFactoryWithState availableSynchronizer = synchronizerStateManager.getNextAvailableSynchronizer();
@@ -185,7 +197,7 @@ class FDv2DataSource implements DataSource {
                 Synchronizer synchronizer = availableSynchronizer.build();
 
                 // Returns true if shutdown.
-                if (synchronizerStateManager.setActiveSource(synchronizer)) return false;
+                if (synchronizerStateManager.setActiveSource(synchronizer)) return;
 
                 try {
                     boolean running = true;
@@ -253,7 +265,7 @@ class FDv2DataSource implements DataSource {
                             // We have been requested to fall back to FDv1. We handle whatever message was associated,
                             // close the synchronizer, and then fallback.
                             if (result.isFdv1Fallback()) {
-                                return true;
+//                                return true;
                             }
                         }
                     }
@@ -263,14 +275,9 @@ class FDv2DataSource implements DataSource {
                 }
                 availableSynchronizer = synchronizerStateManager.getNextAvailableSynchronizer();
             }
-            return false;
         } finally {
             synchronizerStateManager.close();
         }
-    }
-
-    private void runFdv1Fallback() {
-
     }
 
     @Override
