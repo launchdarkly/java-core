@@ -6,6 +6,8 @@ import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Iterables;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.server.DataModel.Operator;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSetType;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
@@ -130,6 +132,23 @@ abstract class DataModelDependencies {
       builder.put(kind, sortCollection(kind, entry.getValue()));
     }
     return new FullDataSet<>(builder.build().entrySet());
+  }
+  
+  /**
+   * Sort the data in the changeset in dependency order. If there are any duplicates, then the highest version
+   * of the duplicate item will be retained.
+   * 
+   * @param inSet the changeset to sort
+   * @return a sorted copy of the changeset
+   */
+  public static ChangeSet<ItemDescriptor> sortChangeset(ChangeSet<ItemDescriptor> inSet) {
+    ImmutableSortedMap.Builder<DataKind, KeyedItems<ItemDescriptor>> builder =
+        ImmutableSortedMap.orderedBy(dataKindPriorityOrder);
+    for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> entry: inSet.getData()) {
+      DataKind kind = entry.getKey();
+      builder.put(kind, sortCollection(kind, entry.getValue()));
+    }
+    return new ChangeSet<>(inSet.getType(), inSet.getSelector(), builder.build().entrySet(), inSet.getEnvironmentId());
   }
   
   private static KeyedItems<ItemDescriptor> sortCollection(DataKind kind, KeyedItems<ItemDescriptor> input) {
