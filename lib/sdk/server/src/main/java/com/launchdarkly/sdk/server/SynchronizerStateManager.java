@@ -49,7 +49,7 @@ class SynchronizerStateManager implements Closeable {
      * @return the next synchronizer factory to use, or null if there are no more available synchronizers.
      */
     public SynchronizerFactoryWithState getNextAvailableSynchronizer() {
-        synchronized (synchronizers) {
+        synchronized (activeSourceLock) {
             SynchronizerFactoryWithState factory = null;
 
             // There is at least one available factory.
