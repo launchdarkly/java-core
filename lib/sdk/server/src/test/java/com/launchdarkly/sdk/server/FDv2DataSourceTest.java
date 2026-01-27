@@ -1751,13 +1751,7 @@ public class FDv2DataSourceTest extends BaseTest {
             }
         );
 
-        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
-            () -> new MockSynchronizer(CompletableFuture.completedFuture(
-                FDv2SourceResult.changeSet(makeChangeSet(false), false)
-            ))
-        );
-
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, ImmutableList.of(), sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
