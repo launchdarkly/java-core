@@ -69,7 +69,7 @@ public final class TestData implements ComponentConfigurer<DataSource> {
   private final Map<String, ItemDescriptor> currentFlags = new HashMap<>();
   private final Map<String, FlagBuilder> currentBuilders = new HashMap<>();
   private final List<DataSourceImpl> instances = new CopyOnWriteArrayList<>();
-  private boolean shouldPersist = true;
+  private volatile boolean shouldPersist = true;
   
   /**
    * Creates a new instance of the test data source.
