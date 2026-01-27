@@ -135,7 +135,8 @@ public class DataSourceUpdatesImplTest {
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         data,
-        null
+        null,
+        true
     );
   }
   
@@ -155,7 +156,8 @@ public class DataSourceUpdatesImplTest {
         ChangeSetType.Partial,
         Selector.make(1, "state1"),
         data,
-        null
+        null,
+        true
     );
   }
 
@@ -707,7 +709,8 @@ public class DataSourceUpdatesImplTest {
         ChangeSetType.Partial,
         Selector.make(1, "state1"),
         data,
-        null
+        null,
+        true
     );
     updates.apply(changeSet);
     
@@ -834,7 +837,8 @@ public class DataSourceUpdatesImplTest {
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         changeSetData,
-        null
+        null,
+        true
     );
     updates.apply(changeSet);
     
@@ -886,7 +890,8 @@ public class DataSourceUpdatesImplTest {
         ChangeSetType.Partial,
         Selector.make(1, "state1"),
         segmentData,
-        null
+        null,
+        true
     );
     updates.apply(changeSet);
     
@@ -1024,7 +1029,8 @@ public class DataSourceUpdatesImplTest {
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         data,
-        "test-env-id"
+        "test-env-id",
+        true
     );
     updates.apply(changeSet);
     

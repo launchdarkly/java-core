@@ -428,8 +428,8 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
   }
   
   private boolean applyFullChangeSetToLegacyStore(ChangeSet<ItemDescriptor> unsortedChangeset) {
-    // Convert ChangeSet to FullDataSet for legacy init path
-    return init(new FullDataSet<>(unsortedChangeset.getData()));
+    // Convert ChangeSet to FullDataSet for legacy init path, preserving shouldPersist flag
+    return init(new FullDataSet<>(unsortedChangeset.getData(), unsortedChangeset.shouldPersist()));
   }
   
   private boolean applyPartialChangeSetToLegacyStore(ChangeSet<ItemDescriptor> changeSet) {

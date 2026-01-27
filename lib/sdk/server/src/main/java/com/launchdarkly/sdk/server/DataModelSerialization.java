@@ -20,7 +20,6 @@ import com.launchdarkly.sdk.server.DataModel.SegmentRule;
 import com.launchdarkly.sdk.server.DataModel.VersionedData;
 import com.launchdarkly.sdk.server.DataModel.WeightedVariation;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 import com.launchdarkly.sdk.server.subsystems.SerializationException;
@@ -106,7 +105,7 @@ abstract class DataModelSerialization {
    * @param jr the JSON reader
    * @return the deserialized data
    */
-  static FullDataSet<ItemDescriptor> parseFullDataSet(JsonReader jr) throws SerializationException {
+  static Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> parseFullDataSet(JsonReader jr) throws SerializationException {
     ImmutableList.Builder<Map.Entry<String, ItemDescriptor>> flags = ImmutableList.builder();
     ImmutableList.Builder<Map.Entry<String, ItemDescriptor>> segments = ImmutableList.builder();
     
@@ -141,10 +140,10 @@ abstract class DataModelSerialization {
       }
       jr.endObject();
 
-      return new FullDataSet<ItemDescriptor>(ImmutableMap.of(
+      return ImmutableMap.of(
           FEATURES, new KeyedItems<>(flags.build()),
           SEGMENTS, new KeyedItems<>(segments.build())
-          ).entrySet());
+          ).entrySet();
     } catch (IOException e) {
       throw new SerializationException(e);
     } catch (RuntimeException e) {

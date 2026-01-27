@@ -66,7 +66,8 @@ public class WriteThroughStoreTest {
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         changeSetData.entrySet(),
-        null
+        null,
+        true
     );
   }
 
@@ -144,6 +145,26 @@ public class WriteThroughStoreTest {
 
     assertTrue(memoryStore.isInitialized());
     assertFalse(persistentStore.wasInitCalled);
+  }
+
+  @Test
+  public void initWithShouldPersistFalseDoesNotCallPersistentStore() throws Exception {
+    InMemoryDataStore memoryStore = new InMemoryDataStore();
+    MockPersistentStore persistentStore = new MockPersistentStore();
+
+    store = new WriteThroughStore(memoryStore, persistentStore, DataStoreMode.READ_WRITE);
+    
+    // Create test data with shouldPersist=false (e.g., from file data source)
+    FullDataSet<ItemDescriptor> testData = new FullDataSet<>(
+        createTestDataSet().getData(),
+        false // shouldPersist=false
+    );
+    store.init(testData);
+
+    assertTrue(memoryStore.isInitialized());
+    // Persistent store should NOT be called when shouldPersist=false
+    assertFalse(persistentStore.wasInitCalled);
+    assertFalse(persistentStore.isInitialized());
   }
 
   @Test
@@ -310,7 +331,8 @@ public class WriteThroughStoreTest {
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData.entrySet(),
-        null
+        null,
+        true
     );
 
     persistentStore.resetCallTracking();
@@ -356,13 +378,78 @@ public class WriteThroughStoreTest {
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData.entrySet(),
-        null
+        null,
+        true
     );
 
     persistentStore.resetCallTracking();
     store.apply(changeSet);
 
     assertTrue(persistentStore.wasUpsertCalled);
+  }
+
+  @Test
+  public void applyWithShouldPersistFalseDoesNotCallPersistentStore() throws Exception {
+    InMemoryDataStore memoryStore = new InMemoryDataStore();
+    MockPersistentStore persistentStore = new MockPersistentStore();
+
+    store = new WriteThroughStore(memoryStore, persistentStore, DataStoreMode.READ_WRITE);
+    
+    store.init(createTestDataSet());
+
+    TestItem item3 = new TestItem("key3", "item3", 30);
+    Map<DataKind, KeyedItems<ItemDescriptor>> changeSetData = ImmutableMap.of(
+        TEST_ITEMS,
+        new KeyedItems<>(ImmutableList.of(
+            new AbstractMap.SimpleEntry<>("key3", new ItemDescriptor(30, item3))
+        ))
+    );
+    // Create change set with shouldPersist=false (e.g., from file data source)
+    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+        ChangeSetType.Partial,
+        Selector.make(2, "state2"),
+        changeSetData.entrySet(),
+        null,
+        false // shouldPersist=false
+    );
+
+    persistentStore.resetCallTracking();
+    store.apply(changeSet);
+
+    // Memory store should be updated
+    ItemDescriptor result = memoryStore.get(TEST_ITEMS, "key3");
+    assertNotNull(result);
+    assertEquals(item3, result.getItem());
+    
+    // Persistent store should NOT be called when shouldPersist=false
+    assertFalse(persistentStore.wasUpsertCalled);
+    assertFalse(persistentStore.wasInitCalled);
+  }
+
+  @Test
+  public void applyWithFullChangeSetShouldPersistFalseDoesNotCallPersistentStore() throws Exception {
+    InMemoryDataStore memoryStore = new InMemoryDataStore();
+    MockTransactionalPersistentStore persistentStore = new MockTransactionalPersistentStore();
+
+    store = new WriteThroughStore(memoryStore, persistentStore, DataStoreMode.READ_WRITE);
+    
+    // Create full change set with shouldPersist=false
+    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+        ChangeSetType.Full,
+        Selector.make(1, "state1"),
+        createFullChangeSet().getData(),
+        null,
+        false // shouldPersist=false
+    );
+    
+    persistentStore.resetCallTracking();
+    store.apply(changeSet);
+
+    // Memory store should be initialized
+    assertTrue(memoryStore.isInitialized());
+    
+    // Persistent store should NOT be called when shouldPersist=false
+    assertFalse(persistentStore.wasApplyCalled);
   }
 
   @Test
@@ -459,7 +546,8 @@ public class WriteThroughStoreTest {
         ChangeSetType.Full,
         Selector.make(42, "test-state"),
         ImmutableList.<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>of(),
-        null
+        null,
+        true
     );
 
     store.apply(changeSet);
@@ -539,7 +627,8 @@ public class WriteThroughStoreTest {
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData.entrySet(),
-        null
+        null,
+        true
     );
 
     try {
@@ -577,7 +666,8 @@ public class WriteThroughStoreTest {
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData.entrySet(),
-        null
+        null,
+        true
     );
 
     try {
@@ -646,7 +736,8 @@ public class WriteThroughStoreTest {
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData.entrySet(),
-        null
+        null,
+        true
     );
 
     try {
@@ -675,7 +766,8 @@ public class WriteThroughStoreTest {
         ChangeSetType.None,
         Selector.make(2, "state2"),
         ImmutableList.<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>of(),
-        null
+        null,
+        true
     );
 
     store.apply(changeSet);
@@ -711,7 +803,8 @@ public class WriteThroughStoreTest {
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData.entrySet(),
-        null
+        null,
+        true
     );
 
     // Apply should throw due to persistent store failure
@@ -908,7 +1001,7 @@ public class WriteThroughStoreTest {
 
       switch (changeSet.getType()) {
         case Full:
-          init(new FullDataSet<>(changeSet.getData()));
+          init(new FullDataSet<>(changeSet.getData(), changeSet.shouldPersist()));
           break;
         case Partial:
           for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> kindData : changeSet.getData()) {

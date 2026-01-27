@@ -251,7 +251,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 try {
                     // TODO: Environment ID.
                     DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> converted =
-                            FDv2ChangeSetTranslator.toChangeSet(changeset.getChangeset(), logger, null);
+                            FDv2ChangeSetTranslator.toChangeSet(changeset.getChangeset(), logger, null, true);
                     result = FDv2SourceResult.changeSet(converted);
                 } catch (Exception e) {
                     logger.error("Failed to convert FDv2 changeset: {}", LogValues.exceptionSummary(e));

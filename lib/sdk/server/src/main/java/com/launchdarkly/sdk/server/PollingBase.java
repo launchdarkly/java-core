@@ -83,7 +83,8 @@ class PollingBase {
                                 Selector.EMPTY,
                                 null,
                                 // TODO: Implement environment ID support.
-                                null
+                                null,
+                                true // Polling data from LaunchDarkly should be persisted
                         ));
             }
             FDv2ProtocolHandler handler = new FDv2ProtocolHandler();
@@ -97,7 +98,8 @@ class PollingBase {
                                     ((FDv2ProtocolHandler.FDv2ActionChangeset) res).getChangeset(),
                                     logger,
                                     // TODO: Implement environment ID support.
-                                    null
+                                    null,
+                                    true // Polling data from LaunchDarkly should be persisted
                             );
                             return FDv2SourceResult.changeSet(converted);
                         } catch (Exception e) {
