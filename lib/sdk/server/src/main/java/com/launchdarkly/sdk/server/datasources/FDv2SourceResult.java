@@ -12,7 +12,7 @@ public class FDv2SourceResult {
     public enum State {
         /**
          * The data source has encountered an interruption and will attempt to reconnect. This isn't intended to be used
-         * with an initializer, and instead TERMINAL_ERROR should be used. When this status is used with an initializer
+         * with an initializer, and instead TERMINAL_ERROR should be used. When this status is used with an initializer,
          * it will still be a terminal state.
          */
         INTERRUPTED,
@@ -67,32 +67,49 @@ public class FDv2SourceResult {
     private final Status status;
 
     private final ResultType resultType;
+    
+    private final boolean fdv1Fallback;
 
-    private FDv2SourceResult(DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet, Status status, ResultType resultType) {
+    private FDv2SourceResult(DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet, Status status, ResultType resultType, boolean fdv1Fallback) {
         this.changeSet = changeSet;
         this.status = status;
         this.resultType = resultType;
+        this.fdv1Fallback = fdv1Fallback;
     }
 
-    public static FDv2SourceResult interrupted(DataSourceStatusProvider.ErrorInfo errorInfo) {
-        return new FDv2SourceResult(null, new Status(State.INTERRUPTED, errorInfo), ResultType.STATUS);
+    public static FDv2SourceResult interrupted(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback) {
+        return new FDv2SourceResult(
+          null,
+          new Status(State.INTERRUPTED, errorInfo),
+          ResultType.STATUS,
+          fdv1Fallback);
     }
 
     public static FDv2SourceResult shutdown() {
-        return new FDv2SourceResult(null, new Status(State.SHUTDOWN, null), ResultType.STATUS);
+        return new FDv2SourceResult(null,
+          new Status(State.SHUTDOWN, null),
+          ResultType.STATUS,
+          false);
     }
 
-    public static FDv2SourceResult terminalError(DataSourceStatusProvider.ErrorInfo errorInfo) {
-        return new FDv2SourceResult(null, new Status(State.TERMINAL_ERROR, errorInfo), ResultType.STATUS);
+    public static FDv2SourceResult terminalError(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback) {
+        return new FDv2SourceResult(null,
+          new Status(State.TERMINAL_ERROR, errorInfo),
+          ResultType.STATUS,
+          fdv1Fallback);
     }
 
-    public static FDv2SourceResult changeSet(DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet) {
-        return new FDv2SourceResult(changeSet, null, ResultType.CHANGE_SET);
+    public static FDv2SourceResult changeSet(DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet, boolean fdv1Fallback) {
+        return new FDv2SourceResult(changeSet, null, ResultType.CHANGE_SET, fdv1Fallback);
     }
 
-    public static FDv2SourceResult goodbye(String reason) {
+    public static FDv2SourceResult goodbye(String reason, boolean fdv1Fallback) {
         // TODO: Goodbye reason.
-        return new FDv2SourceResult(null, new Status(State.GOODBYE, null), ResultType.STATUS);
+        return new FDv2SourceResult(
+          null,
+          new Status(State.GOODBYE, null),
+          ResultType.STATUS,
+          fdv1Fallback);
     }
 
     public ResultType getResultType() {
@@ -105,5 +122,9 @@ public class FDv2SourceResult {
 
     public DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> getChangeSet() {
         return changeSet;
+    }
+
+    public boolean isFdv1Fallback() {
+        return fdv1Fallback;
     }
 }

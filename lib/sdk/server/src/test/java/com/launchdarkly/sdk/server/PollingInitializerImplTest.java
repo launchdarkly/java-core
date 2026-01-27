@@ -67,9 +67,10 @@ public class PollingInitializerImplTest extends BaseTest {
             "}";
 
         try {
-            return new FDv2Requestor.FDv2PayloadResponse(
+            return FDv2Requestor.FDv2PayloadResponse.success(
                 com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(json),
-                okhttp3.Headers.of()
+                okhttp3.Headers.of(),
+                200
             );
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -102,8 +103,10 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2Requestor requestor = mockRequestor();
         SelectorSource selectorSource = mockSelectorSource();
 
+        FDv2Requestor.FDv2PayloadResponse errorResponse =
+            FDv2Requestor.FDv2PayloadResponse.failure(503, okhttp3.Headers.of());
         when(requestor.Poll(any(Selector.class)))
-            .thenReturn(failedFuture(new HttpErrors.HttpErrorException(503)));
+            .thenReturn(CompletableFuture.completedFuture(errorResponse));
 
         PollingInitializerImpl initializer = new PollingInitializerImpl(requestor, testLogger, selectorSource);
 
@@ -116,7 +119,7 @@ public class PollingInitializerImplTest extends BaseTest {
         assertNotNull(result.getStatus().getErrorInfo());
         assertEquals(DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE, result.getStatus().getErrorInfo().getKind());
 
-        
+
     }
 
     @Test
@@ -124,8 +127,10 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2Requestor requestor = mockRequestor();
         SelectorSource selectorSource = mockSelectorSource();
 
+        FDv2Requestor.FDv2PayloadResponse errorResponse =
+            FDv2Requestor.FDv2PayloadResponse.failure(401, okhttp3.Headers.of());
         when(requestor.Poll(any(Selector.class)))
-            .thenReturn(failedFuture(new HttpErrors.HttpErrorException(401)));
+            .thenReturn(CompletableFuture.completedFuture(errorResponse));
 
         PollingInitializerImpl initializer = new PollingInitializerImpl(requestor, testLogger, selectorSource);
 
@@ -137,7 +142,7 @@ public class PollingInitializerImplTest extends BaseTest {
         assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result.getStatus().getState());
         assertEquals(DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE, result.getStatus().getErrorInfo().getKind());
 
-        
+
     }
 
     @Test
@@ -248,9 +253,10 @@ public class PollingInitializerImplTest extends BaseTest {
             "  ]\n" +
             "}";
 
-        FDv2Requestor.FDv2PayloadResponse response = new FDv2Requestor.FDv2PayloadResponse(
+        FDv2Requestor.FDv2PayloadResponse response = FDv2Requestor.FDv2PayloadResponse.success(
             com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(errorJson),
-            okhttp3.Headers.of()
+            okhttp3.Headers.of(),
+            200
         );
 
         when(requestor.Poll(any(Selector.class)))
@@ -284,9 +290,10 @@ public class PollingInitializerImplTest extends BaseTest {
             "  ]\n" +
             "}";
 
-        FDv2Requestor.FDv2PayloadResponse response = new FDv2Requestor.FDv2PayloadResponse(
+        FDv2Requestor.FDv2PayloadResponse response = FDv2Requestor.FDv2PayloadResponse.success(
             com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(goodbyeJson),
-            okhttp3.Headers.of()
+            okhttp3.Headers.of(),
+            200
         );
 
         when(requestor.Poll(any(Selector.class)))
@@ -311,9 +318,10 @@ public class PollingInitializerImplTest extends BaseTest {
 
         String emptyJson = "{\"events\": []}";
 
-        FDv2Requestor.FDv2PayloadResponse response = new FDv2Requestor.FDv2PayloadResponse(
+        FDv2Requestor.FDv2PayloadResponse response = FDv2Requestor.FDv2PayloadResponse.success(
             com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(emptyJson),
-            okhttp3.Headers.of()
+            okhttp3.Headers.of(),
+            200
         );
 
         when(requestor.Poll(any(Selector.class)))
@@ -366,9 +374,10 @@ public class PollingInitializerImplTest extends BaseTest {
             "  ]\n" +
             "}";
 
-        FDv2Requestor.FDv2PayloadResponse response = new FDv2Requestor.FDv2PayloadResponse(
+        FDv2Requestor.FDv2PayloadResponse response = FDv2Requestor.FDv2PayloadResponse.success(
             com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(malformedPayloadTransferred),
-            okhttp3.Headers.of()
+            okhttp3.Headers.of(),
+            200
         );
 
         when(requestor.Poll(any(Selector.class)))
@@ -403,9 +412,10 @@ public class PollingInitializerImplTest extends BaseTest {
             "  ]\n" +
             "}";
 
-        FDv2Requestor.FDv2PayloadResponse response = new FDv2Requestor.FDv2PayloadResponse(
+        FDv2Requestor.FDv2PayloadResponse response = FDv2Requestor.FDv2PayloadResponse.success(
             com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(unknownEventJson),
-            okhttp3.Headers.of()
+            okhttp3.Headers.of(),
+            200
         );
 
         when(requestor.Poll(any(Selector.class)))
@@ -422,5 +432,183 @@ public class PollingInitializerImplTest extends BaseTest {
         assertEquals(DataSourceStatusProvider.ErrorKind.UNKNOWN, result.getStatus().getErrorInfo().getKind());
 
 
+    }
+
+    @Test
+    public void fdv1FallbackFlagSetToTrueInSuccessResponse() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+
+        okhttp3.Headers headers = new okhttp3.Headers.Builder()
+            .add("x-ld-fd-fallback", "true")
+            .build();
+
+        FDv2Requestor.FDv2PayloadResponse response = FDv2Requestor.FDv2PayloadResponse.success(
+            com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(
+                "{\"events\": [{\"event\": \"server-intent\", \"data\": {\"payloads\": [{\"id\": \"payload-1\", \"target\": 100, \"intentCode\": \"xfer-full\", \"reason\": \"payload-missing\"}]}}, {\"event\": \"payload-transferred\", \"data\": {\"state\": \"(p:payload-1:100)\", \"version\": 100}}]}"
+            ),
+            headers,
+            200
+        );
+
+        when(requestor.Poll(any(Selector.class)))
+            .thenReturn(CompletableFuture.completedFuture(response));
+
+        PollingInitializerImpl initializer = new PollingInitializerImpl(requestor, testLogger, selectorSource);
+
+        CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
+        FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+        assertNotNull(result);
+        assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+        assertEquals(true, result.isFdv1Fallback());
+    }
+
+    @Test
+    public void fdv1FallbackFlagSetToFalseWhenHeaderNotPresent() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+
+        FDv2Requestor.FDv2PayloadResponse response = makeSuccessResponse();
+        when(requestor.Poll(any(Selector.class)))
+            .thenReturn(CompletableFuture.completedFuture(response));
+
+        PollingInitializerImpl initializer = new PollingInitializerImpl(requestor, testLogger, selectorSource);
+
+        CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
+        FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+        assertNotNull(result);
+        assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+        assertEquals(false, result.isFdv1Fallback());
+    }
+
+    @Test
+    public void fdv1FallbackFlagSetToTrueInErrorResponse() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+
+        okhttp3.Headers headers = new okhttp3.Headers.Builder()
+            .add("x-ld-fd-fallback", "true")
+            .build();
+
+        FDv2Requestor.FDv2PayloadResponse errorResponse =
+            FDv2Requestor.FDv2PayloadResponse.failure(503, headers);
+        when(requestor.Poll(any(Selector.class)))
+            .thenReturn(CompletableFuture.completedFuture(errorResponse));
+
+        PollingInitializerImpl initializer = new PollingInitializerImpl(requestor, testLogger, selectorSource);
+
+        CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
+        FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+        assertNotNull(result);
+        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
+        assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result.getStatus().getState());
+        assertEquals(true, result.isFdv1Fallback());
+    }
+
+    @Test
+    public void fdv1FallbackFlagSetToFalseInNetworkError() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+
+        when(requestor.Poll(any(Selector.class)))
+            .thenReturn(failedFuture(new IOException("Connection refused")));
+
+        PollingInitializerImpl initializer = new PollingInitializerImpl(requestor, testLogger, selectorSource);
+
+        CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
+        FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+        assertNotNull(result);
+        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
+        assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result.getStatus().getState());
+        // Network errors don't have headers, so fallback should be false
+        assertEquals(false, result.isFdv1Fallback());
+    }
+
+    @Test
+    public void environmentIdExtractedFromHeaders() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+
+        okhttp3.Headers headers = new okhttp3.Headers.Builder()
+            .add("x-ld-envid", "test-env-123")
+            .build();
+
+        FDv2Requestor.FDv2PayloadResponse response = FDv2Requestor.FDv2PayloadResponse.success(
+            com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(
+                "{\"events\": [{\"event\": \"server-intent\", \"data\": {\"payloads\": [{\"id\": \"payload-1\", \"target\": 100, \"intentCode\": \"xfer-full\", \"reason\": \"payload-missing\"}]}}, {\"event\": \"payload-transferred\", \"data\": {\"state\": \"(p:payload-1:100)\", \"version\": 100}}]}"
+            ),
+            headers,
+            200
+        );
+
+        when(requestor.Poll(any(Selector.class)))
+            .thenReturn(CompletableFuture.completedFuture(response));
+
+        PollingInitializerImpl initializer = new PollingInitializerImpl(requestor, testLogger, selectorSource);
+
+        CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
+        FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+        assertNotNull(result);
+        assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+        assertNotNull(result.getChangeSet());
+        assertEquals("test-env-123", result.getChangeSet().getEnvironmentId());
+    }
+
+    @Test
+    public void environmentIdNullWhenHeaderNotPresent() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+
+        FDv2Requestor.FDv2PayloadResponse response = makeSuccessResponse();
+        when(requestor.Poll(any(Selector.class)))
+            .thenReturn(CompletableFuture.completedFuture(response));
+
+        PollingInitializerImpl initializer = new PollingInitializerImpl(requestor, testLogger, selectorSource);
+
+        CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
+        FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+        assertNotNull(result);
+        assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+        assertNotNull(result.getChangeSet());
+        assertNull(result.getChangeSet().getEnvironmentId());
+    }
+
+    @Test
+    public void bothFdv1FallbackAndEnvironmentIdExtractedFromHeaders() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+
+        okhttp3.Headers headers = new okhttp3.Headers.Builder()
+            .add("x-ld-fd-fallback", "true")
+            .add("x-ld-envid", "test-env-456")
+            .build();
+
+        FDv2Requestor.FDv2PayloadResponse response = FDv2Requestor.FDv2PayloadResponse.success(
+            com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(
+                "{\"events\": [{\"event\": \"server-intent\", \"data\": {\"payloads\": [{\"id\": \"payload-1\", \"target\": 100, \"intentCode\": \"xfer-full\", \"reason\": \"payload-missing\"}]}}, {\"event\": \"payload-transferred\", \"data\": {\"state\": \"(p:payload-1:100)\", \"version\": 100}}]}"
+            ),
+            headers,
+            200
+        );
+
+        when(requestor.Poll(any(Selector.class)))
+            .thenReturn(CompletableFuture.completedFuture(response));
+
+        PollingInitializerImpl initializer = new PollingInitializerImpl(requestor, testLogger, selectorSource);
+
+        CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
+        FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+        assertNotNull(result);
+        assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+        assertEquals(true, result.isFdv1Fallback());
+        assertNotNull(result.getChangeSet());
+        assertEquals("test-env-456", result.getChangeSet().getEnvironmentId());
     }
 }
