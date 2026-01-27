@@ -83,8 +83,11 @@ class SynchronizerStateManager implements Closeable {
             for (int index = 0; index < synchronizers.size(); index++) {
                 if (synchronizers.get(index).getState() == SynchronizerFactoryWithState.State.Available) {
                     if (sourceIndex == index) {
+                        // This is the first synchronizer that is available, and it also is the current one.
                         return true;
                     }
+                    break;
+                    // Subsequently encountered synchronizers that are available are not the first one.
                 }
             }
         }
