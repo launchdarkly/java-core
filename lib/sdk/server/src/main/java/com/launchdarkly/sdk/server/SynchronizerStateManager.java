@@ -52,24 +52,24 @@ class SynchronizerStateManager implements Closeable {
         synchronized (activeSourceLock) {
             SynchronizerFactoryWithState factory = null;
 
-            // There is at least one available factory.
-            if(synchronizers.stream().anyMatch(s -> s.getState() == SynchronizerFactoryWithState.State.Available)) {
+            int visited = 0;
+            while(visited < synchronizers.size()) {
                 // Look for the next synchronizer starting at the position after the current one. (avoiding just re-using the same synchronizer.)
-                while(factory == null) {
-                    sourceIndex++;
-                    // We aren't using module here because we want to keep the stored index within range instead
-                    // of increasing indefinitely.
-                    if(sourceIndex >= synchronizers.size()) {
-                        sourceIndex = 0;
-                    }
-                    SynchronizerFactoryWithState candidate = synchronizers.get(sourceIndex);
-                    if (candidate.getState() == SynchronizerFactoryWithState.State.Available) {
-                        factory = candidate;
-                    }
+                sourceIndex++;
 
+                // We aren't using module here because we want to keep the stored index within range instead
+                // of increasing indefinitely.
+                if(sourceIndex >= synchronizers.size()) {
+                    sourceIndex = 0;
                 }
-            }
 
+                SynchronizerFactoryWithState candidate = synchronizers.get(sourceIndex);
+                if (candidate.getState() == SynchronizerFactoryWithState.State.Available) {
+                    factory = candidate;
+                    break;
+                }
+                visited++;
+            }
             return factory;
         }
     }
@@ -80,15 +80,11 @@ class SynchronizerStateManager implements Closeable {
      */
     public boolean isPrimeSynchronizer() {
         synchronized (activeSourceLock) {
-            boolean firstAvailableSynchronizer = true;
             for (int index = 0; index < synchronizers.size(); index++) {
                 if (synchronizers.get(index).getState() == SynchronizerFactoryWithState.State.Available) {
-                    if (firstAvailableSynchronizer && sourceIndex == index) {
-                        // This is the first synchronizer that is available, and it also is the current one.
+                    if (sourceIndex == index) {
                         return true;
                     }
-                    // Subsequently encountered synchronizers that are available are not the first one.
-                    firstAvailableSynchronizer = false;
                 }
             }
         }

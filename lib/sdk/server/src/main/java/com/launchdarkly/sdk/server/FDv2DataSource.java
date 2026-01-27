@@ -25,7 +25,7 @@ class FDv2DataSource implements DataSource {
     /**
      * Default fallback timeout of 2 minutes. The timeout is only configurable for testing.
      */
-    private static final int defaultFallbackTimeout = 2 * 60;
+    private static final int defaultFallbackTimeoutSeconds = 2 * 60;
 
     /**
      * Default recovery timeout of 5 minutes. The timeout is only configurable for testing.
@@ -64,7 +64,7 @@ class FDv2DataSource implements DataSource {
             threadPriority,
             logger,
             sharedExecutor,
-            defaultFallbackTimeout,
+            defaultFallbackTimeoutSeconds,
             defaultRecoveryTimeout
         );
     }
@@ -217,6 +217,10 @@ class FDv2DataSource implements DataSource {
                                 break;
                             }
 
+                            if(!(res instanceof FDv2SourceResult)) {
+                                logger.error("Unexpected result type from synchronizer: {}", res.getClass().getName());
+                                continue;
+                            }
 
                             FDv2SourceResult result = (FDv2SourceResult) res;
                             conditions.inform(result);

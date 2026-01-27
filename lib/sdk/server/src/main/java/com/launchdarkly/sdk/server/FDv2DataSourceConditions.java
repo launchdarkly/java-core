@@ -120,9 +120,6 @@ class FDv2DataSourceConditions {
 
         @Override
         public void inform(FDv2SourceResult sourceResult) {
-            if (sourceResult == null) {
-                return;
-            }
             if (sourceResult.getResultType() == FDv2SourceResult.ResultType.CHANGE_SET) {
                 if (timerFuture != null) {
                     timerFuture.cancel(false);
