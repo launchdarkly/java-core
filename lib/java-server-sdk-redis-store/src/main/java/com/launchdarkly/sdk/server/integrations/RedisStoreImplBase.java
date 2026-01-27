@@ -21,11 +21,15 @@ abstract class RedisStoreImplBase implements Closeable {
     // to decompose the URI.
     String host = builder.uri.getHost();
     int port = builder.uri.getPort();
+    String username = builder.username == null ? RedisURIComponents.getUsername(builder.uri) : builder.username;
     String password = builder.password == null ? RedisURIComponents.getPassword(builder.uri) : builder.password;
     int database = builder.database == null ? RedisURIComponents.getDBIndex(builder.uri) : builder.database;
     boolean tls = builder.tls || builder.uri.getScheme().equals("rediss");
 
     String extra = tls ? " with TLS" : "";
+    if (username != null) {
+      extra = extra + (extra.isEmpty() ? " with" : " and") + " username";
+    }
     if (password != null) {
       extra = extra + (extra.isEmpty() ? " with" : " and") + " password";
     }
@@ -41,6 +45,7 @@ abstract class RedisStoreImplBase implements Closeable {
         port,
         (int) builder.connectTimeout.toMillis(),
         (int) builder.socketTimeout.toMillis(),
+        username,
         password,
         database,
         null, // clientName
