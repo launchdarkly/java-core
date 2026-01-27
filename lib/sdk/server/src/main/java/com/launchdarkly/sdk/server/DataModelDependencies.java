@@ -131,7 +131,7 @@ abstract class DataModelDependencies {
       DataKind kind = entry.getKey();
       builder.put(kind, sortCollection(kind, entry.getValue()));
     }
-    return new FullDataSet<>(builder.build().entrySet());
+    return new FullDataSet<>(builder.build().entrySet(), allData.shouldPersist());
   }
   
   /**
@@ -148,7 +148,7 @@ abstract class DataModelDependencies {
       DataKind kind = entry.getKey();
       builder.put(kind, sortCollection(kind, entry.getValue()));
     }
-    return new ChangeSet<>(inSet.getType(), inSet.getSelector(), builder.build().entrySet(), inSet.getEnvironmentId());
+    return new ChangeSet<>(inSet.getType(), inSet.getSelector(), builder.build().entrySet(), inSet.getEnvironmentId(), inSet.shouldPersist());
   }
   
   private static KeyedItems<ItemDescriptor> sortCollection(DataKind kind, KeyedItems<ItemDescriptor> input) {

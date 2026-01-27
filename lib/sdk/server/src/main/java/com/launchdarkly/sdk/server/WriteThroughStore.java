@@ -57,7 +57,8 @@ final class WriteThroughStore implements DataStore, TransactionalDataStore {
     memoryStore.init(allData);
     maybeSwitchStore();
 
-    if (persistenceMode == DataStoreMode.READ_WRITE) {
+    // Only write to persistent store if shouldPersist is true and store is in READ_WRITE mode
+    if (persistenceMode == DataStoreMode.READ_WRITE && allData.shouldPersist()) {
       if (persistentStore != null) {
         persistentStore.init(allData);
       }
@@ -77,6 +78,8 @@ final class WriteThroughStore implements DataStore, TransactionalDataStore {
   @Override
   public boolean upsert(DataKind kind, String key, ItemDescriptor item) {
     boolean result = memoryStore.upsert(kind, key, item);
+    // Note: upsert() doesn't have persist information. For legacy paths (FDv1), we always persist.
+    // For FDv2 paths, this method shouldn't be called - use apply() instead which has persist info.
     if (hasPersistence && persistenceMode == DataStoreMode.READ_WRITE) {
       result = result && persistentStore.upsert(kind, key, item);
     }
@@ -107,7 +110,8 @@ final class WriteThroughStore implements DataStore, TransactionalDataStore {
     txMemoryStore.apply(changeSet);
     maybeSwitchStore();
 
-    if (!hasPersistence || persistenceMode != DataStoreMode.READ_WRITE) {
+    // Only write to persistent store if shouldPersist is true and store is in READ_WRITE mode
+    if (!hasPersistence || persistenceMode != DataStoreMode.READ_WRITE || !changeSet.shouldPersist()) {
       return;
     }
 
@@ -175,7 +179,8 @@ final class WriteThroughStore implements DataStore, TransactionalDataStore {
    * Applies a full change set to a legacy persistent store.
    */
   private void applyFullChangeSetToLegacyStore(ChangeSet<ItemDescriptor> sortedChangeSet) {
-    persistentStore.init(new FullDataSet<>(sortedChangeSet.getData()));
+    // Preserve shouldPersist flag when converting ChangeSet to FullDataSet
+    persistentStore.init(new FullDataSet<>(sortedChangeSet.getData(), sortedChangeSet.shouldPersist()));
   }
 
   /**

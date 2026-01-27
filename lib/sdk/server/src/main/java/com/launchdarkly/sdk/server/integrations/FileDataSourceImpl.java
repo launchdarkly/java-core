@@ -281,7 +281,8 @@ final class FileDataSourceImpl implements DataSource {
       for (Map.Entry<DataKind, Map<String, ItemDescriptor>> e0: allData.entrySet()) {
         allBuilder.add(new AbstractMap.SimpleEntry<>(e0.getKey(), new KeyedItems<>(e0.getValue().entrySet())));
       }
-      return new FullDataSet<>(allBuilder.build());
+      // File data source data is not authoritative and should not be persisted
+      return new FullDataSet<>(allBuilder.build(), false);
     }
     
     public void add(DataKind kind, String key, ItemDescriptor item) throws FileDataException {

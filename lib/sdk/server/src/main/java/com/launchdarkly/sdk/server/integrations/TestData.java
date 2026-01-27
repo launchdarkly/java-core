@@ -69,6 +69,7 @@ public final class TestData implements ComponentConfigurer<DataSource> {
   private final Map<String, ItemDescriptor> currentFlags = new HashMap<>();
   private final Map<String, FlagBuilder> currentBuilders = new HashMap<>();
   private final List<DataSourceImpl> instances = new CopyOnWriteArrayList<>();
+  private volatile boolean shouldPersist = true;
   
   /**
    * Creates a new instance of the test data source.
@@ -197,6 +198,33 @@ public final class TestData implements ComponentConfigurer<DataSource> {
     return this;
   }
   
+  /**
+   * Configures whether test data should be persisted to persistent stores.
+   * <p>
+   * By default, test data is persisted ({@code shouldPersist = true}) to maintain consistency with
+   * previous versions' behavior. When {@code true}, the test data will be written to any configured persistent
+   * store (if the store is in READ_WRITE mode). This is useful for integration tests that verify
+   * your persistent store configuration.
+   * <p>
+   * Set this to {@code false} if you want to prevent test data from being written to persistent stores.
+   * This may be appropriate for unit testing scenarios where you want to test your application logic
+   * without affecting a persistent store.
+   * <p>
+   * Example:
+   * <pre><code>
+   *     TestData td = TestData.dataSource()
+   *         .shouldPersist(false);  // Disable persistence to avoid polluting the store
+   *     td.update(td.flag("flag-key").booleanFlag().variationForAllUsers(true));
+   * </code></pre>
+   *
+   * @param shouldPersist true if test data should be persisted to persistent stores, false otherwise
+   * @return the same {@code TestData} instance
+   */
+  public TestData shouldPersist(boolean shouldPersist) {
+    this.shouldPersist = shouldPersist;
+    return this;
+  }
+  
   @Override
   public DataSource build(ClientContext context) {
     DataSourceImpl instance = new DataSourceImpl(context.getDataSourceUpdateSink());
@@ -211,7 +239,7 @@ public final class TestData implements ComponentConfigurer<DataSource> {
     synchronized (lock) {
       copiedData = ImmutableMap.copyOf(currentFlags);
     }
-    return new FullDataSet<>(ImmutableMap.of(DataModel.FEATURES, new KeyedItems<>(copiedData.entrySet())).entrySet());
+    return new FullDataSet<>(ImmutableMap.of(DataModel.FEATURES, new KeyedItems<>(copiedData.entrySet())).entrySet(), shouldPersist);
   }
   
   private void closedInstance(DataSourceImpl instance) {

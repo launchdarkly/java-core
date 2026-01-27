@@ -32,15 +32,16 @@ class InMemoryDataStore implements DataStore, TransactionalDataStore, CacheExpor
   private Object writeLock = new Object();
   private final Object selectorLock = new Object();
   private volatile Selector selector = Selector.EMPTY;
+  private volatile boolean shouldPersist = false;
 
   @Override
   public void init(FullDataSet<ItemDescriptor> allData) {
-    applyFullPayload(allData.getData(), null, Selector.EMPTY);
+    applyFullPayload(allData.getData(), null, Selector.EMPTY, allData.shouldPersist());
   }
 
   @Override
   public ItemDescriptor get(DataKind kind, String key) {
-    Map<String, ItemDescriptor> items = allData.get(kind);
+    Map<String, ItemDescriptor> items = this.allData.get(kind);
     if (items == null) {
       return null;
     }
@@ -49,7 +50,7 @@ class InMemoryDataStore implements DataStore, TransactionalDataStore, CacheExpor
 
   @Override
   public KeyedItems<ItemDescriptor> getAll(DataKind kind) {
-    Map<String, ItemDescriptor> items = allData.get(kind);
+    Map<String, ItemDescriptor> items = this.allData.get(kind);
     if (items == null) {
       return new KeyedItems<>(null);
     }
@@ -58,7 +59,7 @@ class InMemoryDataStore implements DataStore, TransactionalDataStore, CacheExpor
 
   @Override
   public boolean upsert(DataKind kind, String key, ItemDescriptor item) {
-    synchronized (writeLock) {
+    synchronized (this.writeLock) {
       Map<String, ItemDescriptor> existingItems = this.allData.get(kind);
       ItemDescriptor oldItem = null;
       if (existingItems != null) {
@@ -97,7 +98,7 @@ class InMemoryDataStore implements DataStore, TransactionalDataStore, CacheExpor
 
   @Override
   public boolean isInitialized() {
-    return initialized;
+    return this.initialized;
   }
   
   @Override
@@ -124,10 +125,10 @@ class InMemoryDataStore implements DataStore, TransactionalDataStore, CacheExpor
   public void apply(ChangeSet<ItemDescriptor> changeSet) {
     switch (changeSet.getType()) {
       case Full:
-        applyFullPayload(changeSet.getData(), changeSet.getEnvironmentId(), changeSet.getSelector());
+        applyFullPayload(changeSet.getData(), changeSet.getEnvironmentId(), changeSet.getSelector(), changeSet.shouldPersist());
         break;
       case Partial:
-        applyPartialData(changeSet.getData(), changeSet.getSelector());
+        applyPartialData(changeSet.getData(), changeSet.getSelector(), changeSet.shouldPersist());
         break;
       case None:
         break;
@@ -140,20 +141,20 @@ class InMemoryDataStore implements DataStore, TransactionalDataStore, CacheExpor
 
   @Override
   public Selector getSelector() {
-    synchronized (selectorLock) {
-      return selector;
+    synchronized (this.selectorLock) {
+      return this.selector;
     }
   }
 
   private void setSelector(Selector newSelector) {
-    synchronized (selectorLock) {
-      selector = newSelector;
+    synchronized (this.selectorLock) {
+      this.selector = newSelector;
     }
   }
 
   private void applyPartialData(Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data,
-      Selector selector) {
-    synchronized (writeLock) {
+      Selector selector, boolean shouldPersist) {
+    synchronized (this.writeLock) {
       // Build the complete updated dictionary before assigning to Items for transactional update
       ImmutableMap.Builder<DataKind, Map<String, ItemDescriptor>> itemsBuilder = ImmutableMap.builder();
       
@@ -164,7 +165,7 @@ class InMemoryDataStore implements DataStore, TransactionalDataStore, CacheExpor
       }
       
       // Add all existing kinds that are NOT being updated
-      for (Map.Entry<DataKind, Map<String, ItemDescriptor>> existingEntry : allData.entrySet()) {
+      for (Map.Entry<DataKind, Map<String, ItemDescriptor>> existingEntry : this.allData.entrySet()) {
         if (!updatedKinds.contains(existingEntry.getKey())) {
           itemsBuilder.put(existingEntry.getKey(), existingEntry.getValue());
         }
@@ -176,7 +177,7 @@ class InMemoryDataStore implements DataStore, TransactionalDataStore, CacheExpor
         // Use HashMap to allow overwriting, then convert to ImmutableMap
         Map<String, ItemDescriptor> kindMap = new HashMap<>();
 
-        Map<String, ItemDescriptor> itemsOfKind = allData.get(kind);
+        Map<String, ItemDescriptor> itemsOfKind = this.allData.get(kind);
         if (itemsOfKind != null) {
           kindMap.putAll(itemsOfKind);
         }
@@ -189,13 +190,14 @@ class InMemoryDataStore implements DataStore, TransactionalDataStore, CacheExpor
         itemsBuilder.put(kind, ImmutableMap.copyOf(kindMap));
       }
 
-      allData = itemsBuilder.build();
+      this.allData = itemsBuilder.build();
+      this.shouldPersist = shouldPersist;
       setSelector(selector);
     }
   }
 
   private void applyFullPayload(Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data,
-      String environmentId, Selector selector) {
+      String environmentId, Selector selector, boolean shouldPersist) {
     ImmutableMap.Builder<DataKind, Map<String, ItemDescriptor>> itemsBuilder = ImmutableMap.builder();
 
     for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> kindEntry : data) {
@@ -208,26 +210,28 @@ class InMemoryDataStore implements DataStore, TransactionalDataStore, CacheExpor
 
     ImmutableMap<DataKind, Map<String, ItemDescriptor>> newItems = itemsBuilder.build();
 
-    synchronized (writeLock) {
-      allData = newItems;
-      initialized = true;
+    synchronized (this.writeLock) {
+      this.allData = newItems;
+      this.initialized = true;
+      this.shouldPersist = shouldPersist;
       setSelector(selector);
     }
   }
 
   @Override
   public FullDataSet<ItemDescriptor> exportAll() {
-    synchronized (writeLock) {
+    synchronized (this.writeLock) {
       ImmutableList.Builder<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> builder = ImmutableList.builder();
 
-      for (Map.Entry<DataKind, Map<String, ItemDescriptor>> kindEntry : allData.entrySet()) {
+      for (Map.Entry<DataKind, Map<String, ItemDescriptor>> kindEntry : this.allData.entrySet()) {
         builder.add(new AbstractMap.SimpleEntry<>(
             kindEntry.getKey(),
             new KeyedItems<>(ImmutableList.copyOf(kindEntry.getValue().entrySet()))
         ));
       }
 
-      return new FullDataSet<>(builder.build());
+      // Preserve the shouldPersist value that was set when data was provided to this store
+      return new FullDataSet<>(builder.build(), this.shouldPersist);
     }
   }
 }

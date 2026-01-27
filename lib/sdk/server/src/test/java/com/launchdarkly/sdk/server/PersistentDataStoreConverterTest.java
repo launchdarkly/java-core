@@ -92,7 +92,7 @@ public class PersistentDataStoreConverterTest {
         }
         builder.add(new AbstractMap.SimpleEntry<>(e.getKey(), new KeyedItems<>(itemsBuilder.build())));
       }
-      return new FullDataSet<>(builder.build());
+      return new FullDataSet<>(builder.build(), true);
     }
   }
 

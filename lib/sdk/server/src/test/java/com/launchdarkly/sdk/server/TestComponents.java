@@ -104,7 +104,7 @@ public class TestComponents {
 
   public static DataStore initedDataStore() {
     DataStore store = new InMemoryDataStore();
-    store.init(new FullDataSet<ItemDescriptor>(null));
+    store.init(new FullDataSet<ItemDescriptor>(null, true));
     return store;
   }
 

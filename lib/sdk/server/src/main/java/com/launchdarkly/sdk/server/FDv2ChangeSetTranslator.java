@@ -30,13 +30,15 @@ final class FDv2ChangeSetTranslator {
      * @param changeset     the FDv2 changeset to convert
      * @param logger        logger for diagnostic messages
      * @param environmentId the environment ID to include in the changeset (may be null)
+     * @param shouldPersist true if the data should be persisted to persistent stores, false otherwise
      * @return a DataStoreTypes.ChangeSet containing the converted data
      * @throws IllegalArgumentException if the changeset type is unknown
      */
     public static DataStoreTypes.ChangeSet<ItemDescriptor> toChangeSet(
             FDv2ChangeSet changeset,
             LDLogger logger,
-            String environmentId) {
+            String environmentId,
+            boolean shouldPersist) {
         ChangeSetType changeSetType;
         switch (changeset.getType()) {
             case FULL:
@@ -103,7 +105,8 @@ final class FDv2ChangeSetTranslator {
                 changeSetType,
                 changeset.getSelector(),
                 dataBuilder.build(),
-                environmentId);
+                environmentId,
+                shouldPersist);
     }
 
     /**
