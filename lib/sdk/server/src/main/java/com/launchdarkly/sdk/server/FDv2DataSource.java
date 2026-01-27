@@ -101,9 +101,10 @@ class FDv2DataSource implements DataSource {
             }
             boolean fdv1Fallback = runSynchronizers();
             if (fdv1Fallback) {
-                // TODO: Run FDv1 fallback.
+                runFdv1Fallback();
             }
             // TODO: Handle. We have ran out of sources or we are shutting down.
+            dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.OFF, new DataSourceStatusProvider.ErrorInfo(DataSourceStatusProvider.ErrorKind.UNKNOWN, 0, "", new Date().instant()));
 
             // If we had initialized at some point, then the future will already be complete and this will be ignored.
             startFuture.complete(false);
@@ -266,6 +267,10 @@ class FDv2DataSource implements DataSource {
         } finally {
             synchronizerStateManager.close();
         }
+    }
+
+    private void runFdv1Fallback() {
+
     }
 
     @Override
