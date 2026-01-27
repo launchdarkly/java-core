@@ -12,7 +12,7 @@ class PollingInitializerImpl extends PollingBase implements Initializer {
     private final SelectorSource selectorSource;
 
     public PollingInitializerImpl(FDv2Requestor requestor, LDLogger logger, SelectorSource selectorSource) {
-        super(requestor, logger);
+        super(requestor, logger.subLogger(Loggers.POLLING_INITIALIZER));
         this.selectorSource = selectorSource;
     }
 
