@@ -114,14 +114,34 @@ class FDv2DataSource implements DataSource {
     private void run() {
         Thread runThread = new Thread(() -> {
             if (initializers.isEmpty() && synchronizerStateManager.getAvailableSynchronizerCount() == 0) {
-               dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
-               startFuture.complete(true);
-               return;
+                // There are not any initializer or synchronizers, so we are at the best state that
+                // can be achieved.
+                dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
+                startFuture.complete(true);
+                return;
             }
             if (!initializers.isEmpty()) {
                 runInitializers();
             }
+            boolean synchronizersAvailable = synchronizerStateManager.getAvailableSynchronizerCount() != 0;
+            if(!synchronizersAvailable) {
+                // If already completed by the initializers, then this will have no effect.
+                startFuture.complete(false);
+                if (!isInitialized()) {
+                    dataSourceUpdates.updateStatus(
+                        DataSourceStatusProvider.State.OFF,
+                        new DataSourceStatusProvider.ErrorInfo(
+                            DataSourceStatusProvider.ErrorKind.UNKNOWN,
+                            0,
+                            "Initializers exhausted and there are no synchronizers",
+                            new Date().toInstant())
+                    );
+                }
+            }
+
             runSynchronizers();
+            // If we had synchronizers, and we ran out of them, then we are off.
+
             dataSourceUpdates.updateStatus(
                 DataSourceStatusProvider.State.OFF,
                 new DataSourceStatusProvider.ErrorInfo(
