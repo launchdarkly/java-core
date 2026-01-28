@@ -54,7 +54,8 @@ public class FDv2DataSourceTest extends BaseTest {
             DataStoreTypes.ChangeSetType.None,
             selector,
             null,
-            null
+            null,
+            true
         );
     }
 
@@ -385,9 +386,9 @@ public class FDv2DataSourceTest extends BaseTest {
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
 
-        assertFalse(dataSource.isInitialized());
+        assertTrue(dataSource.isInitialized());
         assertEquals(0, sink.getApplyCount());
-        // TODO: Verify status reflects exhausted sources when data source status is implemented
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastStatus());
     }
 
     // ============================================================================
@@ -704,8 +705,8 @@ public class FDv2DataSourceTest extends BaseTest {
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
 
-        assertFalse(dataSource.isInitialized());
-        // TODO: Verify status reflects exhausted sources when data source status is implemented
+        assertTrue(dataSource.isInitialized());
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastStatus());
     }
 
     // ============================================================================
@@ -2008,6 +2009,7 @@ public class FDv2DataSourceTest extends BaseTest {
     private static class MockDataSourceUpdateSink implements DataSourceUpdateSinkV2 {
         private final AtomicInteger applyCount = new AtomicInteger(0);
         private final AtomicReference<DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor>> lastChangeSet = new AtomicReference<>();
+        private final AtomicReference<DataSourceStatusProvider.State> lastStatus = new AtomicReference<>();
         private final BlockingQueue<Boolean> applySignals = new LinkedBlockingQueue<>();
 
         @Override
@@ -2020,7 +2022,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         @Override
         public void updateStatus(DataSourceStatusProvider.State newState, DataSourceStatusProvider.ErrorInfo errorInfo) {
-            // TODO: Track status updates when data source status is fully implemented
+            lastStatus.set(newState);
         }
 
         @Override
@@ -2034,6 +2036,10 @@ public class FDv2DataSourceTest extends BaseTest {
 
         public DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> getLastChangeSet() {
             return lastChangeSet.get();
+        }
+
+        public DataSourceStatusProvider.State getLastStatus() {
+            return lastStatus.get();
         }
 
         public void awaitApplyCount(int expectedCount, long timeout, TimeUnit unit) throws InterruptedException {

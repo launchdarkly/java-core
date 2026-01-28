@@ -95,6 +95,13 @@ class FDv2DataSource implements DataSource {
     }
 
     private void run() {
+        if (initializers.isEmpty() && synchronizerStateManager.getAvailableSynchronizerCount() == 0) {
+            logger.info("LaunchDarkly client will not connect to Launchdarkly for feature flag data due to no initializers or synchronizers");
+            dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
+            startFuture.complete(true);
+            return;
+        }
+
         Thread runThread = new Thread(() -> {
             if (!initializers.isEmpty()) {
                 runInitializers();

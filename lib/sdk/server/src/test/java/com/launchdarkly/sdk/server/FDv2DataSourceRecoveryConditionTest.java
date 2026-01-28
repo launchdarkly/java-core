@@ -38,7 +38,8 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
             DataStoreTypes.ChangeSetType.None,
             Selector.EMPTY,
             null,
-            null
+            null,
+            true
         );
     }
 
