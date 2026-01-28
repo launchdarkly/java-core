@@ -333,7 +333,7 @@ public class FDv2DataSourceTest extends BaseTest {
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
-        startFuture.get(2000, TimeUnit.SECONDS);
+        startFuture.get(2, TimeUnit.SECONDS);
 
         // Expected status: VALID (initializer succeeds with selector, no need to wait for synchronizer)
         List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(1, 2, TimeUnit.SECONDS);

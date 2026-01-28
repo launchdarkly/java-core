@@ -160,7 +160,9 @@ final class FDv2DataSystem implements DataSystem, Closeable {
       fdv1FallbackFactory = () -> {
         // Wrap the FDv1 DataSource as a Synchronizer using the adapter
         return new DataSourceSynchronizerAdapter(
-          updateSink -> dataSystemConfiguration.getFDv1FallbackSynchronizer().build(clientContext)
+          updateSink -> dataSystemConfiguration
+              .getFDv1FallbackSynchronizer()
+              .build(clientContext.withDataSourceUpdateSink(updateSink))
         );
       };
     }
