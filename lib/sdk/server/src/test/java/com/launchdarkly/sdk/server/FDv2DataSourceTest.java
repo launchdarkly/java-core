@@ -111,6 +111,14 @@ public class FDv2DataSourceTest extends BaseTest {
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
 
+        // In practice this intermediate status will be supressed by the data source updates sink.
+
+        // Should receive INTERRUPTED from the first failed initializer, then VALID from second successful initializer
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(2, 2, TimeUnit.SECONDS);
+        assertEquals("Should receive 2 status updates", 2, statuses.size());
+        assertEquals(DataSourceStatusProvider.State.INTERRUPTED, statuses.get(0));
+        assertEquals(DataSourceStatusProvider.State.VALID, statuses.get(1));
+
         assertTrue(dataSource.isInitialized());
         assertEquals(1, sink.getApplyCount());
         assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
@@ -156,6 +164,14 @@ public class FDv2DataSourceTest extends BaseTest {
         // Wait for synchronizer to be called
         Boolean synchronizerCalled = synchronizerCalledQueue.poll(2, TimeUnit.SECONDS);
         assertNotNull("Synchronizer should be called", synchronizerCalled);
+
+        // Expected status sequence:
+        // 1. INTERRUPTED when first initializer fails
+        // 2. VALID after synchronizer completes (second initializer has no selector, so must wait for synchronizer)
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(2, 2, TimeUnit.SECONDS);
+        assertEquals("Should receive 2 status updates", 2, statuses.size());
+        assertEquals(DataSourceStatusProvider.State.INTERRUPTED, statuses.get(0));
+        assertEquals(DataSourceStatusProvider.State.VALID, statuses.get(1));
 
         // Wait for apply to be processed
         sink.awaitApplyCount(2, 2, TimeUnit.SECONDS);
@@ -274,6 +290,19 @@ public class FDv2DataSourceTest extends BaseTest {
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
 
+        // Should receive INTERRUPTED for each failing initializer, then OFF when all sources exhausted
+        // Expected: 3 INTERRUPTED statuses + 1 OFF status = 4 total
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(4, 2, TimeUnit.SECONDS);
+        assertEquals("Should receive 4 status updates", 4, statuses.size());
+
+        // First 3 should be INTERRUPTED (one per failed initializer)
+        assertEquals(DataSourceStatusProvider.State.INTERRUPTED, statuses.get(0));
+        assertEquals(DataSourceStatusProvider.State.INTERRUPTED, statuses.get(1));
+        assertEquals(DataSourceStatusProvider.State.INTERRUPTED, statuses.get(2));
+
+        // Final status should be OFF (all sources exhausted, no synchronizers)
+        assertEquals(DataSourceStatusProvider.State.OFF, statuses.get(3));
+
         assertFalse(dataSource.isInitialized());
         assertEquals(0, sink.getApplyCount());
         assertEquals(DataSourceStatusProvider.State.OFF, sink.getLastState());
@@ -300,6 +329,11 @@ public class FDv2DataSourceTest extends BaseTest {
 
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2000, TimeUnit.SECONDS);
+
+        // Expected status: VALID (initializer succeeds with selector, no need to wait for synchronizer)
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(1, 2, TimeUnit.SECONDS);
+        assertEquals("Should receive 1 status update", 1, statuses.size());
+        assertEquals(DataSourceStatusProvider.State.VALID, statuses.get(0));
 
         assertTrue(dataSource.isInitialized());
         assertEquals(1, sink.getApplyCount());
@@ -2554,6 +2588,23 @@ public class FDv2DataSourceTest extends BaseTest {
 
         public DataSourceStatusProvider.State awaitStatus(long timeout, TimeUnit unit) throws InterruptedException {
             return statusUpdates.poll(timeout, unit);
+        }
+
+        public List<DataSourceStatusProvider.State> awaitStatuses(int count, long timeout, TimeUnit unit) throws InterruptedException {
+            List<DataSourceStatusProvider.State> statuses = new ArrayList<>();
+            long deadline = System.currentTimeMillis() + unit.toMillis(timeout);
+            for (int i = 0; i < count; i++) {
+                long remaining = deadline - System.currentTimeMillis();
+                if (remaining <= 0) {
+                    break;
+                }
+                DataSourceStatusProvider.State status = statusUpdates.poll(remaining, TimeUnit.MILLISECONDS);
+                if (status == null) {
+                    break;
+                }
+                statuses.add(status);
+            }
+            return statuses;
         }
 
         public void awaitApplyCount(int expectedCount, long timeout, TimeUnit unit) throws InterruptedException {
