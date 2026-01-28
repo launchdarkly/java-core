@@ -336,6 +336,9 @@ class FDv2DataSource implements DataSource {
                                     }
                                     break;
                             }
+                            if(result.isFdv1Fallback()) {
+                                System.out.println("fdv1 fallback");
+                            }
                             // We have been requested to fall back to FDv1. We handle whatever message was associated,
                             // close the synchronizer, and then fallback.
                             // Only trigger fallback if we're not already running the FDv1 fallback synchronizer.

@@ -212,6 +212,10 @@ class StreamingSynchronizerImpl implements Synchronizer {
     }
 
     private boolean handleEvent(StreamEvent event) {
+        System.out.println(event);
+        if(event instanceof MessageEvent && ((MessageEvent) event).getEventName().equals("whatever")) {
+            System.out.println("stop");
+        }
         if (event instanceof MessageEvent) {
             handleMessage((MessageEvent) event);
             return true;
@@ -303,7 +307,9 @@ class StreamingSynchronizerImpl implements Synchronizer {
                         Instant.now()
                 );
                 result = FDv2SourceResult.interrupted(internalError, getFallback(event));
-                restartStream();
+                if(kind == DataSourceStatusProvider.ErrorKind.INVALID_DATA) {
+                    restartStream();
+                }
                 break;
 
             case NONE:
