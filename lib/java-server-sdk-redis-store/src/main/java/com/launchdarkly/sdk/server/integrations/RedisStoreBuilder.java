@@ -76,6 +76,7 @@ public abstract class RedisStoreBuilder<T> implements ComponentConfigurer<T>, Di
   Duration connectTimeout = Duration.ofMillis(Protocol.DEFAULT_TIMEOUT);
   Duration socketTimeout = Duration.ofMillis(Protocol.DEFAULT_TIMEOUT);
   Integer database = null;
+  String username = null;
   String password = null;
   boolean tls = false;
   JedisPoolConfig poolConfig = null;
@@ -99,10 +100,29 @@ public abstract class RedisStoreBuilder<T> implements ComponentConfigurer<T>, Di
   }
   
   /**
+   * Specifies a username for Redis ACL authentication.
+   * <p>
+   * Redis 6.0+ supports Access Control Lists (ACL) with username/password authentication.
+   * It is also possible to include a username in the Redis URI, in the form {@code redis://USERNAME:PASSWORD@host:port}.
+   * Any username that you set with {@link #username(String)} will override the URI.
+   * <p>
+   * Note: Using this feature requires Jedis 3.6.0 or later.
+   * 
+   * @param username the username for ACL authentication
+   * @return the builder
+   * @since 2.2.0
+   */
+  public RedisStoreBuilder<T> username(String username) {
+    this.username = username;
+    return this;
+  }
+  
+  /**
    * Specifies a password that will be sent to Redis in an AUTH command.
    * <p>
-   * It is also possible to include a password in the Redis URI, in the form {@code redis://:PASSWORD@host:port}. Any
-   * password that you set with {@link #password(String)} will override the URI.
+   * It is also possible to include a password in the Redis URI, in the form {@code redis://:PASSWORD@host:port}
+   * or {@code redis://USERNAME:PASSWORD@host:port} for ACL authentication. Any password that you set with
+   * {@link #password(String)} will override the URI.
    * 
    * @param password the password
    * @return the builder

@@ -20,7 +20,7 @@ public class RedisDataStoreImplTest extends PersistentDataStoreTestBase<RedisDat
   
   @Override
   protected void clearAllData() {
-    try (Jedis client = new Jedis("localhost")) {
+    try (Jedis client = new Jedis("localhost", 6379)) {
       client.flushDB();
     }
   }
