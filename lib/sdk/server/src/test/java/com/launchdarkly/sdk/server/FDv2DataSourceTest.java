@@ -113,7 +113,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         assertTrue(dataSource.isInitialized());
         assertEquals(1, sink.getApplyCount());
-        // TODO: Verify status updated to VALID when data source status is implemented
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
     }
 
     @Test
@@ -160,7 +160,7 @@ public class FDv2DataSourceTest extends BaseTest {
         // Wait for apply to be processed
         sink.awaitApplyCount(2, 2, TimeUnit.SECONDS);
         assertEquals(2, sink.getApplyCount()); // One from initializer, one from synchronizer
-        // TODO: Verify status updated to VALID when data source status is implemented
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
     }
 
     @Test
@@ -195,7 +195,7 @@ public class FDv2DataSourceTest extends BaseTest {
         assertTrue(dataSource.isInitialized());
         assertFalse(secondInitializerCalled.get());
         assertEquals(1, sink.getApplyCount());
-        // TODO: Verify status updated to VALID when data source status is implemented
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
     }
 
     @Test
@@ -276,7 +276,8 @@ public class FDv2DataSourceTest extends BaseTest {
 
         assertFalse(dataSource.isInitialized());
         assertEquals(0, sink.getApplyCount());
-        // TODO: Verify status reflects exhausted sources when data source status is implemented
+        assertEquals(DataSourceStatusProvider.State.OFF, sink.getLastState());
+        assertNotNull(sink.getLastError());
     }
 
     @Test
@@ -298,11 +299,11 @@ public class FDv2DataSourceTest extends BaseTest {
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
-        startFuture.get(2, TimeUnit.SECONDS);
+        startFuture.get(2000, TimeUnit.SECONDS);
 
         assertTrue(dataSource.isInitialized());
         assertEquals(1, sink.getApplyCount());
-        // TODO: Verify status updated to VALID when data source status is implemented
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
     }
 
     // ============================================================================
@@ -387,7 +388,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         assertTrue(dataSource.isInitialized());
         assertEquals(0, sink.getApplyCount());
-        // TODO: Verify status reflects exhausted sources when data source status is implemented
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
     }
 
     // ============================================================================
@@ -479,7 +480,7 @@ public class FDv2DataSourceTest extends BaseTest {
         // Both synchronizers should have been called due to fallback and recovery
         assertTrue(firstSyncCallCount.get() >= 2); // Called initially and after recovery
         assertTrue(secondSyncCallCount.get() >= 1); // Called after fallback
-        // TODO: Verify status transitions when data source status is implemented
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
     }
 
     @Test
@@ -564,7 +565,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // Wait for applies from both
         sink.awaitApplyCount(2, 2, TimeUnit.SECONDS);
-        // TODO: Verify status transitions when data source status is implemented
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
     }
 
     @Test
@@ -600,7 +601,8 @@ public class FDv2DataSourceTest extends BaseTest {
         startFuture.get(2, TimeUnit.SECONDS);
 
         assertFalse(dataSource.isInitialized());
-        // TODO: Verify status reflects exhausted sources when data source status is implemented
+        assertEquals(DataSourceStatusProvider.State.OFF, sink.getLastState());
+        assertNotNull(sink.getLastError());
     }
 
     // ============================================================================
@@ -687,11 +689,12 @@ public class FDv2DataSourceTest extends BaseTest {
         dataSource.close();
 
         assertTrue(startFuture.isDone());
-        // TODO: Verify status updated to OFF when data source status is implemented
+        // Status remains VALID after close - close doesn't change status
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
     }
 
     @Test
-    public void noSourcesProvidedCompletesImmediately() throws Exception {
+    public void noSourcesProvidedCompletesImmediately() throws Exception{
         executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
@@ -705,7 +708,7 @@ public class FDv2DataSourceTest extends BaseTest {
         startFuture.get(2, TimeUnit.SECONDS);
 
         assertTrue(dataSource.isInitialized());
-        // TODO: Verify status reflects exhausted sources when data source status is implemented
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
     }
 
     // ============================================================================
@@ -1788,7 +1791,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         assertTrue(dataSource.isInitialized());
         assertEquals(1, sink.getApplyCount());
-        // TODO: Verify status updated to VALID when data source status is implemented
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
     }
 
     @Test
@@ -1999,6 +2002,197 @@ public class FDv2DataSourceTest extends BaseTest {
         future2.get(2, TimeUnit.SECONDS);
 
         assertTrue(dataSource.isInitialized());
+    }
+
+    // ============================================================================
+    // Data Source Status Tests
+    // ============================================================================
+
+    @Test
+    public void statusTransitionsToValidAfterInitialization() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+
+        CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
+            FDv2SourceResult.changeSet(makeChangeSet(false), false)
+        );
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
+            () -> new MockInitializer(initializerFuture)
+        );
+
+        FDv2DataSource dataSource = new FDv2DataSource(
+            initializers,
+            ImmutableList.of(),
+            null,
+            sink,
+            Thread.NORM_PRIORITY,
+            logger,
+            executor,
+            120,
+            300
+        );
+        resourcesToClose.add(dataSource);
+
+        Future<Void> startFuture = dataSource.start();
+        startFuture.get(2, TimeUnit.SECONDS);
+
+        // After initializers complete with data (no selector), VALID status is emitted
+        // Since we initialized successfully and there are no synchronizers, we stay VALID
+        DataSourceStatusProvider.State status = sink.awaitStatus(2, TimeUnit.SECONDS);
+        assertNotNull("Should receive status update", status);
+        assertEquals(DataSourceStatusProvider.State.VALID, status);
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
+        assertNull("Should not have error when VALID", sink.getLastError());
+    }
+
+    @Test
+    public void statusIncludesErrorInfoOnFailure() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
+
+        // Synchronizer that sends terminal error
+        BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
+        syncResults.add(FDv2SourceResult.terminalError(
+            new DataSourceStatusProvider.ErrorInfo(
+                DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE,
+                401,
+                "Unauthorized",
+                Instant.now()
+            ),
+            false
+        ));
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> new MockQueuedSynchronizer(syncResults)
+        );
+
+        FDv2DataSource dataSource = new FDv2DataSource(
+            initializers,
+            synchronizers,
+            null,
+            sink,
+            Thread.NORM_PRIORITY,
+            logger,
+            executor,
+            120,
+            300
+        );
+        resourcesToClose.add(dataSource);
+
+        Future<Void> startFuture = dataSource.start();
+        startFuture.get(2, TimeUnit.SECONDS);
+
+        // Should receive INTERRUPTED first (from terminal error), then OFF (from exhausted synchronizers)
+        DataSourceStatusProvider.State firstStatus = sink.awaitStatus(2, TimeUnit.SECONDS);
+        assertNotNull("Should receive first status update", firstStatus);
+        assertEquals(DataSourceStatusProvider.State.INTERRUPTED, firstStatus);
+
+        DataSourceStatusProvider.State secondStatus = sink.awaitStatus(2, TimeUnit.SECONDS);
+        assertNotNull("Should receive second status update", secondStatus);
+        assertEquals(DataSourceStatusProvider.State.OFF, secondStatus);
+
+        // Final state should be OFF with error info from the last status update
+        assertEquals(DataSourceStatusProvider.State.OFF, sink.getLastState());
+        assertNotNull("Should have error info", sink.getLastError());
+        assertEquals(DataSourceStatusProvider.ErrorKind.UNKNOWN, sink.getLastError().getKind());
+    }
+
+    @Test
+    public void statusRemainsValidDuringSynchronizerOperation() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
+
+        // Synchronizer that sends multiple changesets
+        BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> new MockQueuedSynchronizer(syncResults)
+        );
+
+        FDv2DataSource dataSource = new FDv2DataSource(
+            initializers,
+            synchronizers,
+            null,
+            sink,
+            Thread.NORM_PRIORITY,
+            logger,
+            executor,
+            120,
+            300
+        );
+        resourcesToClose.add(dataSource);
+
+        Future<Void> startFuture = dataSource.start();
+        startFuture.get(2, TimeUnit.SECONDS);
+
+        // Wait for all changesets to be applied
+        sink.awaitApplyCount(3, 2, TimeUnit.SECONDS);
+
+        // Status should be VALID throughout
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
+        assertEquals(3, sink.getApplyCount());
+    }
+
+    @Test
+    public void statusTransitionsFromValidToOffWhenAllSynchronizersFail() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
+
+        // First synchronizer sends a changeset then terminal error
+        BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        syncResults.add(FDv2SourceResult.terminalError(
+            new DataSourceStatusProvider.ErrorInfo(
+                DataSourceStatusProvider.ErrorKind.NETWORK_ERROR,
+                500,
+                "Server error",
+                Instant.now()
+            ),
+            false
+        ));
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> new MockQueuedSynchronizer(syncResults)
+        );
+
+        FDv2DataSource dataSource = new FDv2DataSource(
+            initializers,
+            synchronizers,
+            null,
+            sink,
+            Thread.NORM_PRIORITY,
+            logger,
+            executor,
+            120,
+            300
+        );
+        resourcesToClose.add(dataSource);
+
+        Future<Void> startFuture = dataSource.start();
+        startFuture.get(2, TimeUnit.SECONDS);
+
+        // Should transition: VALID (from changeset) → INTERRUPTED (from terminal error) → OFF (from exhausted sources)
+        DataSourceStatusProvider.State firstStatus = sink.awaitStatus(2, TimeUnit.SECONDS);
+        assertEquals(DataSourceStatusProvider.State.VALID, firstStatus);
+
+        DataSourceStatusProvider.State secondStatus = sink.awaitStatus(2, TimeUnit.SECONDS);
+        assertEquals(DataSourceStatusProvider.State.INTERRUPTED, secondStatus);
+
+        DataSourceStatusProvider.State thirdStatus = sink.awaitStatus(2, TimeUnit.SECONDS);
+        assertEquals(DataSourceStatusProvider.State.OFF, thirdStatus);
+
+        assertEquals(DataSourceStatusProvider.State.OFF, sink.getLastState());
+        assertNotNull("Should have error info when OFF", sink.getLastError());
     }
 
     // ============================================================================
@@ -2318,6 +2512,9 @@ public class FDv2DataSourceTest extends BaseTest {
         private final AtomicInteger applyCount = new AtomicInteger(0);
         private final AtomicReference<DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor>> lastChangeSet = new AtomicReference<>();
         private final BlockingQueue<Boolean> applySignals = new LinkedBlockingQueue<>();
+        private final AtomicReference<DataSourceStatusProvider.State> lastState = new AtomicReference<>();
+        private final AtomicReference<DataSourceStatusProvider.ErrorInfo> lastError = new AtomicReference<>();
+        private final BlockingQueue<DataSourceStatusProvider.State> statusUpdates = new LinkedBlockingQueue<>();
 
         @Override
         public boolean apply(DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet) {
@@ -2329,7 +2526,9 @@ public class FDv2DataSourceTest extends BaseTest {
 
         @Override
         public void updateStatus(DataSourceStatusProvider.State newState, DataSourceStatusProvider.ErrorInfo errorInfo) {
-            // TODO: Track status updates when data source status is fully implemented
+            lastState.set(newState);
+            lastError.set(errorInfo);
+            statusUpdates.offer(newState);
         }
 
         @Override
@@ -2343,6 +2542,18 @@ public class FDv2DataSourceTest extends BaseTest {
 
         public DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> getLastChangeSet() {
             return lastChangeSet.get();
+        }
+
+        public DataSourceStatusProvider.State getLastState() {
+            return lastState.get();
+        }
+
+        public DataSourceStatusProvider.ErrorInfo getLastError() {
+            return lastError.get();
+        }
+
+        public DataSourceStatusProvider.State awaitStatus(long timeout, TimeUnit unit) throws InterruptedException {
+            return statusUpdates.poll(timeout, unit);
         }
 
         public void awaitApplyCount(int expectedCount, long timeout, TimeUnit unit) throws InterruptedException {

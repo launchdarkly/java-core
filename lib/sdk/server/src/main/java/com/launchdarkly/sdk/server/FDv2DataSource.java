@@ -137,6 +137,7 @@ class FDv2DataSource implements DataSource {
                             new Date().toInstant())
                     );
                 }
+                return;
             }
 
             runSynchronizers();
