@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.util.AbstractMap;
 import java.util.Collections;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -75,6 +76,8 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
                                 Instant.now()
                         );
                         resultQueue.put(FDv2SourceResult.interrupted(errorInfo, false));
+                    } catch (CancellationException e) {
+                        // Start future was cancelled (during close) - exit cleanly
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     }
@@ -97,6 +100,11 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
 
         dataSource.close();
         shutdownFuture.complete(FDv2SourceResult.shutdown());
+        if(startFuture != null) {
+            // If the start future is done, this has no effect.
+            // If it is not, then this will unblock the code waiting on start.
+            startFuture.cancel(true);
+        }
     }
 
     /**
