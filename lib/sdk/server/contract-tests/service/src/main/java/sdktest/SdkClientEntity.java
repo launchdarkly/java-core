@@ -579,7 +579,7 @@ public class SdkClientEntity {
 
         // Create and configure FDv1 fallback
         ComponentConfigurer<DataSource> fdv1Fallback =
-            createFDv1FallbackSynchronizer(fallbackSynchronizer, endpoints);
+            createFDv1FallbackSynchronizer(fallbackSynchronizer);
         dataSystemBuilder.fDv1FallbackSynchronizer(fdv1Fallback);
       }
 
@@ -654,11 +654,10 @@ public class SdkClientEntity {
 
   /**
    * Creates the FDv1 fallback synchronizer based on the selected synchronizer config.
-   * FDv1 fallback is always polling-based.
+   * FDv1 fallback is always polling-based and uses the global service endpoints configuration.
    */
   private static ComponentConfigurer<DataSource> createFDv1FallbackSynchronizer(
-      SdkConfigSynchronizerParams synchronizer,
-      ServiceEndpointsBuilder endpoints) {
+      SdkConfigSynchronizerParams synchronizer) {
 
     // FDv1 fallback is always polling-based
     PollingDataSourceBuilder fdv1Polling = Components.pollingDataSource();
@@ -669,7 +668,8 @@ public class SdkClientEntity {
         fdv1Polling.pollInterval(Duration.ofMillis(synchronizer.polling.pollIntervalMs));
       }
       // Note: FDv1 polling doesn't support per-source service endpoints override,
-      // so it will use the global service endpoints configuration
+      // so it will use the global service endpoints configuration (which is set
+      // by the caller before this method is invoked)
     }
     // If streaming synchronizer, use default polling interval
     // (no additional configuration needed)

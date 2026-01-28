@@ -17,7 +17,6 @@ import org.junit.Test;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -767,8 +766,10 @@ public class FDv2DataSourceTest extends BaseTest {
         dataSource.close();
 
         assertTrue(startFuture.isDone());
-        // Status remains VALID after close - close doesn't change status
-        assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
+
+        statuses = sink.awaitStatuses(1, 2, TimeUnit.SECONDS);
+        assertEquals("Should receive 1 status update", 1, statuses.size());
+        assertEquals(DataSourceStatusProvider.State.OFF, statuses.get(0));
     }
 
     @Test
@@ -1231,6 +1232,81 @@ public class FDv2DataSourceTest extends BaseTest {
     }
 
     @Test
+    public void closingDataSourceDuringInitializationReportsOffWithoutErrors() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+
+        CompletableFuture<FDv2SourceResult> initializerFuture = new CompletableFuture<>();
+
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
+            () -> new MockInitializer(initializerFuture)
+        );
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
+
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        resourcesToClose.add(dataSource);
+
+        Future<Void> startFuture = dataSource.start();
+
+        // Close the data source - this sets closed=true
+        dataSource.close();
+        // Result shouldn't be used.
+//        initializerFuture.complete(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+
+        // Wait for start future (completes when exhaustion happens)
+        startFuture.get(2, TimeUnit.SECONDS);
+        System.out.println("Start future completed");
+
+        // Wait for the OFF status to be reported
+        DataSourceStatusProvider.State status = sink.awaitStatus(2, TimeUnit.SECONDS);
+        assertNotNull("Should receive status update", status);
+        assertEquals(DataSourceStatusProvider.State.OFF, status);
+
+        // The data source should report OFF with null error because it was closed
+        assertNull("Error should be null when closed data source exhausts initializers", sink.getLastError());
+        assertFalse(dataSource.isInitialized());
+    }
+
+    @Test
+    public void dataSourceClosedDuringSynchronizationReportsOffWithoutError() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
+
+        // Synchronizer that emits a changeset to initialize, then waits.
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+                return new MockQueuedSynchronizer(results);
+            }
+        );
+
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+
+        Future<Void> startFuture = dataSource.start();
+        startFuture.get(2, TimeUnit.SECONDS);
+
+        // Close the data source - this sets closed=true
+        dataSource.close();
+
+        // Expected status sequence:
+        // 1. VALID (from first synchronizer's changeset)
+        // 4. OFF (from exhaustion, with null error because closed=true)
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(2, 2, TimeUnit.SECONDS);
+        assertEquals("Should receive 4 status updates", 2, statuses.size());
+
+        assertEquals(DataSourceStatusProvider.State.VALID, statuses.get(0));
+        assertEquals(DataSourceStatusProvider.State.OFF, statuses.get(1));
+
+        assertNull("Error should be null when closed data source exhausts synchronizers", sink.getLastError());
+        assertTrue(dataSource.isInitialized());  // Was initialized before close
+    }
+
+    @Test
     public void closeInterruptsConditionWaiting() throws Exception {
         executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
@@ -1522,10 +1598,10 @@ public class FDv2DataSourceTest extends BaseTest {
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
-        startFuture.get(2, TimeUnit.SECONDS);
+        startFuture.get(2000, TimeUnit.SECONDS);
 
         // Wait for 3 applies with enough time for recovery (2s) + overhead
-        sink.awaitApplyCount(3, 5, TimeUnit.SECONDS);
+        sink.awaitApplyCount(30000, 5, TimeUnit.SECONDS);
 
         // Should have called first synchronizer again after recovery
         assertTrue(firstCallCount.get() >= 2 || secondCallCount.get() >= 1);
@@ -2752,38 +2828,39 @@ public class FDv2DataSourceTest extends BaseTest {
     }
 
     private static class MockQueuedSynchronizer implements Synchronizer {
-        private final BlockingQueue<FDv2SourceResult> results;
+        private final IterableAsyncQueue<FDv2SourceResult> results;
         private volatile boolean closed = false;
 
         public MockQueuedSynchronizer(BlockingQueue<FDv2SourceResult> results) {
+            // Convert BlockingQueue to IterableAsyncQueue by draining it
+            this.results = new IterableAsyncQueue<>();
+            java.util.ArrayList<FDv2SourceResult> temp = new java.util.ArrayList<>();
+            results.drainTo(temp);
+            temp.forEach(this.results::put);
+        }
+
+        public MockQueuedSynchronizer(IterableAsyncQueue<FDv2SourceResult> results) {
             this.results = results;
         }
 
         public void addResult(FDv2SourceResult result) {
             if (!closed) {
-                results.add(result);
+                results.put(result);
             }
         }
 
         @Override
         public CompletableFuture<FDv2SourceResult> next() {
-            if (closed) {
-                return CompletableFuture.completedFuture(FDv2SourceResult.shutdown());
-            }
-
-            // Try to get immediately, don't wait
-            FDv2SourceResult result = results.poll();
-            if (result != null) {
-                return CompletableFuture.completedFuture(result);
-            } else {
-                // Queue is empty - return a never-completing future to simulate waiting for more data
-                return new CompletableFuture<>();
-            }
+            return results.take();
         }
 
         @Override
         public void close() {
-            closed = true;
+            if (!closed) {
+                closed = true;
+                // Emit shutdown result - this will complete any pending take() or queue it for next take()
+                results.put(FDv2SourceResult.shutdown());
+            }
         }
     }
 

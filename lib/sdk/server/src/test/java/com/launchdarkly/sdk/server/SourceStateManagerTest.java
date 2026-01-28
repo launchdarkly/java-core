@@ -22,7 +22,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @SuppressWarnings("javadoc")
-public class SynchronizerStateManagerTest extends BaseTest {
+public class SourceStateManagerTest extends BaseTest {
 
     private SynchronizerFactoryWithState createMockFactory() {
         FDv2DataSource.DataSourceFactory<Synchronizer> factory = mock(FDv2DataSource.DataSourceFactory.class);
@@ -33,7 +33,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
     @Test
     public void getNextAvailableSynchronizerReturnsNullWhenEmpty() {
         List<SynchronizerFactoryWithState> synchronizers = new ArrayList<>();
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         SynchronizerFactoryWithState result = manager.getNextAvailableSynchronizer();
 
@@ -46,7 +46,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
         SynchronizerFactoryWithState sync1 = createMockFactory();
         synchronizers.add(sync1);
 
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         SynchronizerFactoryWithState result = manager.getNextAvailableSynchronizer();
 
@@ -63,7 +63,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
         synchronizers.add(sync2);
         synchronizers.add(sync3);
 
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         // First call returns sync1
         assertSame(sync1, manager.getNextAvailableSynchronizer());
@@ -81,7 +81,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
         synchronizers.add(sync1);
         synchronizers.add(sync2);
 
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         // Get all synchronizers
         manager.getNextAvailableSynchronizer(); // sync1
@@ -101,7 +101,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
         synchronizers.add(sync2);
         synchronizers.add(sync3);
 
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         // Block sync2
         sync2.block();
@@ -122,7 +122,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
         synchronizers.add(sync1);
         synchronizers.add(sync2);
 
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         // Block all synchronizers
         sync1.block();
@@ -143,7 +143,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
         synchronizers.add(sync2);
         synchronizers.add(sync3);
 
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         // Advance to sync3
         manager.getNextAvailableSynchronizer(); // sync1
@@ -165,7 +165,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
         synchronizers.add(sync1);
         synchronizers.add(sync2);
 
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         // Get first synchronizer
         manager.getNextAvailableSynchronizer();
@@ -181,7 +181,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
         synchronizers.add(sync1);
         synchronizers.add(sync2);
 
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         // Get first then second synchronizer
         manager.getNextAvailableSynchronizer();
@@ -196,7 +196,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
         SynchronizerFactoryWithState sync1 = createMockFactory();
         synchronizers.add(sync1);
 
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         // Haven't called getNext yet
         assertFalse(manager.isPrimeSynchronizer());
@@ -212,7 +212,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
         synchronizers.add(sync2);
         synchronizers.add(sync3);
 
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         // Block first synchronizer
         sync1.block();
@@ -233,7 +233,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
         synchronizers.add(sync2);
         synchronizers.add(sync3);
 
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         assertEquals(3, manager.getAvailableSynchronizerCount());
     }
@@ -248,7 +248,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
         synchronizers.add(sync2);
         synchronizers.add(sync3);
 
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         assertEquals(3, manager.getAvailableSynchronizerCount());
 
@@ -265,7 +265,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
     @Test
     public void setActiveSourceSetsNewSource() throws IOException {
         List<SynchronizerFactoryWithState> synchronizers = new ArrayList<>();
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         Closeable source = mock(Closeable.class);
         boolean shutdown = manager.setActiveSource(source);
@@ -276,7 +276,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
     @Test
     public void setActiveSourceClosesPreviousSource() throws IOException {
         List<SynchronizerFactoryWithState> synchronizers = new ArrayList<>();
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         Closeable firstSource = mock(Closeable.class);
         Closeable secondSource = mock(Closeable.class);
@@ -290,7 +290,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
     @Test
     public void setActiveSourceReturnsTrueAfterShutdown() throws IOException {
         List<SynchronizerFactoryWithState> synchronizers = new ArrayList<>();
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         manager.close();
 
@@ -304,7 +304,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
     @Test
     public void setActiveSourceIgnoresCloseExceptionFromPreviousSource() throws IOException {
         List<SynchronizerFactoryWithState> synchronizers = new ArrayList<>();
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         Closeable firstSource = mock(Closeable.class);
         doThrow(new IOException("test")).when(firstSource).close();
@@ -319,7 +319,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
     @Test
     public void shutdownClosesActiveSource() throws IOException {
         List<SynchronizerFactoryWithState> synchronizers = new ArrayList<>();
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         Closeable source = mock(Closeable.class);
         manager.setActiveSource(source);
@@ -332,7 +332,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
     @Test
     public void shutdownCanBeCalledMultipleTimes() throws IOException {
         List<SynchronizerFactoryWithState> synchronizers = new ArrayList<>();
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         Closeable source = mock(Closeable.class);
         manager.setActiveSource(source);
@@ -348,7 +348,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
     @Test
     public void shutdownIgnoresCloseException() throws IOException {
         List<SynchronizerFactoryWithState> synchronizers = new ArrayList<>();
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         Closeable source = mock(Closeable.class);
         doThrow(new IOException("test")).when(source).close();
@@ -362,7 +362,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
     @Test
     public void shutdownWithoutActiveSourceDoesNotFail() {
         List<SynchronizerFactoryWithState> synchronizers = new ArrayList<>();
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         // Should not throw
         manager.close();
@@ -378,7 +378,7 @@ public class SynchronizerStateManagerTest extends BaseTest {
         synchronizers.add(sync2);
         synchronizers.add(sync3);
 
-        SynchronizerStateManager manager = new SynchronizerStateManager(synchronizers);
+        SourceStateManager manager = new SourceStateManager(synchronizers, new ArrayList<>());
 
         // Initial state
         assertEquals(3, manager.getAvailableSynchronizerCount());

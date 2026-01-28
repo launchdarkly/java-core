@@ -1,5 +1,7 @@
 package com.launchdarkly.sdk.server;
 
+import com.launchdarkly.sdk.server.datasources.Initializer;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.List;
@@ -10,8 +12,10 @@ import java.util.List;
  * <p>
  * Package-private for internal use.
  */
-class SynchronizerStateManager implements Closeable {
+class SourceStateManager implements Closeable {
     private final List<SynchronizerFactoryWithState> synchronizers;
+
+    private final List<FDv2DataSource.DataSourceFactory<Initializer>> initializers;
 
     /**
      * Lock for active sources and shutdown state.
@@ -23,10 +27,13 @@ class SynchronizerStateManager implements Closeable {
     /**
      * We start at -1, so finding the next synchronizer can non-conditionally increment the index.
      */
-    private int sourceIndex = -1;
+    private int synchronizerIndex = -1;
 
-    public SynchronizerStateManager(List<SynchronizerFactoryWithState> synchronizers) {
+    private int initializerIndex = -1;
+
+    public SourceStateManager(List<SynchronizerFactoryWithState> synchronizers, List<FDv2DataSource.DataSourceFactory<Initializer>> initializers) {
         this.synchronizers = synchronizers;
+        this.initializers = initializers;
     }
 
     /**
@@ -35,7 +42,7 @@ class SynchronizerStateManager implements Closeable {
      */
     public void resetSourceIndex() {
         synchronized (activeSourceLock) {
-            sourceIndex = -1;
+            synchronizerIndex = -1;
         }
     }
 
@@ -74,18 +81,24 @@ class SynchronizerStateManager implements Closeable {
         synchronized (activeSourceLock) {
             SynchronizerFactoryWithState factory = null;
 
+            if(isShutdown) {
+                safeClose(activeSource);
+                activeSource = null;
+                return factory;
+            }
+
             int visited = 0;
             while(visited < synchronizers.size()) {
                 // Look for the next synchronizer starting at the position after the current one. (avoiding just re-using the same synchronizer.)
-                sourceIndex++;
+                synchronizerIndex++;
 
                 // We aren't using module here because we want to keep the stored index within range instead
                 // of increasing indefinitely.
-                if(sourceIndex >= synchronizers.size()) {
-                    sourceIndex = 0;
+                if(synchronizerIndex >= synchronizers.size()) {
+                    synchronizerIndex = 0;
                 }
 
-                SynchronizerFactoryWithState candidate = synchronizers.get(sourceIndex);
+                SynchronizerFactoryWithState candidate = synchronizers.get(synchronizerIndex);
                 if (candidate.getState() == SynchronizerFactoryWithState.State.Available) {
                     factory = candidate;
                     break;
@@ -93,6 +106,31 @@ class SynchronizerStateManager implements Closeable {
                 visited++;
             }
             return factory;
+        }
+    }
+
+    public boolean hasAvailableSources() {
+        return hasInitializers() || getAvailableSynchronizerCount() > 0;
+    }
+
+    public boolean hasInitializers() {
+        return !initializers.isEmpty();
+    }
+
+    public boolean hasAvailableSynchronizers() {
+        return getAvailableSynchronizerCount() > 0;
+    }
+
+    public FDv2DataSource.DataSourceFactory<Initializer> getNextInitializer() {
+        synchronized (activeSourceLock) {
+            if(isShutdown) {
+                return null;
+            }
+            initializerIndex++;
+            if (initializerIndex >= initializers.size()) {
+                return null;
+            }
+            return initializers.get(initializerIndex);
         }
     }
 
@@ -104,7 +142,7 @@ class SynchronizerStateManager implements Closeable {
         synchronized (activeSourceLock) {
             for (int index = 0; index < synchronizers.size(); index++) {
                 if (synchronizers.get(index).getState() == SynchronizerFactoryWithState.State.Available) {
-                    if (sourceIndex == index) {
+                    if (synchronizerIndex == index) {
                         // This is the first synchronizer that is available, and it also is the current one.
                         return true;
                     }
