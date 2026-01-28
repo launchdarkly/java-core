@@ -208,6 +208,11 @@ public class FDv2DataSourceTest extends BaseTest {
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
 
+        // Expected status: VALID (first initializer succeeds with selector, second not called)
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(1, 2, TimeUnit.SECONDS);
+        assertEquals("Should receive 1 status update", 1, statuses.size());
+        assertEquals(DataSourceStatusProvider.State.VALID, statuses.get(0));
+
         assertTrue(dataSource.isInitialized());
         assertFalse(secondInitializerCalled.get());
         assertEquals(1, sink.getApplyCount());
@@ -420,6 +425,11 @@ public class FDv2DataSourceTest extends BaseTest {
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
 
+        // Expected status: VALID (no sources but data source initializes immediately)
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(1, 2, TimeUnit.SECONDS);
+        assertEquals("Should receive 1 status update", 1, statuses.size());
+        assertEquals(DataSourceStatusProvider.State.VALID, statuses.get(0));
+
         assertTrue(dataSource.isInitialized());
         assertEquals(0, sink.getApplyCount());
         assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
@@ -507,6 +517,18 @@ public class FDv2DataSourceTest extends BaseTest {
         // 4. Recovery timer starts (2 seconds)
         // 5. After recovery, first sync sends apply again (3)
         // Total time: ~3-4 seconds (1s fallback + 2s recovery + processing)
+
+        // Expected status sequence:
+        // 1. VALID when first sync sends initial changeset
+        // 2. INTERRUPTED when first sync sends interrupted result
+        // 3. VALID when second sync (fallback) sends changeset
+        // 4. VALID when first sync recovers and sends changeset again
+        // Wait for at least the first 3 statuses that happen during initialization
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(3, 6, TimeUnit.SECONDS);
+        assertTrue("Should receive at least 3 status updates", statuses.size() >= 3);
+        assertEquals(DataSourceStatusProvider.State.VALID, statuses.get(0));
+        assertEquals(DataSourceStatusProvider.State.INTERRUPTED, statuses.get(1));
+        assertEquals(DataSourceStatusProvider.State.VALID, statuses.get(2));
 
         // Wait for 3 applies with enough time for fallback (1s) + recovery (2s) + overhead
         sink.awaitApplyCount(3, 5, TimeUnit.SECONDS);
@@ -597,6 +619,16 @@ public class FDv2DataSourceTest extends BaseTest {
         assertEquals(Integer.valueOf(1), firstCall);
         assertEquals(Integer.valueOf(2), secondCall);
 
+        // Expected status sequence:
+        // 1. VALID when first synchronizer sends initial changeset
+        // 2. Terminal error from first synchronizer (blocks it)
+        // 3. VALID when second synchronizer sends changeset
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(3, 2, TimeUnit.SECONDS);
+        assertEquals("Should receive 3 status updates", 3, statuses.size());
+        assertEquals(DataSourceStatusProvider.State.VALID, statuses.get(0));
+        // Note: terminal error might be suppressed or show as INTERRUPTED
+        assertEquals(DataSourceStatusProvider.State.VALID, statuses.get(2));
+
         // Wait for applies from both
         sink.awaitApplyCount(2, 2, TimeUnit.SECONDS);
         assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
@@ -633,6 +665,13 @@ public class FDv2DataSourceTest extends BaseTest {
 
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
+
+        // Expected status sequence: 3 terminal errors (one per synchronizer) → OFF when all exhausted
+        // Terminal errors might show as INTERRUPTED status
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(4, 2, TimeUnit.SECONDS);
+        assertEquals("Should receive 4 status updates", 4, statuses.size());
+        // Last status should be OFF
+        assertEquals(DataSourceStatusProvider.State.OFF, statuses.get(3));
 
         assertFalse(dataSource.isInitialized());
         assertEquals(DataSourceStatusProvider.State.OFF, sink.getLastState());
@@ -720,6 +759,11 @@ public class FDv2DataSourceTest extends BaseTest {
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
 
+        // Expected status: VALID when synchronizer sends initial changeset
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(1, 2, TimeUnit.SECONDS);
+        assertEquals("Should receive 1 status update", 1, statuses.size());
+        assertEquals(DataSourceStatusProvider.State.VALID, statuses.get(0));
+
         dataSource.close();
 
         assertTrue(startFuture.isDone());
@@ -740,6 +784,11 @@ public class FDv2DataSourceTest extends BaseTest {
 
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
+
+        // Expected status: VALID (no sources but data source initializes immediately)
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(1, 2, TimeUnit.SECONDS);
+        assertEquals("Should receive 1 status update", 1, statuses.size());
+        assertEquals(DataSourceStatusProvider.State.VALID, statuses.get(0));
 
         assertTrue(dataSource.isInitialized());
         assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
@@ -1822,6 +1871,11 @@ public class FDv2DataSourceTest extends BaseTest {
 
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
+
+        // Expected status: VALID (single initializer without selector completes when it's the last initializer)
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(1, 2, TimeUnit.SECONDS);
+        assertEquals("Should receive 1 status update", 1, statuses.size());
+        assertEquals(DataSourceStatusProvider.State.VALID, statuses.get(0));
 
         assertTrue(dataSource.isInitialized());
         assertEquals(1, sink.getApplyCount());
