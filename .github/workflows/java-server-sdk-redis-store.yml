@@ -14,7 +14,8 @@ jobs:
   build-test-java-server-sdk-redis-store:
     strategy:
       matrix:
-        jedis-version: [2.9.0, 3.0.0]
+        # Username/password (Redis ACL) support requires Jedis 3.6.0+
+        jedis-version: [3.6.0, 7.1.0]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -23,7 +24,7 @@ jobs:
         shell: bash
         run: |
             cd lib/java-server-sdk-redis-store
-            sed -i.bak 's#"jedis":.*"[0-9.]*"#"jedis":"${{ matrix.jedis-version }}"#' build.gradle
+            sed -i.bak -E 's/"jedis":[[:space:]]*"[0-9.]+"/"jedis": "${{ matrix.jedis-version }}"/' build.gradle
 
       - name: Shared CI Steps
         uses: ./.github/actions/ci
@@ -34,7 +35,8 @@ jobs:
   build-test-java-server-sdk-windows:
     strategy:
       matrix:
-        jedis-version: [2.9.0, 3.0.0]
+        # Username/password (Redis ACL) support requires Jedis 3.6.0+
+        jedis-version: [3.6.0, 7.1.0]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v3
@@ -54,7 +56,7 @@ jobs:
         shell: bash
         run: |
             cd lib/java-server-sdk-redis-store
-            sed -i.bak 's#"jedis":.*"[0-9.]*"#"jedis":"${{ matrix.jedis-version }}"#' build.gradle
+            sed -i.bak -E 's/"jedis":[[:space:]]*"[0-9.]+"/"jedis": "${{ matrix.jedis-version }}"/' build.gradle
 
       - name: Setup Java
         uses: actions/setup-java@v4
