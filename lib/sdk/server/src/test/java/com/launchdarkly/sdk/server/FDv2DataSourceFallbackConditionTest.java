@@ -37,7 +37,8 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
             DataStoreTypes.ChangeSetType.None,
             Selector.EMPTY,
             null,
-            null
+            null,
+            true
         );
     }
 

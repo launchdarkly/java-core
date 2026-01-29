@@ -54,7 +54,8 @@ public class FDv2DataSourceTest extends BaseTest {
             DataStoreTypes.ChangeSetType.None,
             selector,
             null,
-            null
+            null,
+            true
         );
     }
 
