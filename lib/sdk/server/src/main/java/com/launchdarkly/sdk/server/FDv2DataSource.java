@@ -352,7 +352,7 @@ class FDv2DataSource implements DataSource {
             }
         } catch(Exception e) {
             // We are not expecting to encounter this situation, but if we do, then we should log it.
-            logger.error("Unexpected error in DataSource: {}", e.toString());
+            logger.error("Unexpected error in data source: {}", e.toString());
         }finally {
             sourceManager.close();
         }
