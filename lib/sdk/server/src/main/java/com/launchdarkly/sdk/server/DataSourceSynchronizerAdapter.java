@@ -64,7 +64,7 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
 
                 // Monitor the start future for errors
                 // The data source will emit updates through the listening sink
-                CompletableFuture.runAsync(() -> {
+                Thread monitorThread = new Thread(() -> {
                     try {
                         startFuture.get();
                     } catch (ExecutionException e) {
@@ -77,11 +77,14 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
                         );
                         resultQueue.put(FDv2SourceResult.interrupted(errorInfo, false));
                     } catch (CancellationException e) {
-                        // Start future was cancelled (during close) - exit cleanly
+                        // Start future was canceled (during close) - exit cleanly
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     }
                 });
+                monitorThread.setName("LaunchDarkly-SDK-Server-DataSourceAdapter-Monitor");
+                monitorThread.setDaemon(true);
+                monitorThread.start();
             }
         }
 
