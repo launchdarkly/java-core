@@ -1,8 +1,8 @@
 package com.launchdarkly.sdk.server.integrations;
 
 import com.launchdarkly.sdk.LDValue;
-import com.launchdarkly.sdk.server.integrations.FileDataSourceImpl.DataBuilder;
-import com.launchdarkly.sdk.server.integrations.FileDataSourceImpl.DataLoader;
+import com.launchdarkly.sdk.server.integrations.FileDataSourceBase.DataBuilder;
+import com.launchdarkly.sdk.server.integrations.FileDataSourceBase.DataLoader;
 import com.launchdarkly.sdk.server.integrations.FileDataSourceParsing.FileDataException;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;

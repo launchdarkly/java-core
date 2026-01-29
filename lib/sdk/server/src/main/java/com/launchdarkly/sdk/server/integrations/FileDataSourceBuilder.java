@@ -3,9 +3,12 @@ package com.launchdarkly.sdk.server.integrations;
 import com.google.common.io.ByteStreams;
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.sdk.server.LDConfig.Builder;
+import com.launchdarkly.sdk.server.datasources.Initializer;
+import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.subsystems.ClientContext;
 import com.launchdarkly.sdk.server.subsystems.ComponentConfigurer;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
+import com.launchdarkly.sdk.server.subsystems.DataSourceBuildInputs;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -30,6 +33,8 @@ public final class FileDataSourceBuilder implements ComponentConfigurer<DataSour
   final List<SourceInfo> sources = new ArrayList<>(); // visible for tests
   private boolean autoUpdate = false;
   private FileData.DuplicateKeysHandling duplicateKeysHandling = FileData.DuplicateKeysHandling.FAIL;
+
+  private boolean shouldPersist = false;
   
   /**
    * Adds any number of source files for loading flag data, specifying each file path as a string. The files will
@@ -123,7 +128,76 @@ public final class FileDataSourceBuilder implements ComponentConfigurer<DataSour
     LDLogger logger = context.getBaseLogger().subLogger("DataSource");
     return new FileDataSourceImpl(context.getDataSourceUpdateSink(), sources, autoUpdate, duplicateKeysHandling, logger);
   }
-  
+
+  /**
+   * Builds an {@link Initializer} for FDv2 data system integration.
+   * <p>
+   * An initializer performs a one-shot load of the file data. If the file cannot be read,
+   * a terminal error is returned.
+   *
+   * @param context the data source build context
+   * @return an Initializer instance
+   */
+  Initializer buildInitializer(DataSourceBuildInputs context) {
+    LDLogger logger = context.getBaseLogger().subLogger("FileDataSource.Initializer");
+    return new FileInitializer(sources, duplicateKeysHandling, logger, shouldPersist);
+  }
+
+  /**
+   * Builds a {@link Synchronizer} for FDv2 data system integration.
+   * <p>
+   * A synchronizer can watch for file changes (if autoUpdate is enabled) and emit
+   * new change sets when files are modified.
+   *
+   * @param context the data source build context
+   * @return a Synchronizer instance
+   */
+  Synchronizer buildSynchronizer(DataSourceBuildInputs context) {
+    LDLogger logger = context.getBaseLogger().subLogger("FileDataSource.Synchronizer");
+    return new FileSynchronizer(sources, autoUpdate, duplicateKeysHandling, logger, shouldPersist);
+  }
+
+  /**
+   * Returns whether auto-update is enabled. Package-private for use by FDv2 builders.
+   */
+  boolean isAutoUpdate() {
+    return autoUpdate;
+  }
+
+  /**
+   * Returns the duplicate keys handling mode. Package-private for use by FDv2 builders.
+   */
+  FileData.DuplicateKeysHandling getDuplicateKeysHandling() {
+    return duplicateKeysHandling;
+  }
+
+  /**
+   * Configures whether file data should be persisted to persistent stores.
+   * <p>
+   * By default, file data is persisted ({@code shouldPersist = true}) to maintain consistency with
+   * previous versions' behavior. When {@code true}, the file data will be written to any configured persistent
+   * store (if the store is in READ_WRITE mode). This may be useful for integration tests that verify
+   * your persistent store configuration.
+   * <p>
+   * FileData synchronizers and initializers to NOT persist data by default.
+   * <p>
+   * Example:
+   * <pre><code>
+   *     FileData fd = FileData.dataSource()
+   *         .filePaths("./testData/flags.json")
+   *         .shouldPersist(true);
+   * </code></pre>
+   * <p>
+   * File data
+   *
+   * @param shouldPersist {@code true} if data from this source should be persisted
+   * @return an instance of this builder
+   */
+  public FileDataSourceBuilder shouldPersist(boolean shouldPersist) {
+    this.shouldPersist = shouldPersist;
+    return this;
+  }
+
   static abstract class SourceInfo {
     abstract byte[] readData() throws IOException;
     abstract Path toFilePath();
