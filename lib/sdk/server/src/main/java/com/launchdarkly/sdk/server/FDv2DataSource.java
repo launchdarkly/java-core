@@ -120,23 +120,17 @@ class FDv2DataSource implements DataSource {
                 startFuture.complete(true);
                 return;
             }
+
             if (sourceManager.hasInitializers()) {
                 runInitializers();
             }
 
             if(!sourceManager.hasAvailableSynchronizers()) {
                 // If already completed by the initializers, then this will have no effect.
-                if (!isInitialized() && !closed) {
-                    // If we were closed, then closing would have handled our terminal update.
-                    dataSourceUpdates.updateStatus(
-                        DataSourceStatusProvider.State.OFF,
-                        // If we were shutdown during initialization, then we don't need to include an error.
-                        new DataSourceStatusProvider.ErrorInfo(
-                            DataSourceStatusProvider.ErrorKind.UNKNOWN,
-                            0,
-                            "Initializers exhausted and there are no synchronizers",
-                            new Date().toInstant())
-                    );
+                if (!isInitialized()) {
+                    // If we have no synchronizers, and we didn't manage to initialize, and we aren't shutting down,
+                    // then that was unexpected, and we will report it.
+                    maybeReportUnexpectedExhaustion("All initializers exhausted and there are no available synchronizers.");
                 }
                 // If already completed has no effect.
                 startFuture.complete(false);
@@ -144,20 +138,10 @@ class FDv2DataSource implements DataSource {
             }
 
             runSynchronizers();
-            // If we had synchronizers, and we ran out of them, then we are off.
 
-            if(!closed) {
-                dataSourceUpdates.updateStatus(
-                    DataSourceStatusProvider.State.OFF,
-                    // If the data source was closed, then we just report we are OFF without an
-                    // associated error.
-                    new DataSourceStatusProvider.ErrorInfo(
-                        DataSourceStatusProvider.ErrorKind.UNKNOWN,
-                        0,
-                        "All data source acquisition methods have been exhausted.",
-                        new Date().toInstant())
-                );
-            }
+            // If we had synchronizers, and we ran out of them, and we aren't shutting down, then that was unexpected,
+            // and we will report it.
+            maybeReportUnexpectedExhaustion("All data source acquisition methods have been exhausted.");
 
             // If we had initialized at some point, then the future will already be complete and this will be ignored.
             startFuture.complete(false);
@@ -167,7 +151,6 @@ class FDv2DataSource implements DataSource {
         runThread.setPriority(threadPriority);
         runThread.start();
     }
-
 
     private void runInitializers() {
         boolean anyDataReceived = false;
@@ -368,6 +351,7 @@ class FDv2DataSource implements DataSource {
                 synchronizer = sourceManager.getNextAvailableSynchronizerAndSetActive();
             }
         } catch(Exception e) {
+            // We are not expecting to encounter this situation, but if we do, then we should log it.
             logger.error("Unexpected error in DataSource: {}", e.toString());
         }finally {
             sourceManager.close();
@@ -404,6 +388,21 @@ class FDv2DataSource implements DataSource {
 
         // If this is already set, then this has no impact.
         startFuture.complete(false);
+    }
+
+    private void maybeReportUnexpectedExhaustion(String message) {
+        if(!closed) {
+            dataSourceUpdates.updateStatus(
+                DataSourceStatusProvider.State.OFF,
+                // If the data source was closed, then we just report we are OFF without an
+                // associated error.
+                new DataSourceStatusProvider.ErrorInfo(
+                    DataSourceStatusProvider.ErrorKind.UNKNOWN,
+                    0,
+                    message,
+                    new Date().toInstant())
+            );
+        }
     }
 
     /**
