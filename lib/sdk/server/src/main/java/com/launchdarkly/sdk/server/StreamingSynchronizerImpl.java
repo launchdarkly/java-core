@@ -303,7 +303,9 @@ class StreamingSynchronizerImpl implements Synchronizer {
                         Instant.now()
                 );
                 result = FDv2SourceResult.interrupted(internalError, getFallback(event));
-                restartStream();
+                if(kind == DataSourceStatusProvider.ErrorKind.INVALID_DATA) {
+                    restartStream();
+                }
                 break;
 
             case NONE:
