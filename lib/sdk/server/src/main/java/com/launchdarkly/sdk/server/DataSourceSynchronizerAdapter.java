@@ -90,7 +90,7 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
     }
 
     @Override
-    public void close() throws IOException {
+    public void close()  {
         synchronized (startLock) {
             if (closed) {
                 return;
@@ -98,7 +98,11 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
             closed = true;
         }
 
-        dataSource.close();
+        try {
+            dataSource.close();
+        } catch (IOException e) {
+            // Ignore as we are shutting down.
+        }
         shutdownFuture.complete(FDv2SourceResult.shutdown());
         if(startFuture != null) {
             // If the start future is done, this has no effect.
