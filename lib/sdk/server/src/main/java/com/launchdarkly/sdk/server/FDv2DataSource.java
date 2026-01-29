@@ -88,7 +88,8 @@ class FDv2DataSource implements DataSource {
         List<SynchronizerFactoryWithState> synchronizerFactories = synchronizers
             .stream()
             .map(SynchronizerFactoryWithState::new)
-            .collect(Collectors.toList());
+            // Collect to an ArrayList to ensure mutability.
+            .collect(Collectors.toCollection(ArrayList::new));
 
         // If we have a fdv1 data source factory, then add that to the synchronizer factories in a blocked state.
         // If we receive a request to fallback, then we will unblock it and block all other synchronizers.
