@@ -1598,10 +1598,10 @@ public class FDv2DataSourceTest extends BaseTest {
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
-        startFuture.get(2000, TimeUnit.SECONDS);
+        startFuture.get(2, TimeUnit.SECONDS);
 
         // Wait for 3 applies with enough time for recovery (2s) + overhead
-        sink.awaitApplyCount(30000, 5, TimeUnit.SECONDS);
+        sink.awaitApplyCount(3, 5, TimeUnit.SECONDS);
 
         // Should have called first synchronizer again after recovery
         assertTrue(firstCallCount.get() >= 2 || secondCallCount.get() >= 1);
