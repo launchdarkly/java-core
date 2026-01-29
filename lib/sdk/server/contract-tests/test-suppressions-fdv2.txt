@@ -1,4 +1,0 @@
-streaming/validation/unrecognized data that can be safely ignored/unknown event name with JSON body
-streaming/validation/unrecognized data that can be safely ignored/unknown event name with non-JSON body
-streaming/validation/unrecognized data that can be safely ignored/patch event with unrecognized path kind
-streaming/fdv2/fallback to FDv1 handling
