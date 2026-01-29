@@ -23,7 +23,7 @@ class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
             ScheduledExecutorService sharedExecutor,
             Duration pollInterval
     ) {
-        super(requestor, logger);
+        super(requestor, logger.subLogger(Loggers.POLLING_SYNCHRONIZER));
         this.selectorSource = selectorSource;
 
         synchronized (this) {

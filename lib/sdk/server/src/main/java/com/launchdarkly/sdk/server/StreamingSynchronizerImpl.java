@@ -71,7 +71,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
     ) {
         this.httpProperties = httpProperties;
         this.selectorSource = selectorSource;
-        this.logger = logger;
+        this.logger = logger.subLogger(Loggers.STREAMING_SYNCHRONIZER);
         this.payloadFilter = payloadFilter;
         this.streamUri = HttpHelpers.concatenateUriPath(baseUri, requestPath);
         this.initialReconnectDelay = initialReconnectDelaySeconds;
