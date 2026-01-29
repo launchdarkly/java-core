@@ -285,6 +285,16 @@ public abstract class DataStoreTypes {
     public boolean shouldPersist() {
       return shouldPersist;
     }
+
+    /**
+     * Constructs a new instance.  Will default to shouldPersist = true and can be stored in a persistent store.
+     * 
+     * @param data the data set
+     */
+    public FullDataSet(Iterable<Map.Entry<DataKind, KeyedItems<TDescriptor>>> data) {
+      this.data = data == null ? ImmutableList.of(): data;
+      this.shouldPersist = true; // default to true if not specified for backwards compatibility
+    }
     
     /**
      * Constructs a new instance.
