@@ -37,14 +37,18 @@ class IterableAsyncQueue<T> {
      * @param item the item to add (maybe null)
      */
     public void put(T item) {
+        CompletableFuture<T> pendingFuture = null;
         synchronized (lock) {
             CompletableFuture<T> nextFuture = pendingFutures.pollFirst();
             if(nextFuture != null) {
-                nextFuture.complete(item);
+                pendingFuture = nextFuture;
+            } else {
+                queue.addLast(item);
                 return;
             }
-            queue.addLast(item);
         }
+        // Execute callback outside the lock.
+        pendingFuture.complete(item);
     }
     /**
      * Retrieves and removes an item from the queue, returning a future that completes with the item.
