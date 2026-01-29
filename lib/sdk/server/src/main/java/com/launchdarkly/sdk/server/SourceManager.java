@@ -12,7 +12,7 @@ import java.util.List;
  * <p>
  * Package-private for internal use.
  */
-class SourceStateManager implements Closeable {
+class SourceManager implements Closeable {
     private final List<SynchronizerFactoryWithState> synchronizers;
 
     private final List<FDv2DataSource.DataSourceFactory<Initializer>> initializers;
@@ -31,7 +31,12 @@ class SourceStateManager implements Closeable {
 
     private int initializerIndex = -1;
 
-    public SourceStateManager(List<SynchronizerFactoryWithState> synchronizers, List<FDv2DataSource.DataSourceFactory<Initializer>> initializers) {
+    /**
+     * The current synchronizer factory (for checking FDv1 fallback status and blocking)
+     */
+    private SynchronizerFactoryWithState currentSynchronizerFactory;
+
+    public SourceManager(List<SynchronizerFactoryWithState> synchronizers, List<FDv2DataSource.DataSourceFactory<Initializer>> initializers) {
         this.synchronizers = synchronizers;
         this.initializers = initializers;
     }
@@ -75,39 +80,75 @@ class SourceStateManager implements Closeable {
      * <p>
      * Any given synchronizer can be marked as blocked, in which case that synchronizer is not eligible to be used again.
      * Synchronizers that are not blocked are available, and this function will only return available synchronizers.
+     * <p>
+     * <b>Note:</b> This is an internal method that must be called while holding activeSourceLock.
+     * It does not check shutdown status or handle locking - that's done by the caller.
+     *
      * @return the next synchronizer factory to use, or null if there are no more available synchronizers.
      */
-    public SynchronizerFactoryWithState getNextAvailableSynchronizer() {
+    private SynchronizerFactoryWithState getNextAvailableSynchronizer() {
+        SynchronizerFactoryWithState factory = null;
+
+        int visited = 0;
+        while(visited < synchronizers.size()) {
+            // Look for the next synchronizer starting at the position after the current one. (avoiding just re-using the same synchronizer.)
+            synchronizerIndex++;
+
+            // We aren't using module here because we want to keep the stored index within range instead
+            // of increasing indefinitely.
+            if(synchronizerIndex >= synchronizers.size()) {
+                synchronizerIndex = 0;
+            }
+
+            SynchronizerFactoryWithState candidate = synchronizers.get(synchronizerIndex);
+            if (candidate.getState() == SynchronizerFactoryWithState.State.Available) {
+                factory = candidate;
+                break;
+            }
+            visited++;
+        }
+        return factory;
+    }
+
+    /**
+     * Get the next available synchronizer, build it, and set it as the active source in one atomic operation.
+     * This combines the two-step process of getting the next synchronizer and setting it active.
+     * <p>
+     * If shutdown has been initiated, returns null without building or setting a source.
+     * Any previously active source will be closed before setting the new one.
+     * <p>
+     * The current synchronizer factory can be retrieved with {@link #blockCurrentSynchronizer()}
+     * or {@link #isCurrentSynchronizerFDv1Fallback()} to interact with it.
+     *
+     * @return the built synchronizer that is now active, or null if no more synchronizers are available or shutdown has been initiated
+     */
+    public com.launchdarkly.sdk.server.datasources.Synchronizer getNextAvailableSynchronizerAndSetActive() {
         synchronized (activeSourceLock) {
-            SynchronizerFactoryWithState factory = null;
+            // Handle shutdown first - if shutdown, don't do any work
+            if (isShutdown) {
+                currentSynchronizerFactory = null;
+                return null;
+            }
 
-            if(isShutdown) {
+            SynchronizerFactoryWithState factory = getNextAvailableSynchronizer();
+            if (factory == null) {
+                currentSynchronizerFactory = null;
+                return null;
+            }
+
+            currentSynchronizerFactory = factory;
+            com.launchdarkly.sdk.server.datasources.Synchronizer synchronizer = factory.build();
+
+            // Close any previously active source
+            if (activeSource != null) {
                 safeClose(activeSource);
-                activeSource = null;
-                return factory;
             }
 
-            int visited = 0;
-            while(visited < synchronizers.size()) {
-                // Look for the next synchronizer starting at the position after the current one. (avoiding just re-using the same synchronizer.)
-                synchronizerIndex++;
-
-                // We aren't using module here because we want to keep the stored index within range instead
-                // of increasing indefinitely.
-                if(synchronizerIndex >= synchronizers.size()) {
-                    synchronizerIndex = 0;
-                }
-
-                SynchronizerFactoryWithState candidate = synchronizers.get(synchronizerIndex);
-                if (candidate.getState() == SynchronizerFactoryWithState.State.Available) {
-                    factory = candidate;
-                    break;
-                }
-                visited++;
-            }
-            return factory;
+            activeSource = synchronizer;
+            return synchronizer;
         }
     }
+
 
     public boolean hasAvailableSources() {
         return hasInitializers() || getAvailableSynchronizerCount() > 0;
@@ -121,16 +162,64 @@ class SourceStateManager implements Closeable {
         return getAvailableSynchronizerCount() > 0;
     }
 
-    public FDv2DataSource.DataSourceFactory<Initializer> getNextInitializer() {
+    /**
+     * Get the next initializer factory. This is an internal method that must be called while holding activeSourceLock.
+     * It does not check shutdown status or handle locking - that's done by the caller.
+     *
+     * @return the next initializer factory, or null if no more initializers are available
+     */
+    private FDv2DataSource.DataSourceFactory<Initializer> getNextInitializer() {
+        initializerIndex++;
+        if (initializerIndex >= initializers.size()) {
+            return null;
+        }
+        return initializers.get(initializerIndex);
+    }
+
+    public void blockCurrentSynchronizer() {
         synchronized (activeSourceLock) {
-            if(isShutdown) {
+            if (currentSynchronizerFactory != null) {
+                currentSynchronizerFactory.block();
+            }
+        }
+    }
+
+    public boolean isCurrentSynchronizerFDv1Fallback() {
+        synchronized (activeSourceLock) {
+            return currentSynchronizerFactory != null && currentSynchronizerFactory.isFDv1Fallback();
+        }
+    }
+
+    /**
+     * Get the next initializer, build it, and set it as the active source in one atomic operation.
+     * This combines the two-step process of getting the next initializer and setting it active.
+     * <p>
+     * If shutdown has been initiated, returns null without building or setting a source.
+     * Any previously active source will be closed before setting the new one.
+     *
+     * @return the built initializer that is now active, or null if no more initializers are available or shutdown has been initiated
+     */
+    public Initializer getNextInitializerAndSetActive() {
+        synchronized (activeSourceLock) {
+            // Handle shutdown first - if shutdown, don't do any work
+            if (isShutdown) {
                 return null;
             }
-            initializerIndex++;
-            if (initializerIndex >= initializers.size()) {
+
+            FDv2DataSource.DataSourceFactory<Initializer> factory = getNextInitializer();
+            if (factory == null) {
                 return null;
             }
-            return initializers.get(initializerIndex);
+
+            Initializer initializer = factory.build();
+
+            // Close any previously active source
+            if (activeSource != null) {
+                safeClose(activeSource);
+            }
+
+            activeSource = initializer;
+            return initializer;
         }
     }
 
@@ -170,25 +259,6 @@ class SourceStateManager implements Closeable {
         }
     }
 
-    /**
-     * Set the active source. If shutdown has been initiated, the source will be closed immediately.
-     * Any previously active source will be closed.
-     * @param source the source to set as active
-     * @return true if shutdown has been initiated, false otherwise
-     */
-    public boolean setActiveSource(Closeable source) {
-        synchronized (activeSourceLock) {
-            if (activeSource != null) {
-                safeClose(activeSource);
-            }
-            if (isShutdown) {
-                safeClose(source);
-                return true;
-            }
-            activeSource = source;
-        }
-        return false;
-    }
 
     /**
      * Close the state manager and shut down any active source.
@@ -215,6 +285,9 @@ class SourceStateManager implements Closeable {
      * @param closeable the closeable to close
      */
     private void safeClose(Closeable closeable) {
+        if (closeable == null) {
+            return;
+        }
         try {
             closeable.close();
         } catch (IOException e) {

@@ -33,7 +33,7 @@ class FDv2DataSource implements DataSource {
      */
     private static final long defaultRecoveryTimeout = 5 * 60;
 
-    private final SourceStateManager sourceManager;
+    private final SourceManager sourceManager;
 
     private final List<ConditionFactory> conditionFactories;
 
@@ -102,7 +102,7 @@ class FDv2DataSource implements DataSource {
             // configuration.
         }
 
-        this.sourceManager = new SourceStateManager(synchronizerFactories, initializers);
+        this.sourceManager = new SourceManager(synchronizerFactories, initializers);
         this.dataSourceUpdates = dataSourceUpdates;
         this.threadPriority = threadPriority;
         this.logger = logger;
@@ -123,8 +123,8 @@ class FDv2DataSource implements DataSource {
             if (sourceManager.hasInitializers()) {
                 runInitializers();
             }
-            boolean synchronizersAvailable = sourceManager.hasAvailableSynchronizers();
-            if(!synchronizersAvailable) {
+
+            if(!sourceManager.hasAvailableSynchronizers()) {
                 // If already completed by the initializers, then this will have no effect.
                 if (!isInitialized() && !closed) {
                     // If we were closed, then closing would have handled our terminal update.
@@ -146,16 +146,18 @@ class FDv2DataSource implements DataSource {
             runSynchronizers();
             // If we had synchronizers, and we ran out of them, then we are off.
 
-            dataSourceUpdates.updateStatus(
-                DataSourceStatusProvider.State.OFF,
-                // If the data source was closed, then we just report we are OFF without an
-                // associated error.
-                closed? null : new DataSourceStatusProvider.ErrorInfo(
-                    DataSourceStatusProvider.ErrorKind.UNKNOWN,
-                    0,
-                    "All data source acquisition methods have been exhausted.",
-                    new Date().toInstant())
-            );
+            if(!closed) {
+                dataSourceUpdates.updateStatus(
+                    DataSourceStatusProvider.State.OFF,
+                    // If the data source was closed, then we just report we are OFF without an
+                    // associated error.
+                    new DataSourceStatusProvider.ErrorInfo(
+                        DataSourceStatusProvider.ErrorKind.UNKNOWN,
+                        0,
+                        "All data source acquisition methods have been exhausted.",
+                        new Date().toInstant())
+                );
+            }
 
             // If we had initialized at some point, then the future will already be complete and this will be ignored.
             startFuture.complete(false);
@@ -169,11 +171,9 @@ class FDv2DataSource implements DataSource {
 
     private void runInitializers() {
         boolean anyDataReceived = false;
-            DataSourceFactory<Initializer> factory = sourceManager.getNextInitializer();
-        while(factory != null) {
+        Initializer initializer = sourceManager.getNextInitializerAndSetActive();
+        while(initializer != null) {
             try {
-                Initializer initializer = factory.build();
-                if (sourceManager.setActiveSource(initializer)) return;
                 FDv2SourceResult result = initializer.run().get();
                 switch (result.getResultType()) {
                     case CHANGE_SET:
@@ -220,7 +220,7 @@ class FDv2DataSource implements DataSource {
                         new Date().toInstant()));
                 logger.warn("Error running initializer: {}", e.toString());
             }
-            factory = sourceManager.getNextInitializer();
+            initializer = sourceManager.getNextInitializerAndSetActive();
         }
         // We received data without a selector, and we have exhausted initializers, so we are going to
         // consider ourselves initialized.
@@ -259,15 +259,10 @@ class FDv2DataSource implements DataSource {
     private void runSynchronizers() {
         // When runSynchronizers exists, no matter how it exits, the synchronizerStateManager will be closed.
         try {
-            SynchronizerFactoryWithState availableSynchronizer = sourceManager.getNextAvailableSynchronizer();
+            Synchronizer synchronizer = sourceManager.getNextAvailableSynchronizerAndSetActive();
 
             // We want to continue running synchronizers for as long as any are available.
-            while (availableSynchronizer != null) {
-                Synchronizer synchronizer = availableSynchronizer.build();
-
-                // Returns true if shutdown.
-                if (sourceManager.setActiveSource(synchronizer)) return;
-
+            while (synchronizer != null) {
                 try {
                     boolean running = true;
 
@@ -331,7 +326,7 @@ class FDv2DataSource implements DataSource {
                                             logger.debug("Synchronizer shutdown.");
                                             return;
                                         case TERMINAL_ERROR:
-                                            availableSynchronizer.block();
+                                            sourceManager.blockCurrentSynchronizer();
                                             running = false;
                                             dataSourceUpdates.updateStatus(
                                                 DataSourceStatusProvider.State.INTERRUPTED,
@@ -351,7 +346,7 @@ class FDv2DataSource implements DataSource {
                                     sourceManager.hasFDv1Fallback() &&
                                     // This shouldn't happen in practice, an FDv1 source shouldn't request fallback
                                     // to FDv1. But if it does, then we will discard its request.
-                                    !availableSynchronizer.isFDv1Fallback()
+                                    !sourceManager.isCurrentSynchronizerFDv1Fallback()
                             ) {
                                 sourceManager.fdv1Fallback();
                                 running = false;
@@ -369,7 +364,8 @@ class FDv2DataSource implements DataSource {
                     logger.warn("Error running synchronizer: {}, will try next synchronizer, or retry.", e.toString());
                     // Move to the next synchronizer.
                 }
-                availableSynchronizer = sourceManager.getNextAvailableSynchronizer();
+                // Get the next available synchronizer and set it active
+                synchronizer = sourceManager.getNextAvailableSynchronizerAndSetActive();
             }
         } catch(Exception e) {
             logger.error("Unexpected error in DataSource: {}", e.toString());
