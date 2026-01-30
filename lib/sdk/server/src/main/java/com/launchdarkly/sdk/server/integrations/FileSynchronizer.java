@@ -16,10 +16,10 @@ import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
 import java.nio.file.Watchable;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static java.nio.file.StandardWatchEventKinds.ENTRY_CREATE;
 import static java.nio.file.StandardWatchEventKinds.ENTRY_DELETE;
@@ -36,7 +36,7 @@ final class FileSynchronizer extends FileDataSourceBase implements Synchronizer 
     private final CompletableFuture<FDv2SourceResult> shutdownFuture = new CompletableFuture<>();
     private final IterableAsyncQueue<FDv2SourceResult> resultQueue = new IterableAsyncQueue<>();
     private final FileWatcher fileWatcher;  // null if autoUpdate=false
-    private volatile boolean started = false;
+    private AtomicBoolean started = new AtomicBoolean(false);
 
     FileSynchronizer(
             List<SourceInfo> sources,
@@ -63,8 +63,7 @@ final class FileSynchronizer extends FileDataSourceBase implements Synchronizer 
 
     @Override
     public CompletableFuture<FDv2SourceResult> next() {
-        if (!started) {
-            started = true;
+        if (!started.getAndSet(true)) {
             // Perform initial load
             resultQueue.put(loadData());
             // Start file watching if enabled
