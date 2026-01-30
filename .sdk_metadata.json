@@ -33,7 +33,7 @@
         "testDataSource": { "introduced": "5.1" },
         "track": { "introduced": "1.0" },
         "variationDetail": { "introduced": "4.3" },
-        "webProxy": { "introduced": "2.2" }
+        "webProxy": { "introduced": "1.0" }
       }
     }
   }
