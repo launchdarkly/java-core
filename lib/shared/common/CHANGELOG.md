@@ -2,6 +2,13 @@
 
 All notable changes to the project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [2.2.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-common-2.2.0...launchdarkly-java-sdk-common-2.2.1) (2026-01-30)
+
+
+### Bug Fixes
+
+* Change IterableAsyncQueue to public access modifier ([#122](https://github.com/launchdarkly/java-core/issues/122)) ([88c4ae0](https://github.com/launchdarkly/java-core/commit/88c4ae00c258c3030bc8e6bf761f26d9ec857941))
+
 ## [2.2.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-common-2.1.2...launchdarkly-java-sdk-common-2.2.0) (2026-01-30)
 
 
