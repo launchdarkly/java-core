@@ -102,6 +102,7 @@ final class FileDataSourceImpl implements DataSource {
             if (result.getStatus().getState() != FDv2SourceResult.State.SHUTDOWN) {
                 dataSourceUpdates.updateStatus(State.INTERRUPTED, result.getStatus().getErrorInfo());
             }
+            // No terminal errors/shutdown for this adaptation.
         }
     }
 
