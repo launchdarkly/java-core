@@ -101,6 +101,50 @@ public class FileInitializerTest {
     }
 
     @Test
+    public void initializerDefaultsToNotPersisting() throws Exception {
+
+        try (Initializer initializer = FileData.initializer()
+            .filePaths(resourceFilePath("all-properties.json"))
+            .build(TestDataSourceBuildInputs.create(testLogger))) {
+            CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
+            FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+            assertThat(result.getChangeSet().shouldPersist(), equalTo(false));
+        }
+    }
+
+    @Test
+    public void initializerCanBeConfiguredToPersist() throws Exception {
+
+        try (Initializer initializer = FileData.initializer()
+            .filePaths(resourceFilePath("all-properties.json"))
+            .shouldPersist(true)
+            .build(TestDataSourceBuildInputs.create(testLogger))) {
+            CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
+            FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+            assertThat(result.getChangeSet().shouldPersist(), equalTo(true));
+        }
+    }
+
+    @Test
+    public void initializerCanBeConfiguredToNotPersist() throws Exception {
+
+        try (Initializer initializer = FileData.initializer()
+            .filePaths(resourceFilePath("all-properties.json"))
+            .shouldPersist(false)
+            .build(TestDataSourceBuildInputs.create(testLogger))) {
+            CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
+            FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+            assertThat(result.getChangeSet().shouldPersist(), equalTo(false));
+        }
+    }
+
+    @Test
     public void initializerFailsOnDuplicateKeysByDefault() throws Exception {
 
         try (Initializer initializer = FileData.initializer()

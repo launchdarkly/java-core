@@ -159,4 +159,48 @@ public class FileSynchronizerTest {
             }
         }
     }
+
+    @Test
+    public void synchronizerDefaultsToNotPersisting() throws Exception {
+
+        try (Synchronizer synchronizer = FileData.synchronizer()
+            .filePaths(resourceFilePath("all-properties.json"))
+            .build(TestDataSourceBuildInputs.create(testLogger))) {
+            CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
+            FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+            assertThat(result.getChangeSet().shouldPersist(), equalTo(false));
+        }
+    }
+
+    @Test
+    public void synchronizerCanBeConfiguredToPersist() throws Exception {
+
+        try (Synchronizer synchronizer = FileData.synchronizer()
+            .filePaths(resourceFilePath("all-properties.json"))
+            .shouldPersist(true)
+            .build(TestDataSourceBuildInputs.create(testLogger))) {
+            CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
+            FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+            assertThat(result.getChangeSet().shouldPersist(), equalTo(true));
+        }
+    }
+
+    @Test
+    public void synchronizerCanBeConfiguredToNotPersist() throws Exception {
+
+        try (Synchronizer synchronizer = FileData.synchronizer()
+            .filePaths(resourceFilePath("all-properties.json"))
+            .shouldPersist(false)
+            .build(TestDataSourceBuildInputs.create(testLogger))) {
+            CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
+            FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+            assertThat(result.getChangeSet().shouldPersist(), equalTo(false));
+        }
+    }
 }

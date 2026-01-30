@@ -34,7 +34,7 @@ public final class FileDataSourceBuilder implements ComponentConfigurer<DataSour
   private boolean autoUpdate = false;
   private FileData.DuplicateKeysHandling duplicateKeysHandling = FileData.DuplicateKeysHandling.FAIL;
 
-  private boolean shouldPersist = false;
+  private boolean shouldPersist = true;
   
   /**
    * Adds any number of source files for loading flag data, specifying each file path as a string. The files will
