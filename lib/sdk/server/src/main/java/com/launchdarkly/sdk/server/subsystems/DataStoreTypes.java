@@ -285,9 +285,9 @@ public abstract class DataStoreTypes {
     public boolean shouldPersist() {
       return shouldPersist;
     }
-    
+
     /**
-     * Constructs a new instance.
+     * Constructs a new instance.  Will default to shouldPersist = true and can be stored in a persistent store.
      * 
      * @param data the data set
      */

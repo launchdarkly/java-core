@@ -2676,7 +2676,6 @@ public class FDv2DataSourceTest extends BaseTest {
     private static class MockDataSourceUpdateSink implements DataSourceUpdateSinkV2 {
         private final AtomicInteger applyCount = new AtomicInteger(0);
         private final AtomicReference<DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor>> lastChangeSet = new AtomicReference<>();
-        private final AtomicReference<DataSourceStatusProvider.State> lastStatus = new AtomicReference<>();
         private final BlockingQueue<Boolean> applySignals = new LinkedBlockingQueue<>();
         private final AtomicReference<DataSourceStatusProvider.State> lastState = new AtomicReference<>();
         private final AtomicReference<DataSourceStatusProvider.ErrorInfo> lastError = new AtomicReference<>();
