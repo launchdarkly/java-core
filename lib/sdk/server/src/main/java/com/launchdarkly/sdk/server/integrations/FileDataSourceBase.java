@@ -81,16 +81,17 @@ class FileDataSourceBase {
         }
 
         FullDataSet<ItemDescriptor> fullData = builder.build();
-        ChangeSet<ItemDescriptor> changeSet = buildChangeSet(fullData, version);
+        ChangeSet<ItemDescriptor> changeSet = buildChangeSet(fullData);
         return FDv2SourceResult.changeSet(changeSet, false);
     }
 
     /**
      * Builds a ChangeSet from a FullDataSet.
      */
-    private ChangeSet<ItemDescriptor> buildChangeSet(FullDataSet<ItemDescriptor> fullData, int version) {
+    private ChangeSet<ItemDescriptor> buildChangeSet(FullDataSet<ItemDescriptor> fullData) {
         return new ChangeSet<>(
             ChangeSetType.Full,
+            // File data is currently selector-less.
             Selector.EMPTY,
             fullData.getData(),
             null,  // no environment ID for file data
@@ -136,10 +137,6 @@ class FileDataSourceBase {
         public DataLoader(List<SourceInfo> sources) {
             this.sources = new ArrayList<>(sources);
             this.lastVersion = new AtomicInteger(0);
-        }
-
-        public Iterable<SourceInfo> getSources() {
-            return sources;
         }
 
         /**

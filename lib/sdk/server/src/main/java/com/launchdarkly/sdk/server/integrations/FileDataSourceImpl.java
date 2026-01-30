@@ -38,11 +38,12 @@ final class FileDataSourceImpl implements DataSource {
         List<SourceInfo> sources,
         boolean autoUpdate,
         FileData.DuplicateKeysHandling duplicateKeysHandling,
-        LDLogger logger
+        LDLogger logger,
+        boolean persist
     ) {
         this.dataSourceUpdates = dataSourceUpdates;
         this.logger = logger;
-        this.synchronizer = new FileSynchronizer(sources, autoUpdate, duplicateKeysHandling, logger, true);
+        this.synchronizer = new FileSynchronizer(sources, autoUpdate, duplicateKeysHandling, logger, persist);
     }
 
     @Override
@@ -93,7 +94,10 @@ final class FileDataSourceImpl implements DataSource {
     private void processResult(FDv2SourceResult result) {
         if (result.getResultType() == FDv2SourceResult.ResultType.CHANGE_SET) {
             // Convert ChangeSet to FullDataSet for legacy init()
-            FullDataSet<ItemDescriptor> fullData = new FullDataSet<>(result.getChangeSet().getData());
+            FullDataSet<ItemDescriptor> fullData = new FullDataSet<>(
+                result.getChangeSet().getData(),
+                result.getChangeSet().shouldPersist()
+            );
             dataSourceUpdates.init(fullData);
             dataSourceUpdates.updateStatus(State.VALID, null);
             inited.set(true);

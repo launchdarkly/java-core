@@ -126,7 +126,14 @@ public final class FileDataSourceBuilder implements ComponentConfigurer<DataSour
   @Override
   public DataSource build(ClientContext context) {
     LDLogger logger = context.getBaseLogger().subLogger("DataSource");
-    return new FileDataSourceImpl(context.getDataSourceUpdateSink(), sources, autoUpdate, duplicateKeysHandling, logger);
+    return new FileDataSourceImpl(
+        context.getDataSourceUpdateSink(),
+        sources,
+        autoUpdate,
+        duplicateKeysHandling,
+        logger,
+        shouldPersist
+    );
   }
 
   /**
