@@ -58,10 +58,8 @@ final class WriteThroughStore implements DataStore, TransactionalDataStore {
     maybeSwitchStore();
 
     // Only write to persistent store if shouldPersist is true and store is in READ_WRITE mode
-    if (persistenceMode == DataStoreMode.READ_WRITE && allData.shouldPersist()) {
-      if (persistentStore != null) {
-        persistentStore.init(allData);
-      }
+    if (hasPersistence && persistenceMode == DataStoreMode.READ_WRITE && allData.shouldPersist()) {
+      persistentStore.init(allData);
     }
   }
 
@@ -97,12 +95,12 @@ final class WriteThroughStore implements DataStore, TransactionalDataStore {
 
   @Override
   public boolean isStatusMonitoringEnabled() {
-    return persistentStore != null ? persistentStore.isStatusMonitoringEnabled() : false;
+    return hasPersistence ? persistentStore.isStatusMonitoringEnabled() : false;
   }
 
   @Override
   public CacheStats getCacheStats() {
-    return persistentStore != null ? persistentStore.getCacheStats() : null;
+    return hasPersistence ? persistentStore.getCacheStats() : null;
   }
 
   @Override
@@ -135,7 +133,7 @@ final class WriteThroughStore implements DataStore, TransactionalDataStore {
   @Override
   public void close() throws IOException {
     memoryStore.close();
-    if (persistentStore != null) {
+    if (hasPersistence) {
       persistentStore.close();
     }
   }
