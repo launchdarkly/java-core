@@ -23,11 +23,10 @@ public class FileInitializerTest {
 
     @Test
     public void initializerReturnsChangeSetOnSuccessfulLoad() throws Exception {
-        Initializer initializer = FileData.initializer()
-                .filePaths(resourceFilePath("all-properties.json"))
-                .build(TestDataSourceBuildInputs.create(testLogger));
 
-        try {
+        try (Initializer initializer = FileData.initializer()
+            .filePaths(resourceFilePath("all-properties.json"))
+            .build(TestDataSourceBuildInputs.create(testLogger))) {
             CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
@@ -35,26 +34,21 @@ public class FileInitializerTest {
             assertThat(result.getChangeSet(), notNullValue());
             assertThat(result.getChangeSet().getType(), equalTo(ChangeSetType.Full));
             assertNotNull(result.getChangeSet().getData());
-        } finally {
-            initializer.close();
         }
     }
 
     @Test
     public void initializerReturnsTerminalErrorOnMissingFile() throws Exception {
-        Initializer initializer = FileData.initializer()
-                .filePaths(Paths.get("no-such-file.json"))
-                .build(TestDataSourceBuildInputs.create(testLogger));
 
-        try {
+        try (Initializer initializer = FileData.initializer()
+            .filePaths(Paths.get("no-such-file.json"))
+            .build(TestDataSourceBuildInputs.create(testLogger))) {
             CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.STATUS));
             assertThat(result.getStatus().getState(), equalTo(FDv2SourceResult.State.TERMINAL_ERROR));
             assertNotNull(result.getStatus().getErrorInfo());
-        } finally {
-            initializer.close();
         }
     }
 
@@ -76,60 +70,51 @@ public class FileInitializerTest {
 
     @Test
     public void initializerCanLoadFromClasspathResource() throws Exception {
-        Initializer initializer = FileData.initializer()
-                .classpathResources(FileDataSourceTestData.resourceLocation("all-properties.json"))
-                .build(TestDataSourceBuildInputs.create(testLogger));
 
-        try {
+        try (Initializer initializer = FileData.initializer()
+            .classpathResources(FileDataSourceTestData.resourceLocation("all-properties.json"))
+            .build(TestDataSourceBuildInputs.create(testLogger))) {
             CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
             assertThat(result.getChangeSet(), notNullValue());
-        } finally {
-            initializer.close();
         }
     }
 
     @Test
     public void initializerRespectsIgnoreDuplicateKeysHandling() throws Exception {
-        Initializer initializer = FileData.initializer()
-                .filePaths(
-                        resourceFilePath("flag-only.json"),
-                        resourceFilePath("flag-with-duplicate-key.json")
-                )
-                .duplicateKeysHandling(FileData.DuplicateKeysHandling.IGNORE)
-                .build(TestDataSourceBuildInputs.create(testLogger));
 
-        try {
+        try (Initializer initializer = FileData.initializer()
+            .filePaths(
+                resourceFilePath("flag-only.json"),
+                resourceFilePath("flag-with-duplicate-key.json")
+            )
+            .duplicateKeysHandling(FileData.DuplicateKeysHandling.IGNORE)
+            .build(TestDataSourceBuildInputs.create(testLogger))) {
             CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             // Should succeed when ignoring duplicates
             assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
-        } finally {
-            initializer.close();
         }
     }
 
     @Test
     public void initializerFailsOnDuplicateKeysByDefault() throws Exception {
-        Initializer initializer = FileData.initializer()
-                .filePaths(
-                        resourceFilePath("flag-only.json"),
-                        resourceFilePath("flag-with-duplicate-key.json")
-                )
-                .build(TestDataSourceBuildInputs.create(testLogger));
 
-        try {
+        try (Initializer initializer = FileData.initializer()
+            .filePaths(
+                resourceFilePath("flag-only.json"),
+                resourceFilePath("flag-with-duplicate-key.json")
+            )
+            .build(TestDataSourceBuildInputs.create(testLogger))) {
             CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             // Should fail with terminal error when duplicate keys are not allowed
             assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.STATUS));
             assertThat(result.getStatus().getState(), equalTo(FDv2SourceResult.State.TERMINAL_ERROR));
-        } finally {
-            initializer.close();
         }
     }
 }
