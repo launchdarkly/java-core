@@ -253,7 +253,8 @@ class StreamingSynchronizerImpl implements Synchronizer {
                             FDv2ChangeSetTranslator.toChangeSet(
                               changeset.getChangeset(),
                               logger,
-                              event.getHeaders().value(HeaderConstants.ENVIRONMENT_ID.getHeaderName()));
+                              event.getHeaders().value(HeaderConstants.ENVIRONMENT_ID.getHeaderName()),
+                              true);
                     result = FDv2SourceResult.changeSet(converted, getFallback(event));
                 } catch (Exception e) {
                     logger.error("Failed to convert FDv2 changeset: {}", LogValues.exceptionSummary(e));
@@ -303,7 +304,9 @@ class StreamingSynchronizerImpl implements Synchronizer {
                         Instant.now()
                 );
                 result = FDv2SourceResult.interrupted(internalError, getFallback(event));
-                restartStream();
+                if(kind == DataSourceStatusProvider.ErrorKind.INVALID_DATA) {
+                    restartStream();
+                }
                 break;
 
             case NONE:

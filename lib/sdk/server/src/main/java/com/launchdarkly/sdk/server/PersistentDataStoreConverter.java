@@ -39,7 +39,8 @@ final class PersistentDataStoreConverter {
       ));
     }
 
-    return new FullDataSet<>(builder.build());
+    // Preserve shouldPersist flag when converting formats
+    return new FullDataSet<>(builder.build(), inMemoryData.shouldPersist());
   }
 
   /**

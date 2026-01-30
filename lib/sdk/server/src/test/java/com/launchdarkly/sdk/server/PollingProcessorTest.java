@@ -14,6 +14,8 @@ import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.ComponentConfigurer;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.testhelpers.ConcurrentHelpers;
 import com.launchdarkly.testhelpers.httptest.Handler;
 import com.launchdarkly.testhelpers.httptest.Handlers;
@@ -149,11 +151,15 @@ public class PollingProcessorTest extends BaseTest {
         assertFutureIsCompleted(initFuture, 1, TimeUnit.SECONDS);
        
         assertTrue(pollingProcessor.isInitialized());
-        assertDataSetEquals(datav1.build(), dataSourceUpdates.awaitInit());
+        FullDataSet<ItemDescriptor> init1 = dataSourceUpdates.awaitInit();
+        assertDataSetEquals(datav1.build(), init1);
+        assertTrue("Polling data should have shouldPersist=true", init1.shouldPersist());
 
         allowSecondPollToProceed.release();
-        
-        assertDataSetEquals(datav2.build(), dataSourceUpdates.awaitInit());
+
+        FullDataSet<ItemDescriptor> init2 = dataSourceUpdates.awaitInit();
+        assertDataSetEquals(datav2.build(), init2);
+        assertTrue("Polling data should have shouldPersist=true", init2.shouldPersist());
       }
     }
   }
@@ -198,8 +204,10 @@ public class PollingProcessorTest extends BaseTest {
     try (HttpServer server = HttpServer.start(new TestPollHandler())) {
       try (PollingProcessor pollingProcessor = makeProcessor(server.getUri(), LENGTHY_INTERVAL)) {
         pollingProcessor.start();
-        
-        assertDataSetEquals(DataBuilder.forStandardTypes().build(), dataSourceUpdates.awaitInit());
+
+        FullDataSet<ItemDescriptor> initData = dataSourceUpdates.awaitInit();
+        assertDataSetEquals(DataBuilder.forStandardTypes().build(), initData);
+        assertTrue("Polling data should have shouldPersist=true", initData.shouldPersist());
 
         assertFalse(pollingProcessor.isInitialized());
  

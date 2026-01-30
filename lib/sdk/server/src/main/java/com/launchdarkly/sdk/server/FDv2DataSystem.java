@@ -15,7 +15,6 @@ import com.launchdarkly.sdk.server.subsystems.DataSourceBuildInputs;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
 import com.launchdarkly.sdk.server.subsystems.LoggingConfiguration;
 import com.launchdarkly.sdk.server.subsystems.DataSystemConfiguration;
-import com.launchdarkly.sdk.server.subsystems.ComponentConfigurer;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -154,14 +153,34 @@ final class FDv2DataSystem implements DataSystem, Closeable {
       .map(synchronizer -> new FactoryWrapper<>(synchronizer, builderContext))
       .collect(ImmutableList.toImmutableList());
 
-    DataSource dataSource = new FDv2DataSource(
-      initializerFactories,
-      synchronizerFactories,
-      dataSourceUpdates,
-      config.threadPriority,
-      clientContext.getBaseLogger().subLogger(Loggers.DATA_SOURCE_LOGGER_NAME),
-      clientContext.sharedExecutor
-    );
+    // Create FDv1 fallback synchronizer factory if configured
+    FDv2DataSource.DataSourceFactory<Synchronizer> fdv1FallbackFactory = null;
+    if (dataSystemConfiguration.getFDv1FallbackSynchronizer() != null) {
+      fdv1FallbackFactory = () -> {
+        // Wrap the FDv1 DataSource as a Synchronizer using the adapter
+        return new DataSourceSynchronizerAdapter(
+          updateSink -> dataSystemConfiguration
+              .getFDv1FallbackSynchronizer()
+              .build(clientContext.withDataSourceUpdateSink(updateSink))
+        );
+      };
+    }
+
+    final DataSource dataSource;
+    if (config.offline) {
+      dataSource = Components.externalUpdatesOnly().build(clientContext.withDataSourceUpdateSink(dataSourceUpdates));
+    } else {
+      dataSource = new FDv2DataSource(
+        initializerFactories,
+        synchronizerFactories,
+        fdv1FallbackFactory,
+        dataSourceUpdates,
+        config.threadPriority,
+        clientContext.getBaseLogger().subLogger(Loggers.DATA_SOURCE_LOGGER_NAME),
+        clientContext.sharedExecutor
+      );
+    }
+
     DataSourceStatusProvider dataSourceStatusProvider = new DataSourceStatusProviderImpl(
       dataSourceStatusBroadcaster,
       dataSourceUpdates);

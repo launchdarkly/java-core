@@ -396,7 +396,8 @@ public class DataModelDependenciesTest {
         ChangeSetType.Partial,
         selector,
         ImmutableList.of(),
-        environmentId
+        environmentId,
+        true
     );
     
     ChangeSet<ItemDescriptor> result = DataModelDependencies.sortChangeset(changeSet);
@@ -441,7 +442,8 @@ public class DataModelDependenciesTest {
         ChangeSetType.Partial,
         Selector.make(1, "state1"),
         changeSetData,
-        null
+        null,
+        true
     );
     
     ChangeSet<ItemDescriptor> result = DataModelDependencies.sortChangeset(changeSet);
@@ -489,7 +491,8 @@ public class DataModelDependenciesTest {
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         changeSetData,
-        null
+        null,
+        true
     );
     
     ChangeSet<ItemDescriptor> result = DataModelDependencies.sortChangeset(changeSet);
@@ -506,7 +509,8 @@ public class DataModelDependenciesTest {
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         ImmutableList.of(),
-        null
+        null,
+        true
     );
     
     ChangeSet<ItemDescriptor> result = DataModelDependencies.sortChangeset(changeSet);
@@ -542,7 +546,8 @@ public class DataModelDependenciesTest {
         ChangeSetType.Partial,
         Selector.make(1, "state1"),
         changeSetData,
-        null
+        null,
+        true
     );
     
     ChangeSet<ItemDescriptor> result = DataModelDependencies.sortChangeset(changeSet);
@@ -582,7 +587,8 @@ public class DataModelDependenciesTest {
         ChangeSetType.Partial,
         Selector.make(1, "state1"),
         changeSetData,
-        null
+        null,
+        true
     );
     
     ChangeSet<ItemDescriptor> result = DataModelDependencies.sortChangeset(changeSet);

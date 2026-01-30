@@ -6,8 +6,10 @@ import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSetType;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 
 import org.junit.Test;
 
@@ -85,7 +87,8 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         changeSetData,
-        "test-env"
+        "test-env",
+        true
     );
 
     typedStore().apply(changeSet);
@@ -108,7 +111,8 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
         ChangeSetType.Full,
         selector,
         ImmutableList.of(),
-        null
+        null,
+        true
     );
 
     typedStore().apply(changeSet);
@@ -125,7 +129,8 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         ImmutableList.of(),
-        null
+        null,
+        true
     );
 
     typedStore().apply(changeSet);
@@ -158,7 +163,8 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData,
-        null
+        null,
+        true
     );
 
     typedStore().apply(changeSet);
@@ -200,7 +206,8 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData,
-        null
+        null,
+        true
     );
 
     typedStore().apply(changeSet);
@@ -241,7 +248,8 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData,
-        null
+        null,
+        true
     );
 
     typedStore().apply(changeSet);
@@ -269,7 +277,8 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
         ChangeSetType.Partial,
         newSelector,
         ImmutableList.of(),
-        null
+        null,
+        true
     );
 
     typedStore().apply(changeSet);
@@ -287,7 +296,8 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
         ChangeSetType.None,
         Selector.make(5, "state5"),
         ImmutableList.of(),
-        null
+        null,
+        true
     );
 
     typedStore().apply(changeSet);
@@ -334,7 +344,8 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         changeSetData,
-        null
+        null,
+        true
     );
 
     typedStore().apply(changeSet);
@@ -381,7 +392,8 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData,
-        null
+        null,
+        true
     );
 
     typedStore().apply(changeSet);
@@ -429,7 +441,8 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData,
-        null
+        null,
+        true
     );
 
     typedStore().apply(changeSet);
@@ -454,7 +467,8 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         ImmutableList.of(),
-        null
+        null,
+        true
     );
 
     typedStore().apply(changeSet);
@@ -489,7 +503,8 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
         ChangeSetType.Partial,
         Selector.make(1, "state1"),
         changeSetData,
-        null
+        null,
+        true
     );
 
     typedStore().apply(changeSet);
@@ -528,7 +543,8 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         changeSetData,
-        null
+        null,
+        true
     );
 
     typedStore().apply(changeSet);
@@ -583,6 +599,9 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
     assertEquals(1, otherKindData.size());
     assertEquals(item3, otherKindData.get("key3").getItem());
     assertEquals(3, otherKindData.get("key3").getVersion());
+    
+    // Verify shouldPersist is preserved (DataBuilder.build() returns shouldPersist=true)
+    assertTrue(exported.shouldPersist());
   }
 
   @Test
@@ -595,6 +614,9 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
       count++;
     }
     assertEquals(0, count);
+    
+    // Empty store should default to shouldPersist=false (initial default value)
+    assertFalse(exported.shouldPersist());
   }
 
   @Test
@@ -629,6 +651,9 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
     ItemDescriptor deletedItem = testKindData.get("key2");
     assertNull(deletedItem.getItem());
     assertEquals(2, deletedItem.getVersion());
+    
+    // Verify shouldPersist is preserved from init (DataBuilder.build() returns shouldPersist=true)
+    assertTrue(exported.shouldPersist());
   }
 
   @Test
@@ -714,5 +739,216 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
     assertNotNull(testKindData);
     assertEquals(1, testKindData.size());
     assertEquals("key1", testKindData.keySet().iterator().next());
+    
+    // Verify shouldPersist is preserved from init (DataBuilder.build() returns shouldPersist=true)
+    assertTrue(exported.shouldPersist());
+  }
+
+  @Test
+  public void exportAllPreservesShouldPersistFromInitWithFalse() {
+    TestItem item1 = new TestItem("key1", "item1", 1);
+    
+    // Initialize with shouldPersist=false (e.g., from file data source)
+    FullDataSet<ItemDescriptor> initData = new FullDataSet<>(
+        new DataStoreTestTypes.DataBuilder()
+            .add(TEST_ITEMS, item1)
+            .build().getData(),
+        false // shouldPersist=false
+    );
+    store.init(initData);
+    
+    FullDataSet<ItemDescriptor> exported = typedStore().exportAll();
+    
+    // Verify shouldPersist=false is preserved
+    assertFalse(exported.shouldPersist());
+    
+    // Verify data is correct
+    Map<String, ItemDescriptor> testKindData = null;
+    for (Map.Entry<com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind,
+        com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems<ItemDescriptor>> entry : exported.getData()) {
+      if (entry.getKey() == TEST_ITEMS) {
+        testKindData = toItemsMap(entry.getValue());
+      }
+    }
+    assertNotNull(testKindData);
+    assertEquals(1, testKindData.size());
+    assertEquals(item1, testKindData.get("key1").getItem());
+  }
+
+  @Test
+  public void exportAllPreservesShouldPersistFromInitWithTrue() {
+    TestItem item1 = new TestItem("key1", "item1", 1);
+    
+    // Initialize with shouldPersist=true (e.g., from polling/streaming data source)
+    FullDataSet<ItemDescriptor> initData = new FullDataSet<>(
+        new DataStoreTestTypes.DataBuilder()
+            .add(TEST_ITEMS, item1)
+            .build().getData(),
+        true // shouldPersist=true
+    );
+    store.init(initData);
+    
+    FullDataSet<ItemDescriptor> exported = typedStore().exportAll();
+    
+    // Verify shouldPersist=true is preserved
+    assertTrue(exported.shouldPersist());
+    
+    // Verify data is correct
+    Map<String, ItemDescriptor> testKindData = null;
+    for (Map.Entry<com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind,
+        com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems<ItemDescriptor>> entry : exported.getData()) {
+      if (entry.getKey() == TEST_ITEMS) {
+        testKindData = toItemsMap(entry.getValue());
+      }
+    }
+    assertNotNull(testKindData);
+    assertEquals(1, testKindData.size());
+    assertEquals(item1, testKindData.get("key1").getItem());
+  }
+
+  @Test
+  public void exportAllPreservesShouldPersistWhenApplyFalseOverwritesTrue() {
+    TestItem item1 = new TestItem("key1", "item1", 1);
+    TestItem item2 = new TestItem("key2", "item2", 2);
+    
+    // Initialize with shouldPersist=true
+    FullDataSet<ItemDescriptor> initData = new FullDataSet<>(
+        new DataStoreTestTypes.DataBuilder()
+            .add(TEST_ITEMS, item1)
+            .build().getData(),
+        true // shouldPersist=true
+    );
+    store.init(initData);
+    
+    // Apply change set with shouldPersist=false (e.g., file data source overwrites)
+    Map<DataKind, KeyedItems<ItemDescriptor>> changeSetData = ImmutableMap.of(
+        TEST_ITEMS,
+        new KeyedItems<>(ImmutableList.of(
+            new AbstractMap.SimpleEntry<>("key2", new ItemDescriptor(2, item2))
+        ))
+    );
+    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+        ChangeSetType.Partial,
+        Selector.make(2, "state2"),
+        changeSetData.entrySet(),
+        null,
+        false // shouldPersist=false
+    );
+    typedStore().apply(changeSet);
+    
+    FullDataSet<ItemDescriptor> exported = typedStore().exportAll();
+    
+    // Verify shouldPersist=false is preserved (most recent apply overwrites)
+    assertFalse(exported.shouldPersist());
+    
+    // Verify data includes both items
+    Map<String, ItemDescriptor> testKindData = null;
+    for (Map.Entry<com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind,
+        com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems<ItemDescriptor>> entry : exported.getData()) {
+      if (entry.getKey() == TEST_ITEMS) {
+        testKindData = toItemsMap(entry.getValue());
+      }
+    }
+    assertNotNull(testKindData);
+    assertEquals(2, testKindData.size());
+    assertEquals(item1, testKindData.get("key1").getItem());
+    assertEquals(item2, testKindData.get("key2").getItem());
+  }
+
+  @Test
+  public void exportAllPreservesShouldPersistWhenApplyTrueOverwritesFalse() {
+    TestItem item1 = new TestItem("key1", "item1", 1);
+    TestItem item2 = new TestItem("key2", "item2", 2);
+    
+    // Initialize with shouldPersist=false
+    FullDataSet<ItemDescriptor> initData = new FullDataSet<>(
+        new DataStoreTestTypes.DataBuilder()
+            .add(TEST_ITEMS, item1)
+            .build().getData(),
+        false // shouldPersist=false
+    );
+    store.init(initData);
+    
+    // Apply change set with shouldPersist=true (e.g., polling data source overwrites file data)
+    Map<DataKind, KeyedItems<ItemDescriptor>> changeSetData = ImmutableMap.of(
+        TEST_ITEMS,
+        new KeyedItems<>(ImmutableList.of(
+            new AbstractMap.SimpleEntry<>("key2", new ItemDescriptor(2, item2))
+        ))
+    );
+    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+        ChangeSetType.Partial,
+        Selector.make(2, "state2"),
+        changeSetData.entrySet(),
+        null,
+        true // shouldPersist=true
+    );
+    typedStore().apply(changeSet);
+    
+    FullDataSet<ItemDescriptor> exported = typedStore().exportAll();
+    
+    // Verify shouldPersist=true is preserved (most recent apply overwrites)
+    assertTrue(exported.shouldPersist());
+    
+    // Verify data includes both items
+    Map<String, ItemDescriptor> testKindData = null;
+    for (Map.Entry<com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind,
+        com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems<ItemDescriptor>> entry : exported.getData()) {
+      if (entry.getKey() == TEST_ITEMS) {
+        testKindData = toItemsMap(entry.getValue());
+      }
+    }
+    assertNotNull(testKindData);
+    assertEquals(2, testKindData.size());
+    assertEquals(item1, testKindData.get("key1").getItem());
+    assertEquals(item2, testKindData.get("key2").getItem());
+  }
+
+  @Test
+  public void exportAllPreservesShouldPersistWhenFullChangeSetOverwrites() {
+    TestItem item1 = new TestItem("key1", "item1", 1);
+    TestItem item2 = new TestItem("key2", "item2", 2);
+    
+    // Initialize with shouldPersist=true
+    FullDataSet<ItemDescriptor> initData = new FullDataSet<>(
+        new DataStoreTestTypes.DataBuilder()
+            .add(TEST_ITEMS, item1)
+            .build().getData(),
+        true // shouldPersist=true
+    );
+    store.init(initData);
+    
+    // Apply full change set with shouldPersist=false
+    Map<DataKind, KeyedItems<ItemDescriptor>> changeSetData = ImmutableMap.of(
+        TEST_ITEMS,
+        new KeyedItems<>(ImmutableList.of(
+            new AbstractMap.SimpleEntry<>("key2", new ItemDescriptor(2, item2))
+        ))
+    );
+    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+        ChangeSetType.Full,
+        Selector.make(2, "state2"),
+        changeSetData.entrySet(),
+        null,
+        false // shouldPersist=false
+    );
+    typedStore().apply(changeSet);
+    
+    FullDataSet<ItemDescriptor> exported = typedStore().exportAll();
+    
+    // Verify shouldPersist=false is preserved (most recent apply overwrites)
+    assertFalse(exported.shouldPersist());
+    
+    // Verify data only includes item2 (full change set replaces all data)
+    Map<String, ItemDescriptor> testKindData = null;
+    for (Map.Entry<com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind,
+        com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems<ItemDescriptor>> entry : exported.getData()) {
+      if (entry.getKey() == TEST_ITEMS) {
+        testKindData = toItemsMap(entry.getValue());
+      }
+    }
+    assertNotNull(testKindData);
+    assertEquals(1, testKindData.size());
+    assertEquals(item2, testKindData.get("key2").getItem());
   }
 }
