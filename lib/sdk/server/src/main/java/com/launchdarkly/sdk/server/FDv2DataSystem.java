@@ -15,7 +15,6 @@ import com.launchdarkly.sdk.server.subsystems.DataSourceBuildInputs;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
 import com.launchdarkly.sdk.server.subsystems.LoggingConfiguration;
 import com.launchdarkly.sdk.server.subsystems.DataSystemConfiguration;
-import com.launchdarkly.sdk.server.subsystems.ComponentConfigurer;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -167,15 +166,21 @@ final class FDv2DataSystem implements DataSystem, Closeable {
       };
     }
 
-    DataSource dataSource = new FDv2DataSource(
-      initializerFactories,
-      synchronizerFactories,
-      fdv1FallbackFactory,
-      dataSourceUpdates,
-      config.threadPriority,
-      clientContext.getBaseLogger().subLogger(Loggers.DATA_SOURCE_LOGGER_NAME),
-      clientContext.sharedExecutor
-    );
+    final DataSource dataSource;
+    if (config.offline) {
+      dataSource = Components.externalUpdatesOnly().build(clientContext.withDataSourceUpdateSink(dataSourceUpdates));
+    } else {
+      dataSource = new FDv2DataSource(
+        initializerFactories,
+        synchronizerFactories,
+        fdv1FallbackFactory,
+        dataSourceUpdates,
+        config.threadPriority,
+        clientContext.getBaseLogger().subLogger(Loggers.DATA_SOURCE_LOGGER_NAME),
+        clientContext.sharedExecutor
+      );
+    }
+
     DataSourceStatusProvider dataSourceStatusProvider = new DataSourceStatusProviderImpl(
       dataSourceStatusBroadcaster,
       dataSourceUpdates);
