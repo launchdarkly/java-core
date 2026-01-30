@@ -2,6 +2,7 @@ package com.launchdarkly.sdk.server.integrations;
 
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.logging.LogValues;
+import com.launchdarkly.sdk.collections.IterableAsyncQueue;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.integrations.FileDataSourceBuilder.SourceInfo;
@@ -33,7 +34,7 @@ import static java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY;
  */
 final class FileSynchronizer extends FileDataSourceBase implements Synchronizer {
     private final CompletableFuture<FDv2SourceResult> shutdownFuture = new CompletableFuture<>();
-    private final AsyncQueue<FDv2SourceResult> resultQueue = new AsyncQueue<>();
+    private final IterableAsyncQueue<FDv2SourceResult> resultQueue = new IterableAsyncQueue<>();
     private final FileWatcher fileWatcher;  // null if autoUpdate=false
     private volatile boolean started = false;
 
@@ -84,37 +85,6 @@ final class FileSynchronizer extends FileDataSourceBase implements Synchronizer 
         shutdownFuture.complete(FDv2SourceResult.shutdown());
         if (fileWatcher != null) {
             fileWatcher.stop();
-        }
-    }
-
-    /**
-     * A simple thread-safe async queue for passing results between the file watcher and the synchronizer.
-     */
-    private static final class AsyncQueue<T> {
-        private final Object lock = new Object();
-        private final LinkedList<T> queue = new LinkedList<>();
-        private final LinkedList<CompletableFuture<T>> pendingFutures = new LinkedList<>();
-
-        public void put(T item) {
-            synchronized (lock) {
-                CompletableFuture<T> nextFuture = pendingFutures.pollFirst();
-                if (nextFuture != null) {
-                    nextFuture.complete(item);
-                    return;
-                }
-                queue.addLast(item);
-            }
-        }
-
-        public CompletableFuture<T> take() {
-            synchronized (lock) {
-                if (!queue.isEmpty()) {
-                    return CompletableFuture.completedFuture(queue.removeFirst());
-                }
-                CompletableFuture<T> takeFuture = new CompletableFuture<>();
-                pendingFutures.addLast(takeFuture);
-                return takeFuture;
-            }
         }
     }
 
