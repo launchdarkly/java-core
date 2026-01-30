@@ -17,7 +17,7 @@ import java.util.concurrent.CompletableFuture;
  *
  * @param <T> the type of elements held in this queue
  */
-class IterableAsyncQueue<T> {
+public class IterableAsyncQueue<T> {
     private final Object lock = new Object();
     private final LinkedList<T> queue = new LinkedList<>();
 
