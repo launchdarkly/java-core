@@ -33,6 +33,8 @@ final class FileDataSourceImpl implements DataSource {
     private final LDLogger logger;
     private Thread updateThread;
 
+    private final boolean autoUpdate;
+
     FileDataSourceImpl(
             DataSourceUpdateSink dataSourceUpdates,
             List<SourceInfo> sources,
@@ -42,8 +44,8 @@ final class FileDataSourceImpl implements DataSource {
     ) {
         this.dataSourceUpdates = dataSourceUpdates;
         this.logger = logger;
-        // The FDv1
         this.synchronizer = new FileSynchronizer(sources, autoUpdate, duplicateKeysHandling, logger, true);
+        this.autoUpdate = autoUpdate;
     }
 
     @Override
@@ -62,14 +64,13 @@ final class FileDataSourceImpl implements DataSource {
 
         processResult(initialResult);
 
-        // Note that if the initial load finds any errors, it will not set our status to "initialized".
-        // But we will still do all the other startup steps, because we still might end up getting
-        // valid data if we are told to reload by the file watcher.
-
-        // Start a background thread to listen for file changes
-        updateThread = new Thread(this::runUpdateLoop, FileDataSourceImpl.class.getName());
-        updateThread.setDaemon(true);
-        updateThread.start();
+        // We only need to drive the update loop if auto-updating is enabled.
+        if(autoUpdate) {
+            // Start a background thread to listen for file changes
+            updateThread = new Thread(this::runUpdateLoop, FileDataSourceImpl.class.getName());
+            updateThread.setDaemon(true);
+            updateThread.start();
+        }
 
         return initFuture;
     }
