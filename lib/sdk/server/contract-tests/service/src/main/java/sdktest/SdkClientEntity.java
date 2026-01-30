@@ -11,6 +11,7 @@ import com.launchdarkly.sdk.server.FeatureFlagsState;
 import com.launchdarkly.sdk.server.FlagsStateOption;
 import com.launchdarkly.sdk.server.LDClient;
 import com.launchdarkly.sdk.server.LDConfig;
+import com.launchdarkly.sdk.server.interfaces.ServiceEndpoints;
 import com.launchdarkly.sdk.server.migrations.Migration;
 import com.launchdarkly.sdk.server.migrations.MigrationBuilder;
 import com.launchdarkly.sdk.server.migrations.MigrationExecution;
@@ -25,12 +26,15 @@ import com.launchdarkly.sdk.server.integrations.EventProcessorBuilder;
 import com.launchdarkly.sdk.server.integrations.HooksConfigurationBuilder;
 import com.launchdarkly.sdk.server.integrations.ServiceEndpointsBuilder;
 import com.launchdarkly.sdk.server.integrations.StreamingDataSourceBuilder;
+import com.launchdarkly.sdk.server.integrations.PollingDataSourceBuilder;
 import com.launchdarkly.sdk.server.integrations.DataSystemBuilder;
 import com.launchdarkly.sdk.server.DataSystemComponents;
 import com.launchdarkly.sdk.server.integrations.FDv2PollingInitializerBuilder;
 import com.launchdarkly.sdk.server.integrations.FDv2PollingSynchronizerBuilder;
 import com.launchdarkly.sdk.server.integrations.FDv2StreamingSynchronizerBuilder;
 import com.launchdarkly.sdk.server.interfaces.BigSegmentStoreStatusProvider;
+import com.launchdarkly.sdk.server.subsystems.ComponentConfigurer;
+import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataSourceBuilder;
 import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
@@ -563,6 +567,22 @@ public class SdkClientEntity {
         }
       }
 
+      // Configure FDv1 fallback synchronizer
+      SdkConfigSynchronizerParams fallbackSynchronizer =
+          selectFallbackSynchronizer(params.dataSystem);
+      if (fallbackSynchronizer != null) {
+        // Set global polling endpoints if the fallback synchronizer has polling with custom base URI
+        if (fallbackSynchronizer.polling != null &&
+            fallbackSynchronizer.polling.baseUri != null) {
+          endpoints.polling(fallbackSynchronizer.polling.baseUri);
+        }
+
+        // Create and configure FDv1 fallback
+        ComponentConfigurer<DataSource> fdv1Fallback =
+            createFDv1FallbackSynchronizer(fallbackSynchronizer);
+        dataSystemBuilder.fDv1FallbackSynchronizer(fdv1Fallback);
+      }
+
       builder.dataSystem(dataSystemBuilder);
     }
 
@@ -600,5 +620,60 @@ public class SdkClientEntity {
       return streamingBuilder;
     }
     return null;
+  }
+
+  /**
+   * Selects the best synchronizer configuration to use for FDv1 fallback.
+   * Prefers polling synchronizers, falls back to primary synchronizer.
+   */
+  private static SdkConfigSynchronizerParams selectFallbackSynchronizer(
+      SdkConfigDataSystemParams dataSystemParams) {
+
+    // Prefer secondary polling synchronizer
+    if (dataSystemParams.synchronizers != null &&
+        dataSystemParams.synchronizers.secondary != null &&
+        dataSystemParams.synchronizers.secondary.polling != null) {
+      return dataSystemParams.synchronizers.secondary;
+    }
+
+    // Fall back to primary polling synchronizer
+    if (dataSystemParams.synchronizers != null &&
+        dataSystemParams.synchronizers.primary != null &&
+        dataSystemParams.synchronizers.primary.polling != null) {
+      return dataSystemParams.synchronizers.primary;
+    }
+
+    // Fall back to primary synchronizer (even if streaming)
+    if (dataSystemParams.synchronizers != null &&
+        dataSystemParams.synchronizers.primary != null) {
+      return dataSystemParams.synchronizers.primary;
+    }
+
+    return null;
+  }
+
+  /**
+   * Creates the FDv1 fallback synchronizer based on the selected synchronizer config.
+   * FDv1 fallback is always polling-based and uses the global service endpoints configuration.
+   */
+  private static ComponentConfigurer<DataSource> createFDv1FallbackSynchronizer(
+      SdkConfigSynchronizerParams synchronizer) {
+
+    // FDv1 fallback is always polling-based
+    PollingDataSourceBuilder fdv1Polling = Components.pollingDataSource();
+
+    // Configure polling interval if the synchronizer has polling configuration
+    if (synchronizer.polling != null) {
+      if (synchronizer.polling.pollIntervalMs != null) {
+        fdv1Polling.pollInterval(Duration.ofMillis(synchronizer.polling.pollIntervalMs));
+      }
+      // Note: FDv1 polling doesn't support per-source service endpoints override,
+      // so it will use the global service endpoints configuration (which is set
+      // by the caller before this method is invoked)
+    }
+    // If streaming synchronizer, use default polling interval
+    // (no additional configuration needed)
+
+    return fdv1Polling;
   }
 }

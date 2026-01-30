@@ -290,6 +290,16 @@ public abstract class DataStoreTypes {
      * Constructs a new instance.
      * 
      * @param data the data set
+     */
+    public FullDataSet(Iterable<Map.Entry<DataKind, KeyedItems<TDescriptor>>> data) {
+      this.data = data == null ? ImmutableList.of(): data;
+      this.shouldPersist = true; // default to true if not specified for backwards compatibility
+    }
+    
+    /**
+     * Constructs a new instance.
+     * 
+     * @param data the data set
      * @param shouldPersist true if the data should be persisted to persistent stores, false otherwise
      */
     public FullDataSet(Iterable<Map.Entry<DataKind, KeyedItems<TDescriptor>>> data, boolean shouldPersist) {
