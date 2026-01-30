@@ -68,7 +68,7 @@ public class PersistentDataStoreWrapperRecoveryTest extends BaseTest {
       }
       builder.add(new AbstractMap.SimpleEntry<>(e.getKey(), new KeyedItems<>(itemsBuilder.build())));
     }
-    return new FullDataSet<>(builder.build());
+    return new FullDataSet<>(builder.build(), true);
   }
 
   // Helper method to merge two FullDataSets
@@ -99,7 +99,7 @@ public class PersistentDataStoreWrapperRecoveryTest extends BaseTest {
       }
       builder.add(new AbstractMap.SimpleEntry<>(e.getKey(), new KeyedItems<>(itemsBuilder.build())));
     }
-    return new FullDataSet<>(builder.build());
+    return new FullDataSet<>(builder.build(), true);
   }
 
   private PersistentDataStoreWrapper makeWrapperWithExternalSource(CacheExporter externalSource) {
@@ -495,7 +495,7 @@ public class PersistentDataStoreWrapperRecoveryTest extends BaseTest {
       }
       builder2.add(new AbstractMap.SimpleEntry<>(e.getKey(), new KeyedItems<>(itemsBuilder.build())));
     }
-    externalSource.setData(new FullDataSet<>(builder2.build()));
+    externalSource.setData(new FullDataSet<>(builder2.build(), true));
 
     PersistentDataStoreWrapper wrapper = makeWrapperWithExternalSource(externalSource);
     try {
@@ -596,6 +596,82 @@ public class PersistentDataStoreWrapperRecoveryTest extends BaseTest {
       assertTrue(logCapture.getMessages().stream()
           .anyMatch(m -> m.getLevel().name().equals("WARN") &&
               m.getText().contains("Successfully updated persistent store from cached data")));
+    } finally {
+      wrapper.close();
+    }
+  }
+
+  @Test
+  public void externalDataSourceSyncWithShouldPersistFalseDoesNotPersist() throws Exception {
+    // This test verifies that when exportAll() returns data with shouldPersist=false,
+    // the data is NOT persisted during recovery
+    MockCacheExporter externalSource = new MockCacheExporter();
+    DataStoreTestTypes.TestItem item1 = new DataStoreTestTypes.TestItem("key1", "item1", 1);
+    DataStoreTestTypes.TestItem item2 = new DataStoreTestTypes.TestItem("key2", "item2", 1);
+
+    // Set data with shouldPersist=false (e.g., from a file data source)
+    FullDataSet<ItemDescriptor> nonAuthoritativeData = new FullDataSet<>(
+        new DataStoreTestTypes.DataBuilder()
+            .add(TEST_ITEMS, item1)
+            .add(TEST_ITEMS, item2)
+            .build().getData(),
+            false
+    );
+    externalSource.setData(nonAuthoritativeData);
+
+    PersistentDataStoreWrapper wrapper = makeWrapperWithExternalSource(externalSource);
+    try {
+      DataStoreStatusProvider dataStoreStatusProvider = new DataStoreStatusProviderImpl(wrapper, dataStoreUpdates);
+      BlockingQueue<DataStoreStatusProvider.Status> statuses = new LinkedBlockingQueue<>();
+      dataStoreStatusProvider.addStatusListener(statuses::add);
+
+      // Initialize the wrapper with some initial authoritative data
+      wrapper.init(new DataStoreTestTypes.DataBuilder()
+          .add(TEST_ITEMS, item1)
+          .build());
+
+      // Verify initial data is in persistent store
+      SerializedItemDescriptor initialItem = core.data.get(TEST_ITEMS).get("key1");
+      assertNotNull(initialItem);
+      assertEquals(1, initialItem.getVersion());
+
+      // Cause a store error
+      core.unavailable = true;
+      core.fakeError = FAKE_ERROR;
+      try {
+        wrapper.upsert(TEST_ITEMS, "key1", new ItemDescriptor(2, item1));
+        fail("Expected exception");
+      } catch (RuntimeException e) {
+        assertEquals(FAKE_ERROR.getMessage(), e.getMessage());
+      }
+
+      DataStoreStatusProvider.Status unavailableStatus = statuses.poll(TIMEOUT_FOR_RECOVERY.toMillis(), TimeUnit.MILLISECONDS);
+      assertNotNull("Expected unavailable status", unavailableStatus);
+      assertFalse(unavailableStatus.isAvailable());
+
+      // Make store available again
+      core.fakeError = null;
+      core.unavailable = false;
+
+      // Wait for recovery
+      DataStoreStatusProvider.Status recoveryStatus = statuses.poll(TIMEOUT_FOR_RECOVERY.toMillis(), TimeUnit.MILLISECONDS);
+      assertNotNull("Expected recovery status update", recoveryStatus);
+      assertTrue(recoveryStatus.isAvailable());
+
+      // Verify that the non-authoritative data (shouldPersist=false) was NOT persisted
+      // The persistent store should still have the original data, not the new data from external source
+      SerializedItemDescriptor persistedItem1 = core.data.get(TEST_ITEMS).get("key1");
+      assertNotNull(persistedItem1);
+      // Should still be version 1 (from initial init), not updated with external source data
+      assertEquals(1, persistedItem1.getVersion());
+
+      // item2 should not exist in persistent store since it was only in the non-authoritative external source
+      assertFalse(core.data.get(TEST_ITEMS).containsKey("key2"));
+
+      // Check log message - should indicate skipping persistence
+      assertTrue(logCapture.getMessages().stream()
+          .anyMatch(m -> m.getLevel().name().equals("DEBUG") &&
+              m.getText().contains("Skipping persistence of non-authoritative data (shouldPersist=false) during recovery")));
     } finally {
       wrapper.close();
     }

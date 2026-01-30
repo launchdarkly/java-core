@@ -86,7 +86,8 @@ class PollingBase {
                         new DataStoreTypes.ChangeSet<>(DataStoreTypes.ChangeSetType.None,
                                 Selector.EMPTY,
                                 null,
-                                null // Header derived values will have been handled on initial response.
+                                null, // Header derived values will have been handled on initial response.
+                                true // Polling data from LaunchDarkly should be persisted
                         ),
                         // Headers would have been processed from the initial response.
                         false);
@@ -113,7 +114,8 @@ class PollingBase {
                             DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> converted = FDv2ChangeSetTranslator.toChangeSet(
                                     ((FDv2ProtocolHandler.FDv2ActionChangeset) res).getChangeset(),
                                     logger,
-                                    environmentId
+                                    environmentId,
+                                    true // Polling data from LaunchDarkly should be persisted
                             );
                             return FDv2SourceResult.changeSet(converted, fdv1Fallback);
                         } catch (Exception e) {

@@ -59,7 +59,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, Selector.make(1, "state1"));
 
     DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
-        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null);
+        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     assertEquals(ChangeSetType.Full, result.getType());
   }
@@ -72,7 +72,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.PARTIAL, changes, Selector.make(1, "state1"));
 
     DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
-        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null);
+        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     assertEquals(ChangeSetType.Partial, result.getType());
   }
@@ -83,7 +83,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.NONE, changes, Selector.make(1, "state1"));
 
     DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
-        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null);
+        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     assertEquals(ChangeSetType.None, result.getType());
   }
@@ -95,7 +95,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, selector);
 
     DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
-        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null);
+        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     assertEquals(selector.getVersion(), result.getSelector().getVersion());
     assertEquals(selector.getState(), result.getSelector().getState());
@@ -107,7 +107,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, Selector.make(1, "state1"));
 
     DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
-        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, "test-env-id");
+        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, "test-env-id", true);
 
     assertEquals("test-env-id", result.getEnvironmentId());
   }
@@ -118,7 +118,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, Selector.make(1, "state1"));
 
     DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
-        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null);
+        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     assertNull(result.getEnvironmentId());
   }
@@ -131,7 +131,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, Selector.make(1, "state1"));
 
     DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
-        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null);
+        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     Map.Entry<DataKind, KeyedItems<DataStoreTypes.ItemDescriptor>> flagData = findDataKind(result, "features");
     assertNotNull(flagData);
@@ -149,7 +149,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.PARTIAL, changes, Selector.make(1, "state1"));
 
     DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
-        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null);
+        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     Map.Entry<DataKind, KeyedItems<DataStoreTypes.ItemDescriptor>> flagData = findDataKind(result, "features");
     assertNotNull(flagData);
@@ -168,7 +168,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, Selector.make(1, "state1"));
 
     DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
-        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null);
+        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     Map.Entry<DataKind, KeyedItems<DataStoreTypes.ItemDescriptor>> flagData = findDataKind(result, "features");
     assertNotNull(flagData);
@@ -184,7 +184,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, Selector.make(1, "state1"));
 
     DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
-        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null);
+        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     assertEquals(2, countDataKinds(result));
     assertNotNull(findDataKind(result, "features"));
@@ -200,7 +200,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, Selector.make(1, "state1"));
 
     DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
-        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null);
+        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     assertEquals(1, countDataKinds(result));
     assertNotNull(findDataKind(result, "features"));
@@ -216,7 +216,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, Selector.make(1, "state1"));
 
     DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
-        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null);
+        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     Map.Entry<DataKind, KeyedItems<DataStoreTypes.ItemDescriptor>> flagData = findDataKind(result, "features");
     assertNotNull(flagData);
@@ -231,7 +231,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, Selector.make(1, "state1"));
 
     DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
-        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null);
+        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     assertEquals(0, countDataKinds(result));
   }
@@ -246,7 +246,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.PARTIAL, changes, Selector.make(1, "state1"));
 
     DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
-        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null);
+        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     assertEquals(2, countDataKinds(result));
 
@@ -277,7 +277,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, Selector.make(1, "state1"));
 
     DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
-        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null);
+        FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     Map.Entry<DataKind, KeyedItems<DataStoreTypes.ItemDescriptor>> flagData = findDataKind(result, "features");
     assertNotNull(flagData);

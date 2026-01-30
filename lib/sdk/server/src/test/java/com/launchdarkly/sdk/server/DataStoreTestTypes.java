@@ -177,7 +177,8 @@ public class DataStoreTestTypes {
           ImmutableMap.copyOf(
               Maps.transformValues(data, itemsMap ->
                 new KeyedItems<>(ImmutableList.copyOf(itemsMap.entrySet()))
-              )).entrySet()
+              )).entrySet(),
+              true
           );
     }
     
@@ -191,7 +192,9 @@ public class DataStoreTestTypes {
                     ).entrySet()
                     )
                 )
-          ).entrySet());
+          ).entrySet(),
+          true
+          );
     }
     
     public LDValue buildJson() {

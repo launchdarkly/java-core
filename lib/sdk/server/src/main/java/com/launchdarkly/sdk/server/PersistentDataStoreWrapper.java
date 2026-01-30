@@ -186,7 +186,7 @@ final class PersistentDataStoreWrapper implements DataStore, SettableCache {
       KeyedItems<SerializedItemDescriptor> items = PersistentDataStoreConverter.serializeAll(kind, e0.getValue());
       allBuilder.add(new AbstractMap.SimpleEntry<>(kind, items));
     }
-    RuntimeException failure = initCore(new FullDataSet<>(allBuilder.build()));
+    RuntimeException failure = initCore(new FullDataSet<>(allBuilder.build(), allData.shouldPersist()));
     if (itemCache != null && allCache != null) {
       itemCache.invalidateAll();
       allCache.invalidateAll();
@@ -410,6 +410,12 @@ final class PersistentDataStoreWrapper implements DataStore, SettableCache {
       if (externalCacheSnapshot.isInitialized()) {
         try {
           FullDataSet<ItemDescriptor> externalData = externalCacheSnapshot.exportAll();
+          
+          if (!externalData.shouldPersist()) {
+            logger.debug("Skipping persistence of non-authoritative data (shouldPersist=false) during recovery");
+            return true; // Recovery succeeded, but we didn't persist
+          }
+          
           FullDataSet<SerializedItemDescriptor> serializedData = 
               PersistentDataStoreConverter.toSerializedFormat(externalData);
           RuntimeException e = initCore(serializedData);
@@ -453,7 +459,8 @@ final class PersistentDataStoreWrapper implements DataStore, SettableCache {
           builder.add(new AbstractMap.SimpleEntry<>(kind, PersistentDataStoreConverter.serializeAll(kind, items)));
         }
       }
-      RuntimeException e = initCore(new FullDataSet<>(builder.build()));
+      // any data that this PersistentDataStoreWrapper contains has already passed the shouldPersist check
+      RuntimeException e = initCore(new FullDataSet<>(builder.build(), true));
       if (e == null) {
         logger.warn("Successfully updated persistent store from cached data");
       } else {
