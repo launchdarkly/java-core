@@ -1,7 +1,7 @@
 {
   "lib/java-server-sdk-otel": "0.2.0",
   "lib/java-server-sdk-redis-store": "3.1.0",
-  "lib/shared/common": "2.1.2",
+  "lib/shared/common": "2.2.0",
   "lib/shared/internal": "1.6.1",
   "lib/shared/test-helpers": "2.1.0",
   "lib/sdk/server": "7.10.2"
