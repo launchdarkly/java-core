@@ -26,11 +26,10 @@ public class FileSynchronizerTest {
 
     @Test
     public void synchronizerReturnsChangeSetOnSuccessfulLoad() throws Exception {
-        Synchronizer synchronizer = FileData.synchronizer()
-                .filePaths(resourceFilePath("all-properties.json"))
-                .build(TestDataSourceBuildInputs.create(testLogger));
 
-        try {
+        try (Synchronizer synchronizer = FileData.synchronizer()
+            .filePaths(resourceFilePath("all-properties.json"))
+            .build(TestDataSourceBuildInputs.create(testLogger))) {
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
@@ -38,18 +37,15 @@ public class FileSynchronizerTest {
             assertThat(result.getChangeSet(), notNullValue());
             assertThat(result.getChangeSet().getType(), equalTo(ChangeSetType.Full));
             assertNotNull(result.getChangeSet().getData());
-        } finally {
-            synchronizer.close();
         }
     }
 
     @Test
     public void synchronizerReturnsInterruptedOnMissingFile() throws Exception {
-        Synchronizer synchronizer = FileData.synchronizer()
-                .filePaths(Paths.get("no-such-file.json"))
-                .build(TestDataSourceBuildInputs.create(testLogger));
 
-        try {
+        try (Synchronizer synchronizer = FileData.synchronizer()
+            .filePaths(Paths.get("no-such-file.json"))
+            .build(TestDataSourceBuildInputs.create(testLogger))) {
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
@@ -57,8 +53,6 @@ public class FileSynchronizerTest {
             assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.STATUS));
             assertThat(result.getStatus().getState(), equalTo(FDv2SourceResult.State.INTERRUPTED));
             assertNotNull(result.getStatus().getErrorInfo());
-        } finally {
-            synchronizer.close();
         }
     }
 
@@ -87,60 +81,51 @@ public class FileSynchronizerTest {
 
     @Test
     public void synchronizerCanLoadFromClasspathResource() throws Exception {
-        Synchronizer synchronizer = FileData.synchronizer()
-                .classpathResources(FileDataSourceTestData.resourceLocation("all-properties.json"))
-                .build(TestDataSourceBuildInputs.create(testLogger));
 
-        try {
+        try (Synchronizer synchronizer = FileData.synchronizer()
+            .classpathResources(FileDataSourceTestData.resourceLocation("all-properties.json"))
+            .build(TestDataSourceBuildInputs.create(testLogger))) {
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
             assertThat(result.getChangeSet(), notNullValue());
-        } finally {
-            synchronizer.close();
         }
     }
 
     @Test
     public void synchronizerRespectsIgnoreDuplicateKeysHandling() throws Exception {
-        Synchronizer synchronizer = FileData.synchronizer()
-                .filePaths(
-                        resourceFilePath("flag-only.json"),
-                        resourceFilePath("flag-with-duplicate-key.json")
-                )
-                .duplicateKeysHandling(FileData.DuplicateKeysHandling.IGNORE)
-                .build(TestDataSourceBuildInputs.create(testLogger));
 
-        try {
+        try (Synchronizer synchronizer = FileData.synchronizer()
+            .filePaths(
+                resourceFilePath("flag-only.json"),
+                resourceFilePath("flag-with-duplicate-key.json")
+            )
+            .duplicateKeysHandling(FileData.DuplicateKeysHandling.IGNORE)
+            .build(TestDataSourceBuildInputs.create(testLogger))) {
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             // Should succeed when ignoring duplicates
             assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
-        } finally {
-            synchronizer.close();
         }
     }
 
     @Test
     public void synchronizerFailsOnDuplicateKeysByDefault() throws Exception {
-        Synchronizer synchronizer = FileData.synchronizer()
-                .filePaths(
-                        resourceFilePath("flag-only.json"),
-                        resourceFilePath("flag-with-duplicate-key.json")
-                )
-                .build(TestDataSourceBuildInputs.create(testLogger));
 
-        try {
+        try (Synchronizer synchronizer = FileData.synchronizer()
+            .filePaths(
+                resourceFilePath("flag-only.json"),
+                resourceFilePath("flag-with-duplicate-key.json")
+            )
+            .build(TestDataSourceBuildInputs.create(testLogger))) {
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             // Should fail with interrupted error when duplicate keys are not allowed
             assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.STATUS));
             assertThat(result.getStatus().getState(), equalTo(FDv2SourceResult.State.INTERRUPTED));
-        } finally {
-            synchronizer.close();
         }
     }
 
@@ -150,12 +135,10 @@ public class FileSynchronizerTest {
             try (TempFile file = dir.tempFile(".json")) {
                 file.setContents(getResourceContents("flag-only.json"));
 
-                Synchronizer synchronizer = FileData.synchronizer()
-                        .filePaths(file.getPath())
-                        .autoUpdate(true)
-                        .build(TestDataSourceBuildInputs.create(testLogger));
-
-                try {
+                try (Synchronizer synchronizer = FileData.synchronizer()
+                    .filePaths(file.getPath())
+                    .autoUpdate(true)
+                    .build(TestDataSourceBuildInputs.create(testLogger))) {
                     // Get initial result
                     CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
                     FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
@@ -172,8 +155,6 @@ public class FileSynchronizerTest {
                     // Note: File watching on MacOS can take up to 10 seconds
                     result = nextResultFuture.get(15, TimeUnit.SECONDS);
                     assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
-                } finally {
-                    synchronizer.close();
                 }
             }
         }

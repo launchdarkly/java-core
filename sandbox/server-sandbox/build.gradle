@@ -1,0 +1,29 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'com.launchdarkly'
+version = '1.0.0'
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+repositories {
+    // Check mavenLocal first for local SDK development
+    mavenLocal()
+    // Fall back to mavenCentral for published versions
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'com.launchdarkly:launchdarkly-java-server-sdk:7.10.+'
+    implementation 'org.slf4j:slf4j-simple:1.7.36'
+}
+
+application {
+    mainClass = 'Hello'
+}
+
+run {
+    standardInput = System.in
+}
