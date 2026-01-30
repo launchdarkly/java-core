@@ -33,19 +33,16 @@ final class FileDataSourceImpl implements DataSource {
     private final LDLogger logger;
     private Thread updateThread;
 
-    private final boolean autoUpdate;
-
     FileDataSourceImpl(
-            DataSourceUpdateSink dataSourceUpdates,
-            List<SourceInfo> sources,
-            boolean autoUpdate,
-            FileData.DuplicateKeysHandling duplicateKeysHandling,
-            LDLogger logger
+        DataSourceUpdateSink dataSourceUpdates,
+        List<SourceInfo> sources,
+        boolean autoUpdate,
+        FileData.DuplicateKeysHandling duplicateKeysHandling,
+        LDLogger logger
     ) {
         this.dataSourceUpdates = dataSourceUpdates;
         this.logger = logger;
         this.synchronizer = new FileSynchronizer(sources, autoUpdate, duplicateKeysHandling, logger, true);
-        this.autoUpdate = autoUpdate;
     }
 
     @Override
@@ -64,13 +61,11 @@ final class FileDataSourceImpl implements DataSource {
 
         processResult(initialResult);
 
-        // We only need to drive the update loop if auto-updating is enabled.
-        if(autoUpdate) {
-            // Start a background thread to listen for file changes
-            updateThread = new Thread(this::runUpdateLoop, FileDataSourceImpl.class.getName());
-            updateThread.setDaemon(true);
-            updateThread.start();
-        }
+        // Start a background thread to listen for file changes
+        updateThread = new Thread(this::runUpdateLoop, FileDataSourceImpl.class.getName());
+        updateThread.setDaemon(true);
+        updateThread.start();
+
 
         return initFuture;
     }
@@ -83,7 +78,7 @@ final class FileDataSourceImpl implements DataSource {
                     break;
                 }
                 if (result.getResultType() == FDv2SourceResult.ResultType.STATUS &&
-                        result.getStatus().getState() == FDv2SourceResult.State.SHUTDOWN) {
+                    result.getStatus().getState() == FDv2SourceResult.State.SHUTDOWN) {
                     break;
                 }
                 processResult(result);
