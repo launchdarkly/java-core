@@ -65,7 +65,7 @@ final class FileSynchronizer extends FileDataSourceBase implements Synchronizer 
         if (!started) {
             started = true;
             // Perform initial load
-            resultQueue.put(loadData(false));
+            resultQueue.put(loadData());
             // Start file watching if enabled
             if (fileWatcher != null) {
                 fileWatcher.start(this::onFileChange);
@@ -76,7 +76,7 @@ final class FileSynchronizer extends FileDataSourceBase implements Synchronizer 
     }
 
     private void onFileChange() {
-        resultQueue.put(loadData(false));
+        resultQueue.put(loadData());
     }
 
     @Override

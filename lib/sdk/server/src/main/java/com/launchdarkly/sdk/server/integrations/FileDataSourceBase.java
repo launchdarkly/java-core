@@ -62,7 +62,7 @@ class FileDataSourceBase {
      * @param oneShot true if this is a one-shot load (Initializer), false for continuous (Synchronizer)
      * @return an FDv2SourceResult containing either a ChangeSet or an error status
      */
-    protected FDv2SourceResult loadData(boolean oneShot) {
+    protected FDv2SourceResult loadData() {
         DataBuilder builder = new DataBuilder(duplicateKeysHandling);
         int version;
         try {
@@ -77,9 +77,7 @@ class FileDataSourceBase {
                 Instant.now()
             );
             // For initializers, file errors are terminal. For synchronizers, they are recoverable.
-            return oneShot
-                ? FDv2SourceResult.terminalError(errorInfo, false)
-                : FDv2SourceResult.interrupted(errorInfo, false);
+            return FDv2SourceResult.interrupted(errorInfo, false);
         }
 
         FullDataSet<ItemDescriptor> fullData = builder.build();
