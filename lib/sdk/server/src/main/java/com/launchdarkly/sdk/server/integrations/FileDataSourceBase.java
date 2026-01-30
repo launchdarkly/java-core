@@ -10,7 +10,6 @@ import com.launchdarkly.sdk.server.integrations.FileDataSourceParsing.FileDataEx
 import com.launchdarkly.sdk.server.integrations.FileDataSourceParsing.FlagFactory;
 import com.launchdarkly.sdk.server.integrations.FileDataSourceParsing.FlagFileParser;
 import com.launchdarkly.sdk.server.integrations.FileDataSourceParsing.FlagFileRep;
-import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.ErrorInfo;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.ErrorKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
@@ -92,10 +91,9 @@ class FileDataSourceBase {
      * Builds a ChangeSet from a FullDataSet.
      */
     private ChangeSet<ItemDescriptor> buildChangeSet(FullDataSet<ItemDescriptor> fullData, int version) {
-        Selector selector = Selector.make(version, "file-data-" + version);
         return new ChangeSet<>(
             ChangeSetType.Full,
-            selector,
+            Selector.EMPTY,
             fullData.getData(),
             null,  // no environment ID for file data
             persist
