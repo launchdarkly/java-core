@@ -9,35 +9,18 @@ import com.launchdarkly.sdk.AttributeRef;
 import com.launchdarkly.sdk.ContextKind;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.ObjectBuilder;
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
 import com.launchdarkly.sdk.server.DataModel;
-import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
-import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.State;
 import com.launchdarkly.sdk.server.subsystems.ClientContext;
 import com.launchdarkly.sdk.server.subsystems.ComponentConfigurer;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
-import com.launchdarkly.sdk.server.subsystems.DataSourceBuildInputs;
-import com.launchdarkly.sdk.server.subsystems.DataSourceBuilder;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSetType;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
-import com.launchdarkly.sdk.server.subsystems.TransactionalDataSourceUpdateSink;
 
 import java.io.IOException;
-import java.util.concurrent.ExecutionException;
-import java.time.Instant;
-import java.util.AbstractMap;
-import java.util.Collections;
-import java.util.LinkedList;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -45,7 +28,8 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
-import java.util.function.BooleanSupplier;
+
+import static java.util.concurrent.CompletableFuture.completedFuture;
 
 /**
  * A mechanism for providing dynamically updatable feature flag state in a simplified form to an SDK
@@ -76,25 +60,15 @@ import java.util.function.BooleanSupplier;
  * <p>
  * If the same {@code TestData} instance is used to configure multiple {@code LDClient} instances,
  * any changes made to the data will propagate to all of the {@code LDClient}s.
- * <p>
- * {@code TestData} implements both {@link ComponentConfigurer}{@code <DataSource>} and
- * {@link DataSourceBuilder}{@code <Synchronizer>}, so it can be used as:
- * <ul>
- *   <li>A legacy {@link DataSource} via {@link LDConfig.Builder#dataSource(ComponentConfigurer)}</li>
- *   <li>A {@link Synchronizer} via {@link DataSystemBuilder#synchronizers(DataSourceBuilder[])}</li>
- * </ul>
- * In both cases the same {@link #update(FlagBuilder)}, {@link #delete(String)}, and
- * {@link #updateStatus(DataSourceStatusProvider.State, DataSourceStatusProvider.ErrorInfo)} API
- * drives updates to all configured clients.
- *
+ * 
  * @since 5.1.0
  * @see FileData
  */
-public final class TestData implements ComponentConfigurer<DataSource>, DataSourceBuilder<Synchronizer> {
+public final class TestData implements ComponentConfigurer<DataSource> {
   private final Object lock = new Object();
   private final Map<String, ItemDescriptor> currentFlags = new HashMap<>();
   private final Map<String, FlagBuilder> currentBuilders = new HashMap<>();
-  private final List<TestDataSynchronizerImpl> synchronizerInstances = new CopyOnWriteArrayList<>();
+  private final List<DataSourceImpl> instances = new CopyOnWriteArrayList<>();
   private volatile boolean shouldPersist = true;
   
   /**
@@ -160,7 +134,9 @@ public final class TestData implements ComponentConfigurer<DataSource>, DataSour
       currentBuilders.remove(key);
     }
 
-    pushToSynchronizers(FDv2SourceResult.changeSet(makePartialChangeSet(key, tombstoneItem), false));
+    for (DataSourceImpl instance: instances) {
+      instance.updates.upsert(DataModel.FEATURES, key, tombstoneItem);
+    }
 
     return this;
   }
@@ -194,8 +170,10 @@ public final class TestData implements ComponentConfigurer<DataSource>, DataSour
       currentBuilders.put(key, clonedBuilder);
     }
     
-    pushToSynchronizers(FDv2SourceResult.changeSet(makePartialChangeSet(key, newItem), false));
-
+    for (DataSourceImpl instance: instances) {
+      instance.updates.upsert(DataModel.FEATURES, key, newItem);
+    }
+    
     return this;
   }
 
@@ -204,13 +182,9 @@ public final class TestData implements ComponentConfigurer<DataSource>, DataSour
    * <p>
    * Use this if you want to test the behavior of application code that uses
    * {@link com.launchdarkly.sdk.server.LDClient#getDataSourceStatusProvider()} to track whether the data
-   * source is having problems (for example, a network failure interrupting the streaming connection). It
+   * source is having problems (for example, a network failure interruptsingthe streaming connection). It
    * does not actually stop the {@code TestData} data source from working, so even if you have simulated
    * an outage, calling {@link #update(FlagBuilder)} will still send updates.
-   * <p>
-   * The mapping from legacy {@link DataSourceStatusProvider.State} to FDv2 status results matches
-   * {@link com.launchdarkly.sdk.server.DataSourceSynchronizerAdapter}: OFF with error → terminalError,
-   * OFF with null → shutdown, INTERRUPTED → interrupted, VALID/INITIALIZING → no event.
    *
    * @param newState one of the constants defined by {@link com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.State}
    * @param newError an {@link com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.ErrorInfo} instance,
@@ -218,69 +192,10 @@ public final class TestData implements ComponentConfigurer<DataSource>, DataSour
    * @return the same {@code TestData} instance
    */
   public TestData updateStatus(DataSourceStatusProvider.State newState, DataSourceStatusProvider.ErrorInfo newError) {
-    FDv2SourceResult statusResult;
-    switch (newState) {
-      case OFF:
-        statusResult = newError != null
-            ? FDv2SourceResult.terminalError(newError, false)
-            : FDv2SourceResult.shutdown();
-        break;
-      case INTERRUPTED:
-        statusResult = FDv2SourceResult.interrupted(
-            newError != null ? newError : new DataSourceStatusProvider.ErrorInfo(DataSourceStatusProvider.ErrorKind.UNKNOWN, 0, null, Instant.now()),
-            false);
-        break;
-      case VALID:
-      case INITIALIZING:
-      default:
-        // VALID and INITIALIZING do not map to FDv2 status events (same as DataSourceSynchronizerAdapter)
-        statusResult = null;
-        break;
-    }
-    if (statusResult != null) {
-      pushToSynchronizers(statusResult);
+    for (DataSourceImpl instance: instances) {
+      instance.updates.updateStatus(newState, newError);
     }
     return this;
-  }
-
-  /**
-   * Waits until the given condition returns true or the timeout elapses.
-   * <p>
-   * Use this after calling {@link #update(FlagBuilder)}, {@link #delete(String)}, or
-   * {@link #updateStatus(DataSourceStatusProvider.State, DataSourceStatusProvider.ErrorInfo)}
-   * when using TestData as a {@link DataSource} (e.g. with an {@code LDClient}), so that your
-   * assertions see the updated state. The DataSource adapter applies updates on a background
-   * thread, so propagation is asynchronous unless you wait.
-   *
-   * @param timeout maximum time to wait
-   * @param unit unit for the timeout
-   * @param condition condition to poll; when it returns true, this method returns
-   * @throws InterruptedException if the current thread is interrupted while waiting
-   * @throws AssertionError if the condition does not become true before the timeout
-   */
-  public void awaitPropagation(long timeout, TimeUnit unit, BooleanSupplier condition)
-      throws InterruptedException {
-    long deadlineMs = System.currentTimeMillis() + unit.toMillis(timeout);
-    while (System.currentTimeMillis() < deadlineMs) {
-      if (condition.getAsBoolean()) {
-        return;
-      }
-      Thread.sleep(20);
-    }
-    throw new AssertionError("Update did not propagate within " + timeout + " " + unit);
-  }
-
-  /**
-   * Waits until the given condition returns true or the default timeout (5 seconds) elapses.
-   * <p>
-   * Equivalent to {@link #awaitPropagation(long, TimeUnit, BooleanSupplier)} with a 5-second timeout.
-   *
-   * @param condition condition to poll; when it returns true, this method returns
-   * @throws InterruptedException if the current thread is interrupted while waiting
-   * @throws AssertionError if the condition does not become true before the timeout
-   */
-  public void awaitPropagation(BooleanSupplier condition) throws InterruptedException {
-    awaitPropagation(5, TimeUnit.SECONDS, condition);
   }
   
   /**
@@ -312,26 +227,30 @@ public final class TestData implements ComponentConfigurer<DataSource>, DataSour
   
   @Override
   public DataSource build(ClientContext context) {
-    TestDataSynchronizerImpl synchronizer = new TestDataSynchronizerImpl();
+    DataSourceImpl instance = new DataSourceImpl(context.getDataSourceUpdateSink());
     synchronized (lock) {
-      synchronizerInstances.add(synchronizer);
+      instances.add(instance);
     }
-    return new SynchronizerToDataSourceAdapter(synchronizer, context.getDataSourceUpdateSink());
+    return instance;
   }
-
-  @Override
-  public Synchronizer build(DataSourceBuildInputs context) {
-    TestDataSynchronizerImpl synchronizer = new TestDataSynchronizerImpl();
+  
+  private FullDataSet<ItemDescriptor> makeInitData() {
+    ImmutableMap<String, ItemDescriptor> copiedData;
     synchronized (lock) {
-      synchronizerInstances.add(synchronizer);
+      copiedData = ImmutableMap.copyOf(currentFlags);
     }
-    return synchronizer;
+    return new FullDataSet<>(ImmutableMap.of(DataModel.FEATURES, new KeyedItems<>(copiedData.entrySet())).entrySet(), shouldPersist);
   }
-
-
+  
+  private void closedInstance(DataSourceImpl instance) {
+    synchronized (lock) {
+      instances.remove(instance);
+    }
+  }
+  
   /**
-   * A builder for feature flag configurations to be used with {@link TestData}.
-   * 
+   * A builder for feature flag configurations to be used with {@link TestData} and {@link TestDataV2}.
+   *
    * @see TestData#flag(String)
    * @see TestData#update(FlagBuilder)
    */
@@ -350,13 +269,13 @@ public final class TestData implements ComponentConfigurer<DataSource>, DataSour
     final Map<ContextKind, Map<Integer, ImmutableSet<String>>> targets = new TreeMap<>(); // TreeMap enforces ordering for test determinacy
     final List<FlagRuleBuilder> rules = new ArrayList<>();
     
-    private FlagBuilder(String key) {
+    FlagBuilder(String key) {
       this.key = key;
       this.on = true;
       this.variations = new CopyOnWriteArrayList<>();
     }
     
-    private FlagBuilder(FlagBuilder from) {
+    FlagBuilder(FlagBuilder from) {
       this.key = from.key;
       this.offVariation = from.offVariation;
       this.on = from.on;
@@ -892,6 +811,8 @@ public final class TestData implements ComponentConfigurer<DataSource>, DataSour
      * {@link #thenReturn(int)} to finish defining the rule.
      */
     public final class FlagRuleBuilder {
+      // TODO: Move FlagRuleBuilder to TestDataV2 when TestData is deprecated
+
       final List<Clause> clauses = new ArrayList<>();
       int variation;
 
@@ -1042,219 +963,28 @@ public final class TestData implements ComponentConfigurer<DataSource>, DataSour
     }
   }
   
-
-  private void pushToSynchronizers(FDv2SourceResult result) {
-    for (TestDataSynchronizerImpl sync : synchronizerInstances) {
-      sync.put(result);
+  private final class DataSourceImpl implements DataSource {
+    final DataSourceUpdateSink updates;
+    
+    DataSourceImpl(DataSourceUpdateSink updates) {
+      this.updates = updates;
     }
-  }
-  
-  private ChangeSet<ItemDescriptor> makeFullChangeSet() {
-    ImmutableMap<String, ItemDescriptor> copiedData;
-    synchronized (lock) {
-      copiedData = ImmutableMap.copyOf(currentFlags);
-    }
-    Iterable<Map.Entry<String, ItemDescriptor>> entries = copiedData.entrySet();
-    return new ChangeSet<>(
-        ChangeSetType.Full,
-        Selector.EMPTY,
-        Collections.singletonList(
-            new AbstractMap.SimpleEntry<>(DataModel.FEATURES, new KeyedItems<>(entries))),
-        null,
-        shouldPersist);
-  }
-
-  private ChangeSet<ItemDescriptor> makePartialChangeSet(String key, ItemDescriptor item) {
-    return new ChangeSet<>(
-        ChangeSetType.Partial,
-        Selector.EMPTY,
-        Collections.singletonList(
-            new AbstractMap.SimpleEntry<>(DataModel.FEATURES, new KeyedItems<>(Collections.singletonList(new AbstractMap.SimpleEntry<>(key, item))))),
-        null,
-        shouldPersist);
-  }
-  
-  private void closedSynchronizerInstance(TestDataSynchronizerImpl synchronizer) {
-    synchronized (lock) {
-      synchronizerInstances.remove(synchronizer);
-    }
-  }
-
-  /**
-   * Adapts a {@link Synchronizer} to the legacy {@link DataSource} interface by driving
-   * {@link Synchronizer#next()} in a loop and applying results to the update sink.
-   * Used when TestData is configured as a legacy DataSource so that a single synchronizer
-   * implementation can serve both the FDv2 data system and legacy configuration.
-   */
-  private static final class SynchronizerToDataSourceAdapter implements DataSource {
-    private final Synchronizer synchronizer;
-    private final DataSourceUpdateSink updateSink;
-    private final CompletableFuture<Boolean> startFuture = new CompletableFuture<>();
-    private volatile Thread runThread;
-    private volatile boolean closed;
-
-    SynchronizerToDataSourceAdapter(Synchronizer synchronizer, DataSourceUpdateSink updateSink) {
-      this.synchronizer = synchronizer;
-      this.updateSink = updateSink;
-    }
-
+    
     @Override
     public Future<Void> start() {
-      runThread = new Thread(this::run);
-      runThread.setName("LaunchDarkly-TestData-synchronizer-adapter");
-      runThread.setDaemon(true);
-      runThread.start();
-      return startFuture.thenApply(x -> null);
+      updates.init(makeInitData());
+      updates.updateStatus(State.VALID, null);
+      return completedFuture(null);
     }
 
     @Override
     public boolean isInitialized() {
-      try {
-        return startFuture.isDone() && startFuture.get();
-      } catch (Exception e) {
-        return false;
-      }
+      return true;
     }
 
     @Override
     public void close() throws IOException {
-      closed = true;
-      synchronizer.close();
-      startFuture.complete(false);
-    }
-
-    private static DataSourceStatusProvider.State toDataSourceStatusState(FDv2SourceResult.State fdState) {
-      switch (fdState) {
-        case SHUTDOWN:
-        case TERMINAL_ERROR:
-          return DataSourceStatusProvider.State.OFF;
-        case INTERRUPTED:
-          return DataSourceStatusProvider.State.INTERRUPTED;
-        case GOODBYE:
-        default:
-          return DataSourceStatusProvider.State.VALID;
-      }
-    }
-
-    /**
-     * Applies a change set using the legacy DataSourceUpdateSink API (init/upsert)
-     * when the sink does not implement TransactionalDataSourceUpdateSink.
-     */
-    private void applyChangeSetToLegacySink(ChangeSet<ItemDescriptor> changeSet) {
-      switch (changeSet.getType()) {
-        case Full:
-          updateSink.init(new FullDataSet<>(changeSet.getData(), changeSet.shouldPersist()));
-          break;
-        case Partial:
-          for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> kindItems : changeSet.getData()) {
-            for (Map.Entry<String, ItemDescriptor> item : kindItems.getValue().getItems()) {
-              updateSink.upsert(kindItems.getKey(), item.getKey(), item.getValue());
-            }
-          }
-          break;
-        case None:
-        default:
-          break;
-      }
-    }
-
-    private void run() {
-      try {
-        while (!closed) {
-          CompletableFuture<FDv2SourceResult> nextFuture = synchronizer.next();
-          FDv2SourceResult result;
-          try {
-            result = nextFuture.get();
-          } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            break;
-          } catch (ExecutionException e) {
-            break;
-          }
-
-          switch (result.getResultType()) {
-            case CHANGE_SET:
-              if (result.getChangeSet() != null && !closed) {
-                if (updateSink instanceof TransactionalDataSourceUpdateSink) {
-                  ((TransactionalDataSourceUpdateSink) updateSink).apply(result.getChangeSet());
-                } else {
-                  applyChangeSetToLegacySink(result.getChangeSet());
-                }
-                updateSink.updateStatus(DataSourceStatusProvider.State.VALID, null);
-              }
-              startFuture.complete(true);
-              break;
-            case STATUS:
-              FDv2SourceResult.Status status = result.getStatus();
-              if (status != null && !closed) {
-                DataSourceStatusProvider.State state = toDataSourceStatusState(status.getState());
-                updateSink.updateStatus(state, status.getErrorInfo());
-                if (state == DataSourceStatusProvider.State.OFF) {
-                  return;
-                }
-              }
-              break;
-          }
-        }
-      } finally {
-        startFuture.complete(false);
-      }
-    }
-  }
-
-  /**
-   * Synchronizer implementation that queues initial and incremental change sets from TestData.
-   * Used both when TestData is configured as a Synchronizer (FDv2) and when wrapped as a DataSource.
-   */
-  private final class TestDataSynchronizerImpl implements Synchronizer {
-    private final Object queueLock = new Object();
-    private final LinkedList<FDv2SourceResult> queue = new LinkedList<>();
-    private final LinkedList<CompletableFuture<FDv2SourceResult>> pendingFutures = new LinkedList<>();
-    private final CompletableFuture<FDv2SourceResult> shutdownFuture = new CompletableFuture<>();
-    private volatile boolean closed;
-    private volatile boolean initialSent;
-
-    void put(FDv2SourceResult result) {
-      synchronized (queueLock) {
-        if (closed) return;
-        CompletableFuture<FDv2SourceResult> waiter = pendingFutures.pollFirst();
-        if (waiter != null) {
-          waiter.complete(result);
-        } else {
-          queue.addLast(result);
-        }
-      }
-    }
-
-    @Override
-    public CompletableFuture<FDv2SourceResult> next() {
-      synchronized (queueLock) {
-        if (!initialSent) {
-          initialSent = true;
-          put(FDv2SourceResult.changeSet(makeFullChangeSet(), false));
-        }
-      }
-      synchronized (queueLock) {
-        if (!queue.isEmpty()) {
-          return CompletableFuture.completedFuture(queue.removeFirst());
-        }
-        CompletableFuture<FDv2SourceResult> future = new CompletableFuture<>();
-        pendingFutures.addLast(future);
-        if (closed) {
-          future.complete(FDv2SourceResult.shutdown());
-        }
-        return CompletableFuture.anyOf(shutdownFuture, future).thenApply(r -> (FDv2SourceResult) r);
-      }
-    }
-
-    @Override
-    public void close() {
-      synchronized (queueLock) {
-        if (closed) return;
-        closed = true;
-      }
-      shutdownFuture.complete(FDv2SourceResult.shutdown());
-      closedSynchronizerInstance(this);
+      closedInstance(this);
     }
   }
 }

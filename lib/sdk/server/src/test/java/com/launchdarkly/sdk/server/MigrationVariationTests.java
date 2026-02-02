@@ -51,12 +51,13 @@ public class MigrationVariationTests extends BaseTest {
   }
 
   @Test
-  public void itEvaluatesCorrectValueForExistingFlag() throws Exception {
+  public void itEvaluatesCorrectValueForExistingFlag() {
     final String flagKey = "test-flag";
     final LDContext context = LDContext.create("test-key");
     testData.update(testData.flag(flagKey).valueForAll(LDValue.of(stage.toString())));
     // Get a stage that is not the stage we are testing.
     MigrationStage defaultStage = Arrays.stream(MigrationStage.values()).filter(item -> item != stage).findFirst().get();
-    testData.awaitPropagation(() -> client.migrationVariation(flagKey, context, defaultStage).getStage() == stage);
+    MigrationVariation resStage = client.migrationVariation(flagKey, context, defaultStage);
+    Assert.assertEquals(stage, resStage.getStage());
   }
 }

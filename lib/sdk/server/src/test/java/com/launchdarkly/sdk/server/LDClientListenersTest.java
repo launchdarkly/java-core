@@ -162,9 +162,9 @@ public class LDClientListenersTest extends BaseTest {
       DataSourceStatusProvider.ErrorInfo errorInfo = new DataSourceStatusProvider.ErrorInfo(
           DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE, 401, null, Instant.now());
       testData.updateStatus(DataSourceStatusProvider.State.OFF, errorInfo);
-      testData.awaitPropagation(() -> client.getDataSourceStatusProvider().getStatus().getState() == DataSourceStatusProvider.State.OFF);
 
       DataSourceStatusProvider.Status newStatus = client.getDataSourceStatusProvider().getStatus();
+      assertThat(newStatus.getState(), equalTo(DataSourceStatusProvider.State.OFF));
       assertThat(newStatus.getStateSince(), greaterThanOrEqualTo(errorInfo.getTime()));
       assertThat(newStatus.getLastError(), equalTo(errorInfo));
     }
