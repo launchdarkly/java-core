@@ -58,7 +58,6 @@ class FileDataSourceBase {
     /**
      * Loads data from all configured files and returns an FDv2SourceResult.
      *
-     * @param oneShot true if this is a one-shot load (Initializer), false for continuous (Synchronizer)
      * @return an FDv2SourceResult containing either a ChangeSet or an error status
      */
     protected FDv2SourceResult loadData() {

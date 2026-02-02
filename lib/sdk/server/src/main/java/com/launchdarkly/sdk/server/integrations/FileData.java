@@ -257,8 +257,8 @@ public abstract class FileData {
      *         .shouldPersist(true);
      * </code></pre>
      *
-     * @param shouldPersist {@code true} if tile data should be persisted to persistent stores, false otherwise
-     * @return the same {@code TestData} instance
+     * @param shouldPersist {@code true} if file data should be persisted to persistent stores, false otherwise
+     * @return the same {@code FileInitializerBuilder} instance
      */
     public FileInitializerBuilder shouldPersist(boolean shouldPersist) {
       delegate.shouldPersist(shouldPersist);
@@ -302,7 +302,7 @@ public abstract class FileData {
      * </code></pre>
      *
      * @param shouldPersist {@code true} if file data should be persisted to persistent stores, false otherwise
-     * @return the same {@code TestData} instance
+     * @return the same {@code FileSynchronizerBuilder} instance
      */
     public FileSynchronizerBuilder shouldPersist(boolean shouldPersist) {
       delegate.shouldPersist(shouldPersist);
