@@ -356,7 +356,11 @@ public final class TestDataV2 implements DataSourceBuilder<Synchronizer> {
       synchronized (queueLock) {
         if (!initialSent) {
           initialSent = true;
-          put(FDv2SourceResult.changeSet(makeFullChangeSet(), false));
+          // Prepend full changeset so it is delivered before any partial changesets that
+          // accumulated from update()/delete() calls made before next() was first called.
+          if (!closed) {
+            queue.addFirst(FDv2SourceResult.changeSet(makeFullChangeSet(), false));
+          }
         }
       }
       synchronized (queueLock) {
