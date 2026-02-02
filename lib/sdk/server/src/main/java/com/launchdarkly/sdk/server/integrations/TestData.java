@@ -108,46 +108,6 @@ public final class TestData implements ComponentConfigurer<DataSource>, DataSour
     return new TestData();
   }
 
-  /**
-   * Waits until the given condition returns true or the timeout elapses.
-   * <p>
-   * Use this after calling {@link #update(FlagBuilder)}, {@link #delete(String)}, or
-   * {@link #updateStatus(DataSourceStatusProvider.State, DataSourceStatusProvider.ErrorInfo)}
-   * when using TestData as a {@link DataSource} (e.g. with an {@code LDClient}), so that your
-   * assertions see the updated state. The DataSource adapter applies updates on a background
-   * thread, so propagation is asynchronous unless you wait.
-   *
-   * @param timeout maximum time to wait
-   * @param unit unit for the timeout
-   * @param condition condition to poll; when it returns true, this method returns
-   * @throws InterruptedException if the current thread is interrupted while waiting
-   * @throws AssertionError if the condition does not become true before the timeout
-   */
-  public void awaitPropagation(long timeout, TimeUnit unit, BooleanSupplier condition)
-      throws InterruptedException {
-    long deadlineMs = System.currentTimeMillis() + unit.toMillis(timeout);
-    while (System.currentTimeMillis() < deadlineMs) {
-      if (condition.getAsBoolean()) {
-        return;
-      }
-      Thread.sleep(20);
-    }
-    throw new AssertionError("Update did not propagate within " + timeout + " " + unit);
-  }
-
-  /**
-   * Waits until the given condition returns true or the default timeout (5 seconds) elapses.
-   * <p>
-   * Equivalent to {@link #awaitPropagation(long, TimeUnit, BooleanSupplier)} with a 5-second timeout.
-   *
-   * @param condition condition to poll; when it returns true, this method returns
-   * @throws InterruptedException if the current thread is interrupted while waiting
-   * @throws AssertionError if the condition does not become true before the timeout
-   */
-  public void awaitPropagation(BooleanSupplier condition) throws InterruptedException {
-    awaitPropagation(5, TimeUnit.SECONDS, condition);
-  }
-
   private TestData() {}
   
   /**
@@ -282,6 +242,46 @@ public final class TestData implements ComponentConfigurer<DataSource>, DataSour
     }
     return this;
   }
+
+  /**
+   * Waits until the given condition returns true or the timeout elapses.
+   * <p>
+   * Use this after calling {@link #update(FlagBuilder)}, {@link #delete(String)}, or
+   * {@link #updateStatus(DataSourceStatusProvider.State, DataSourceStatusProvider.ErrorInfo)}
+   * when using TestData as a {@link DataSource} (e.g. with an {@code LDClient}), so that your
+   * assertions see the updated state. The DataSource adapter applies updates on a background
+   * thread, so propagation is asynchronous unless you wait.
+   *
+   * @param timeout maximum time to wait
+   * @param unit unit for the timeout
+   * @param condition condition to poll; when it returns true, this method returns
+   * @throws InterruptedException if the current thread is interrupted while waiting
+   * @throws AssertionError if the condition does not become true before the timeout
+   */
+  public void awaitPropagation(long timeout, TimeUnit unit, BooleanSupplier condition)
+      throws InterruptedException {
+    long deadlineMs = System.currentTimeMillis() + unit.toMillis(timeout);
+    while (System.currentTimeMillis() < deadlineMs) {
+      if (condition.getAsBoolean()) {
+        return;
+      }
+      Thread.sleep(20);
+    }
+    throw new AssertionError("Update did not propagate within " + timeout + " " + unit);
+  }
+
+  /**
+   * Waits until the given condition returns true or the default timeout (5 seconds) elapses.
+   * <p>
+   * Equivalent to {@link #awaitPropagation(long, TimeUnit, BooleanSupplier)} with a 5-second timeout.
+   *
+   * @param condition condition to poll; when it returns true, this method returns
+   * @throws InterruptedException if the current thread is interrupted while waiting
+   * @throws AssertionError if the condition does not become true before the timeout
+   */
+  public void awaitPropagation(BooleanSupplier condition) throws InterruptedException {
+    awaitPropagation(5, TimeUnit.SECONDS, condition);
+  }
   
   /**
    * Configures whether test data should be persisted to persistent stores.
@@ -328,220 +328,6 @@ public final class TestData implements ComponentConfigurer<DataSource>, DataSour
     return synchronizer;
   }
 
-  private void pushToSynchronizers(FDv2SourceResult result) {
-    for (TestDataSynchronizerImpl sync : synchronizerInstances) {
-      sync.put(result);
-    }
-  }
-  
-  private ChangeSet<ItemDescriptor> makeFullChangeSet() {
-    ImmutableMap<String, ItemDescriptor> copiedData;
-    synchronized (lock) {
-      copiedData = ImmutableMap.copyOf(currentFlags);
-    }
-    Iterable<Map.Entry<String, ItemDescriptor>> entries = copiedData.entrySet();
-    return new ChangeSet<>(
-        ChangeSetType.Full,
-        Selector.EMPTY,
-        Collections.singletonList(
-            new AbstractMap.SimpleEntry<>(DataModel.FEATURES, new KeyedItems<>(entries))),
-        null,
-        shouldPersist);
-  }
-
-  private ChangeSet<ItemDescriptor> makePartialChangeSet(String key, ItemDescriptor item) {
-    return new ChangeSet<>(
-        ChangeSetType.Partial,
-        Selector.EMPTY,
-        Collections.singletonList(
-            new AbstractMap.SimpleEntry<>(DataModel.FEATURES, new KeyedItems<>(Collections.singletonList(new AbstractMap.SimpleEntry<>(key, item))))),
-        null,
-        shouldPersist);
-  }
-  
-  private void closedSynchronizerInstance(TestDataSynchronizerImpl synchronizer) {
-    synchronized (lock) {
-      synchronizerInstances.remove(synchronizer);
-    }
-  }
-
-  /**
-   * Adapts a {@link Synchronizer} to the legacy {@link DataSource} interface by driving
-   * {@link Synchronizer#next()} in a loop and applying results to the update sink.
-   * Used when TestData is configured as a legacy DataSource so that a single synchronizer
-   * implementation can serve both the FDv2 data system and legacy configuration.
-   */
-  private static final class SynchronizerToDataSourceAdapter implements DataSource {
-    private final Synchronizer synchronizer;
-    private final DataSourceUpdateSink updateSink;
-    private final CompletableFuture<Boolean> startFuture = new CompletableFuture<>();
-    private volatile Thread runThread;
-    private volatile boolean closed;
-
-    SynchronizerToDataSourceAdapter(Synchronizer synchronizer, DataSourceUpdateSink updateSink) {
-      this.synchronizer = synchronizer;
-      this.updateSink = updateSink;
-    }
-
-    @Override
-    public Future<Void> start() {
-      runThread = new Thread(this::run);
-      runThread.setName("LaunchDarkly-TestData-synchronizer-adapter");
-      runThread.setDaemon(true);
-      runThread.start();
-      return startFuture.thenApply(x -> null);
-    }
-
-    @Override
-    public boolean isInitialized() {
-      try {
-        return startFuture.isDone() && startFuture.get();
-      } catch (Exception e) {
-        return false;
-      }
-    }
-
-    @Override
-    public void close() throws IOException {
-      closed = true;
-      synchronizer.close();
-      startFuture.complete(false);
-    }
-
-    private static DataSourceStatusProvider.State toDataSourceStatusState(FDv2SourceResult.State fdState) {
-      switch (fdState) {
-        case SHUTDOWN:
-        case TERMINAL_ERROR:
-          return DataSourceStatusProvider.State.OFF;
-        case INTERRUPTED:
-          return DataSourceStatusProvider.State.INTERRUPTED;
-        case GOODBYE:
-        default:
-          return DataSourceStatusProvider.State.VALID;
-      }
-    }
-
-    /**
-     * Applies a change set using the legacy DataSourceUpdateSink API (init/upsert)
-     * when the sink does not implement TransactionalDataSourceUpdateSink.
-     */
-    private void applyChangeSetToLegacySink(ChangeSet<ItemDescriptor> changeSet) {
-      switch (changeSet.getType()) {
-        case Full:
-          updateSink.init(new FullDataSet<>(changeSet.getData(), changeSet.shouldPersist()));
-          break;
-        case Partial:
-          for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> kindItems : changeSet.getData()) {
-            for (Map.Entry<String, ItemDescriptor> item : kindItems.getValue().getItems()) {
-              updateSink.upsert(kindItems.getKey(), item.getKey(), item.getValue());
-            }
-          }
-          break;
-        case None:
-        default:
-          break;
-      }
-    }
-
-    private void run() {
-      try {
-        while (!closed) {
-          CompletableFuture<FDv2SourceResult> nextFuture = synchronizer.next();
-          FDv2SourceResult result;
-          try {
-            result = nextFuture.get();
-          } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            break;
-          } catch (ExecutionException e) {
-            break;
-          }
-
-          switch (result.getResultType()) {
-            case CHANGE_SET:
-              if (result.getChangeSet() != null && !closed) {
-                if (updateSink instanceof TransactionalDataSourceUpdateSink) {
-                  ((TransactionalDataSourceUpdateSink) updateSink).apply(result.getChangeSet());
-                } else {
-                  applyChangeSetToLegacySink(result.getChangeSet());
-                }
-                updateSink.updateStatus(DataSourceStatusProvider.State.VALID, null);
-              }
-              startFuture.complete(true);
-              break;
-            case STATUS:
-              FDv2SourceResult.Status status = result.getStatus();
-              if (status != null && !closed) {
-                DataSourceStatusProvider.State state = toDataSourceStatusState(status.getState());
-                updateSink.updateStatus(state, status.getErrorInfo());
-                if (state == DataSourceStatusProvider.State.OFF) {
-                  return;
-                }
-              }
-              break;
-          }
-        }
-      } finally {
-        startFuture.complete(false);
-      }
-    }
-  }
-
-  /**
-   * Synchronizer implementation that queues initial and incremental change sets from TestData.
-   * Used both when TestData is configured as a Synchronizer (FDv2) and when wrapped as a DataSource.
-   */
-  private final class TestDataSynchronizerImpl implements Synchronizer {
-    private final Object queueLock = new Object();
-    private final LinkedList<FDv2SourceResult> queue = new LinkedList<>();
-    private final LinkedList<CompletableFuture<FDv2SourceResult>> pendingFutures = new LinkedList<>();
-    private final CompletableFuture<FDv2SourceResult> shutdownFuture = new CompletableFuture<>();
-    private volatile boolean closed;
-    private volatile boolean initialSent;
-
-    void put(FDv2SourceResult result) {
-      synchronized (queueLock) {
-        if (closed) return;
-        CompletableFuture<FDv2SourceResult> waiter = pendingFutures.pollFirst();
-        if (waiter != null) {
-          waiter.complete(result);
-        } else {
-          queue.addLast(result);
-        }
-      }
-    }
-
-    @Override
-    public CompletableFuture<FDv2SourceResult> next() {
-      synchronized (queueLock) {
-        if (!initialSent) {
-          initialSent = true;
-          put(FDv2SourceResult.changeSet(makeFullChangeSet(), false));
-        }
-      }
-      synchronized (queueLock) {
-        if (!queue.isEmpty()) {
-          return CompletableFuture.completedFuture(queue.removeFirst());
-        }
-        CompletableFuture<FDv2SourceResult> future = new CompletableFuture<>();
-        pendingFutures.addLast(future);
-        if (closed) {
-          future.complete(FDv2SourceResult.shutdown());
-        }
-        return CompletableFuture.anyOf(shutdownFuture, future).thenApply(r -> (FDv2SourceResult) r);
-      }
-    }
-
-    @Override
-    public void close() {
-      synchronized (queueLock) {
-        if (closed) return;
-        closed = true;
-      }
-      shutdownFuture.complete(FDv2SourceResult.shutdown());
-      closedSynchronizerInstance(this);
-    }
-  }
 
   /**
    * A builder for feature flag configurations to be used with {@link TestData}.
@@ -1256,4 +1042,219 @@ public final class TestData implements ComponentConfigurer<DataSource>, DataSour
     }
   }
   
+
+  private void pushToSynchronizers(FDv2SourceResult result) {
+    for (TestDataSynchronizerImpl sync : synchronizerInstances) {
+      sync.put(result);
+    }
+  }
+  
+  private ChangeSet<ItemDescriptor> makeFullChangeSet() {
+    ImmutableMap<String, ItemDescriptor> copiedData;
+    synchronized (lock) {
+      copiedData = ImmutableMap.copyOf(currentFlags);
+    }
+    Iterable<Map.Entry<String, ItemDescriptor>> entries = copiedData.entrySet();
+    return new ChangeSet<>(
+        ChangeSetType.Full,
+        Selector.EMPTY,
+        Collections.singletonList(
+            new AbstractMap.SimpleEntry<>(DataModel.FEATURES, new KeyedItems<>(entries))),
+        null,
+        shouldPersist);
+  }
+
+  private ChangeSet<ItemDescriptor> makePartialChangeSet(String key, ItemDescriptor item) {
+    return new ChangeSet<>(
+        ChangeSetType.Partial,
+        Selector.EMPTY,
+        Collections.singletonList(
+            new AbstractMap.SimpleEntry<>(DataModel.FEATURES, new KeyedItems<>(Collections.singletonList(new AbstractMap.SimpleEntry<>(key, item))))),
+        null,
+        shouldPersist);
+  }
+  
+  private void closedSynchronizerInstance(TestDataSynchronizerImpl synchronizer) {
+    synchronized (lock) {
+      synchronizerInstances.remove(synchronizer);
+    }
+  }
+
+  /**
+   * Adapts a {@link Synchronizer} to the legacy {@link DataSource} interface by driving
+   * {@link Synchronizer#next()} in a loop and applying results to the update sink.
+   * Used when TestData is configured as a legacy DataSource so that a single synchronizer
+   * implementation can serve both the FDv2 data system and legacy configuration.
+   */
+  private static final class SynchronizerToDataSourceAdapter implements DataSource {
+    private final Synchronizer synchronizer;
+    private final DataSourceUpdateSink updateSink;
+    private final CompletableFuture<Boolean> startFuture = new CompletableFuture<>();
+    private volatile Thread runThread;
+    private volatile boolean closed;
+
+    SynchronizerToDataSourceAdapter(Synchronizer synchronizer, DataSourceUpdateSink updateSink) {
+      this.synchronizer = synchronizer;
+      this.updateSink = updateSink;
+    }
+
+    @Override
+    public Future<Void> start() {
+      runThread = new Thread(this::run);
+      runThread.setName("LaunchDarkly-TestData-synchronizer-adapter");
+      runThread.setDaemon(true);
+      runThread.start();
+      return startFuture.thenApply(x -> null);
+    }
+
+    @Override
+    public boolean isInitialized() {
+      try {
+        return startFuture.isDone() && startFuture.get();
+      } catch (Exception e) {
+        return false;
+      }
+    }
+
+    @Override
+    public void close() throws IOException {
+      closed = true;
+      synchronizer.close();
+      startFuture.complete(false);
+    }
+
+    private static DataSourceStatusProvider.State toDataSourceStatusState(FDv2SourceResult.State fdState) {
+      switch (fdState) {
+        case SHUTDOWN:
+        case TERMINAL_ERROR:
+          return DataSourceStatusProvider.State.OFF;
+        case INTERRUPTED:
+          return DataSourceStatusProvider.State.INTERRUPTED;
+        case GOODBYE:
+        default:
+          return DataSourceStatusProvider.State.VALID;
+      }
+    }
+
+    /**
+     * Applies a change set using the legacy DataSourceUpdateSink API (init/upsert)
+     * when the sink does not implement TransactionalDataSourceUpdateSink.
+     */
+    private void applyChangeSetToLegacySink(ChangeSet<ItemDescriptor> changeSet) {
+      switch (changeSet.getType()) {
+        case Full:
+          updateSink.init(new FullDataSet<>(changeSet.getData(), changeSet.shouldPersist()));
+          break;
+        case Partial:
+          for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> kindItems : changeSet.getData()) {
+            for (Map.Entry<String, ItemDescriptor> item : kindItems.getValue().getItems()) {
+              updateSink.upsert(kindItems.getKey(), item.getKey(), item.getValue());
+            }
+          }
+          break;
+        case None:
+        default:
+          break;
+      }
+    }
+
+    private void run() {
+      try {
+        while (!closed) {
+          CompletableFuture<FDv2SourceResult> nextFuture = synchronizer.next();
+          FDv2SourceResult result;
+          try {
+            result = nextFuture.get();
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            break;
+          } catch (ExecutionException e) {
+            break;
+          }
+
+          switch (result.getResultType()) {
+            case CHANGE_SET:
+              if (result.getChangeSet() != null && !closed) {
+                if (updateSink instanceof TransactionalDataSourceUpdateSink) {
+                  ((TransactionalDataSourceUpdateSink) updateSink).apply(result.getChangeSet());
+                } else {
+                  applyChangeSetToLegacySink(result.getChangeSet());
+                }
+                updateSink.updateStatus(DataSourceStatusProvider.State.VALID, null);
+              }
+              startFuture.complete(true);
+              break;
+            case STATUS:
+              FDv2SourceResult.Status status = result.getStatus();
+              if (status != null && !closed) {
+                DataSourceStatusProvider.State state = toDataSourceStatusState(status.getState());
+                updateSink.updateStatus(state, status.getErrorInfo());
+                if (state == DataSourceStatusProvider.State.OFF) {
+                  return;
+                }
+              }
+              break;
+          }
+        }
+      } finally {
+        startFuture.complete(false);
+      }
+    }
+  }
+
+  /**
+   * Synchronizer implementation that queues initial and incremental change sets from TestData.
+   * Used both when TestData is configured as a Synchronizer (FDv2) and when wrapped as a DataSource.
+   */
+  private final class TestDataSynchronizerImpl implements Synchronizer {
+    private final Object queueLock = new Object();
+    private final LinkedList<FDv2SourceResult> queue = new LinkedList<>();
+    private final LinkedList<CompletableFuture<FDv2SourceResult>> pendingFutures = new LinkedList<>();
+    private final CompletableFuture<FDv2SourceResult> shutdownFuture = new CompletableFuture<>();
+    private volatile boolean closed;
+    private volatile boolean initialSent;
+
+    void put(FDv2SourceResult result) {
+      synchronized (queueLock) {
+        if (closed) return;
+        CompletableFuture<FDv2SourceResult> waiter = pendingFutures.pollFirst();
+        if (waiter != null) {
+          waiter.complete(result);
+        } else {
+          queue.addLast(result);
+        }
+      }
+    }
+
+    @Override
+    public CompletableFuture<FDv2SourceResult> next() {
+      synchronized (queueLock) {
+        if (!initialSent) {
+          initialSent = true;
+          put(FDv2SourceResult.changeSet(makeFullChangeSet(), false));
+        }
+      }
+      synchronized (queueLock) {
+        if (!queue.isEmpty()) {
+          return CompletableFuture.completedFuture(queue.removeFirst());
+        }
+        CompletableFuture<FDv2SourceResult> future = new CompletableFuture<>();
+        pendingFutures.addLast(future);
+        if (closed) {
+          future.complete(FDv2SourceResult.shutdown());
+        }
+        return CompletableFuture.anyOf(shutdownFuture, future).thenApply(r -> (FDv2SourceResult) r);
+      }
+    }
+
+    @Override
+    public void close() {
+      synchronized (queueLock) {
+        if (closed) return;
+        closed = true;
+      }
+      shutdownFuture.complete(FDv2SourceResult.shutdown());
+      closedSynchronizerInstance(this);
+    }
+  }
 }
