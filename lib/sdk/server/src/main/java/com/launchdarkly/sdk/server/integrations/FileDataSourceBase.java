@@ -15,7 +15,6 @@ import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.ErrorKind
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSetType;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 
@@ -64,9 +63,8 @@ class FileDataSourceBase {
      */
     protected FDv2SourceResult loadData() {
         DataBuilder builder = new DataBuilder(duplicateKeysHandling);
-        int version;
         try {
-            version = dataLoader.load(builder);
+            dataLoader.load(builder);
         } catch (FileDataException e) {
             String description = getErrorDescription(e);
             logger.error(description);
@@ -80,20 +78,20 @@ class FileDataSourceBase {
             return FDv2SourceResult.interrupted(errorInfo, false);
         }
 
-        FullDataSet<ItemDescriptor> fullData = builder.build();
-        ChangeSet<ItemDescriptor> changeSet = buildChangeSet(fullData);
+        Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data = builder.build();
+        ChangeSet<ItemDescriptor> changeSet = buildChangeSet(data);
         return FDv2SourceResult.changeSet(changeSet, false);
     }
 
     /**
-     * Builds a ChangeSet from a FullDataSet.
+     * Builds a ChangeSet from the data entries.
      */
-    private ChangeSet<ItemDescriptor> buildChangeSet(FullDataSet<ItemDescriptor> fullData) {
+    private ChangeSet<ItemDescriptor> buildChangeSet(Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data) {
         return new ChangeSet<>(
             ChangeSetType.Full,
             // File data is currently selector-less.
             Selector.EMPTY,
-            fullData.getData(),
+            data,
             null,  // no environment ID for file data
             persist
         );
@@ -190,20 +188,16 @@ class FileDataSourceBase {
             this.duplicateKeysHandling = duplicateKeysHandling;
         }
 
-        public FullDataSet<ItemDescriptor> build() {
+        public Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> build() {
             ImmutableList.Builder<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> allBuilder = ImmutableList.builder();
             for (Map.Entry<DataKind, Map<String, ItemDescriptor>> e0 : allData.entrySet()) {
                 allBuilder.add(new AbstractMap.SimpleEntry<>(e0.getKey(), new KeyedItems<>(e0.getValue().entrySet())));
             }
-            return new FullDataSet<>(allBuilder.build());
+            return allBuilder.build();
         }
 
         public void add(DataKind kind, String key, ItemDescriptor item) throws FileDataException {
-            Map<String, ItemDescriptor> items = allData.get(kind);
-            if (items == null) {
-                items = new HashMap<String, ItemDescriptor>();
-                allData.put(kind, items);
-            }
+            Map<String, ItemDescriptor> items = allData.computeIfAbsent(kind, k -> new HashMap<>());
             if (items.containsKey(key)) {
                 if (duplicateKeysHandling == FileData.DuplicateKeysHandling.IGNORE) {
                     return;

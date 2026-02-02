@@ -165,20 +165,6 @@ public final class FileDataSourceBuilder implements ComponentConfigurer<DataSour
   }
 
   /**
-   * Returns whether auto-update is enabled. Package-private for use by FDv2 builders.
-   */
-  boolean isAutoUpdate() {
-    return autoUpdate;
-  }
-
-  /**
-   * Returns the duplicate keys handling mode. Package-private for use by FDv2 builders.
-   */
-  FileData.DuplicateKeysHandling getDuplicateKeysHandling() {
-    return duplicateKeysHandling;
-  }
-
-  /**
    * Configures whether file data should be persisted to persistent stores.
    * <p>
    * By default, file data is persisted ({@code shouldPersist = true}) to maintain consistency with

@@ -34,13 +34,13 @@ public abstract class FileData {
      * Data loading will fail if keys are duplicated across files.
      */
     FAIL,
-    
+
     /**
      * Keys that are duplicated across files will be ignored, and the first occurrence will be used.
      */
     IGNORE
   }
-  
+
   /**
    * Creates a {@link FileDataSourceBuilder} which you can use to configure the file data source.
    * This allows you to use local files (or classpath resources containing file data) as a source of
@@ -137,7 +137,7 @@ public abstract class FileData {
    * <p>
    * If the data source encounters any error in any file-- malformed content, a missing file, or a
    * duplicate key-- it will not load flags from any of the files.
-   * 
+   *
    * @return a data source configuration object
    * @since 4.12.0
    */
@@ -270,7 +270,7 @@ public abstract class FileData {
     public Initializer build(DataSourceBuildInputs context) {
       return delegate.buildInitializer(context);
     }
-}
+  }
 
   /**
    * Builder for creating an FDv2 {@link Synchronizer} that loads and watches file data.
