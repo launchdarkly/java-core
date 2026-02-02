@@ -97,7 +97,7 @@ public class MigrationConsistencyCheckTest extends BaseTest {
   }
 
   @Test
-  public void itDoesNotRunTheCheckIfCheckRatioIsZero() {
+  public void itDoesNotRunTheCheckIfCheckRatioIsZero() throws Exception {
     readOldResult = "consistent";
     readNewResult = "inconsistent";
 
@@ -105,11 +105,13 @@ public class MigrationConsistencyCheckTest extends BaseTest {
       .on(true)
       .valueForAll(LDValue.of("shadow"))
       .migrationCheckRatio(0));
+    testData.awaitPropagation(() -> "shadow".equals(client.stringVariation("test-flag", LDContext.create("user-key"), "")));
 
     migration.read("test-flag",
       LDContext.create("user-key"), MigrationStage.LIVE);
 
-    Event e = eventSink.events.get(1);
+    // awaitPropagation polls stringVariation, which records events; MigrationOp is the last event
+    Event e = eventSink.events.get(eventSink.events.size() - 1);
     assertEquals(Event.MigrationOp.class, e.getClass());
     Event.MigrationOp me = (Event.MigrationOp) e;
     assertNull(me.getConsistencyMeasurement());

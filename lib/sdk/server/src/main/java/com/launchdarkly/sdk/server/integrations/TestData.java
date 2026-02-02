@@ -37,6 +37,7 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -44,6 +45,7 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
+import java.util.function.BooleanSupplier;
 
 /**
  * A mechanism for providing dynamically updatable feature flag state in a simplified form to an SDK
@@ -104,6 +106,46 @@ public final class TestData implements ComponentConfigurer<DataSource>, DataSour
    */
   public static TestData dataSource() {
     return new TestData();
+  }
+
+  /**
+   * Waits until the given condition returns true or the timeout elapses.
+   * <p>
+   * Use this after calling {@link #update(FlagBuilder)}, {@link #delete(String)}, or
+   * {@link #updateStatus(DataSourceStatusProvider.State, DataSourceStatusProvider.ErrorInfo)}
+   * when using TestData as a {@link DataSource} (e.g. with an {@code LDClient}), so that your
+   * assertions see the updated state. The DataSource adapter applies updates on a background
+   * thread, so propagation is asynchronous unless you wait.
+   *
+   * @param timeout maximum time to wait
+   * @param unit unit for the timeout
+   * @param condition condition to poll; when it returns true, this method returns
+   * @throws InterruptedException if the current thread is interrupted while waiting
+   * @throws AssertionError if the condition does not become true before the timeout
+   */
+  public void awaitPropagation(long timeout, TimeUnit unit, BooleanSupplier condition)
+      throws InterruptedException {
+    long deadlineMs = System.currentTimeMillis() + unit.toMillis(timeout);
+    while (System.currentTimeMillis() < deadlineMs) {
+      if (condition.getAsBoolean()) {
+        return;
+      }
+      Thread.sleep(20);
+    }
+    throw new AssertionError("Update did not propagate within " + timeout + " " + unit);
+  }
+
+  /**
+   * Waits until the given condition returns true or the default timeout (5 seconds) elapses.
+   * <p>
+   * Equivalent to {@link #awaitPropagation(long, TimeUnit, BooleanSupplier)} with a 5-second timeout.
+   *
+   * @param condition condition to poll; when it returns true, this method returns
+   * @throws InterruptedException if the current thread is interrupted while waiting
+   * @throws AssertionError if the condition does not become true before the timeout
+   */
+  public void awaitPropagation(BooleanSupplier condition) throws InterruptedException {
+    awaitPropagation(5, TimeUnit.SECONDS, condition);
   }
 
   private TestData() {}
@@ -417,7 +459,7 @@ public final class TestData implements ComponentConfigurer<DataSource>, DataSour
 
           switch (result.getResultType()) {
             case CHANGE_SET:
-              if (result.getChangeSet() != null) {
+              if (result.getChangeSet() != null && !closed) {
                 if (updateSink instanceof TransactionalDataSourceUpdateSink) {
                   ((TransactionalDataSourceUpdateSink) updateSink).apply(result.getChangeSet());
                 } else {
@@ -429,7 +471,7 @@ public final class TestData implements ComponentConfigurer<DataSource>, DataSour
               break;
             case STATUS:
               FDv2SourceResult.Status status = result.getStatus();
-              if (status != null) {
+              if (status != null && !closed) {
                 DataSourceStatusProvider.State state = toDataSourceStatusState(status.getState());
                 updateSink.updateStatus(state, status.getErrorInfo());
                 if (state == DataSourceStatusProvider.State.OFF) {

@@ -50,8 +50,7 @@ public class TestDataWithClientTest {
       assertThat(client.boolVariation("flag", LDContext.create("user"), false), is(false));
       
       td.update(td.flag("flag").on(true));
-      
-      assertThat(client.boolVariation("flag", LDContext.create("user"), false), is(true));
+      td.awaitPropagation(() -> client.boolVariation("flag", LDContext.create("user"), false));
     }
   }
 
@@ -63,10 +62,10 @@ public class TestDataWithClientTest {
       assertThat(client.boolVariation("flag", LDContext.create("user"), false), is(true));
 
       td.delete("flag");
+      td.awaitPropagation(() -> client.boolVariationDetail("flag", LDContext.create("user"), false).isDefaultValue());
 
       final EvaluationDetail<Boolean> detail = client.boolVariationDetail("flag", LDContext.create("user"), false);
       assertThat(detail.getValue(), is(false));
-      assertThat(detail.isDefaultValue(), is(true));
       assertThat(detail.getReason().getErrorKind(), is(EvaluationReason.ErrorKind.FLAG_NOT_FOUND));
     }
   }
@@ -107,8 +106,7 @@ public class TestDataWithClientTest {
       assertThat(client.stringVariation("flag", LDContext.builder("user3").name("Quincy").build(), ""), equalTo("blue"));
       
       td.update(td.flag("flag").on(false));
-
-      assertThat(client.stringVariation("flag", LDContext.builder("user1").name("Lucy").build(), ""), equalTo("red"));
+      td.awaitPropagation(() -> "red".equals(client.stringVariation("flag", LDContext.builder("user1").name("Lucy").build(), "")));
     }
   }
   
@@ -119,8 +117,8 @@ public class TestDataWithClientTest {
       
       ErrorInfo ei = ErrorInfo.fromHttpError(500);
       td.updateStatus(State.INTERRUPTED, ei);
-      
-      assertThat(client.getDataSourceStatusProvider().getStatus().getState(), equalTo(State.INTERRUPTED));
+      td.awaitPropagation(() -> client.getDataSourceStatusProvider().getStatus().getState() == State.INTERRUPTED);
+
       assertThat(client.getDataSourceStatusProvider().getStatus().getLastError(), equalTo(ei));
     }
   }
@@ -135,9 +133,8 @@ public class TestDataWithClientTest {
         assertThat(client2.boolVariation("flag", LDContext.create("user"), false), is(true));
         
         td.update(td.flag("flag").on(false));
-
-        assertThat(client1.boolVariation("flag", LDContext.create("user"), false), is(false));
-        assertThat(client2.boolVariation("flag", LDContext.create("user"), false), is(false));
+        td.awaitPropagation(() -> !client1.boolVariation("flag", LDContext.create("user"), false)
+            && !client2.boolVariation("flag", LDContext.create("user"), false));
       }
     }
   }
