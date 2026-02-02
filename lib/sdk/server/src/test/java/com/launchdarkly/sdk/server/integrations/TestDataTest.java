@@ -1,6 +1,7 @@
 package com.launchdarkly.sdk.server.integrations;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
 import com.launchdarkly.sdk.ContextKind;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.server.DataModel;
@@ -13,24 +14,26 @@ import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSinkV2;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSetType;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
-import static com.google.common.collect.Iterables.get;
 import static com.launchdarkly.sdk.server.ModelBuilders.flagBuilder;
 import static com.launchdarkly.sdk.server.TestComponents.clientContext;
 import static com.launchdarkly.testhelpers.JsonAssertions.assertJsonEquals;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.emptyIterable;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.iterableWithSize;
@@ -43,8 +46,10 @@ public class TestDataTest {
   private static final LDValue[] THREE_STRING_VALUES =
       new LDValue[] { LDValue.of("red"), LDValue.of("green"), LDValue.of("blue") };
   
+  private static final int START_TIMEOUT_SECONDS = 5; // necessary due to synchronizer to data source adapter using thread
+
   private CapturingDataSourceUpdates updates = new CapturingDataSourceUpdates();
-  
+
   // Test implementation note: We're using the ModelBuilders test helpers to build the expected
   // flag JSON. However, we have to use them in a slightly different way than we do in other tests
   // (for instance, writing out an expected clause as a JSON literal), because specific data model
@@ -55,15 +60,16 @@ public class TestDataTest {
     TestData td = TestData.dataSource();
     DataSource ds = td.build(clientContext("", new LDConfig.Builder().build(), updates));
     Future<Void> started = ds.start();
-    
-    assertThat(started.isDone(), is(true));
-    assertThat(updates.valid, is(true));
+    started.get(START_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
-    assertThat(updates.inits.size(), equalTo(1));
-    FullDataSet<ItemDescriptor> data = updates.inits.take();
-    assertThat(data.getData(), iterableWithSize(1));
-    assertThat(get(data.getData(), 0).getKey(), equalTo(DataModel.FEATURES));
-    assertThat(get(data.getData(), 0).getValue().getItems(), emptyIterable());
+    assertThat(updates.valid, is(true));
+    assertThat(updates.applies.size(), equalTo(1));
+    ChangeSet<ItemDescriptor> changeSet = updates.applies.take();
+    assertThat(changeSet.getType(), equalTo(ChangeSetType.Full));
+    assertThat(changeSet.getData(), iterableWithSize(1));
+    assertThat(Iterables.get(changeSet.getData(), 0).getKey(), equalTo(DataModel.FEATURES));
+    Map<String, ItemDescriptor> flags = getFlagsFromChangeSet(changeSet);
+    assertThat(flags.isEmpty(), is(true));
   }
 
   @Test
@@ -75,23 +81,23 @@ public class TestDataTest {
     
     DataSource ds = td.build(clientContext("", new LDConfig.Builder().build(), updates));
     Future<Void> started = ds.start();
-    
-    assertThat(started.isDone(), is(true));
-    assertThat(updates.valid, is(true));
+    started.get(START_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
-    assertThat(updates.inits.size(), equalTo(1));
-    FullDataSet<ItemDescriptor> data = updates.inits.take();
-    assertThat(data.getData(), iterableWithSize(1));
-    assertThat(get(data.getData(), 0).getKey(), equalTo(DataModel.FEATURES));
-    assertThat(get(data.getData(), 0).getValue().getItems(), iterableWithSize(2));
+    assertThat(updates.valid, is(true));
+    assertThat(updates.applies.size(), equalTo(1));
+    ChangeSet<ItemDescriptor> changeSet = updates.applies.take();
+    assertThat(changeSet.getType(), equalTo(ChangeSetType.Full));
+    assertThat(changeSet.getData(), iterableWithSize(1));
+    assertThat(Iterables.get(changeSet.getData(), 0).getKey(), equalTo(DataModel.FEATURES));
+    Map<String, ItemDescriptor> flags = getFlagsFromChangeSet(changeSet);
+    assertThat(flags.entrySet(), iterableWithSize(2));
     
     ModelBuilders.FlagBuilder expectedFlag1 = flagBuilder("flag1").version(1).salt("")
         .on(true).offVariation(1).fallthroughVariation(0).variations(true, false);
     ModelBuilders.FlagBuilder expectedFlag2 = flagBuilder("flag2").version(1).salt("")
         .on(false).offVariation(1).fallthroughVariation(0).variations(true, false);
 
-    Map<String, ItemDescriptor> flags = ImmutableMap.copyOf(get(data.getData(), 0).getValue().getItems());
-    ItemDescriptor flag1 = flags.get("flag1"); 
+    ItemDescriptor flag1 = flags.get("flag1");
     ItemDescriptor flag2 = flags.get("flag2");
     assertThat(flag1, not(nullValue()));
     assertThat(flag2, not(nullValue()));
@@ -105,22 +111,22 @@ public class TestDataTest {
     TestData td = TestData.dataSource();
     DataSource ds = td.build(clientContext("", new LDConfig.Builder().build(), updates));
     Future<Void> started = ds.start();
-    
-    assertThat(started.isDone(), is(true));
-    assertThat(updates.valid, is(true));
+    started.get(START_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
+    assertThat(updates.valid, is(true));
     td.update(td.flag("flag1").on(true));
-    
+
     ModelBuilders.FlagBuilder expectedFlag = flagBuilder("flag1").version(1).salt("")
         .on(true).offVariation(1).fallthroughVariation(0).variations(true, false);
 
-    assertThat(updates.upserts.size(), equalTo(1));
-    UpsertParams up = updates.upserts.take();
-    assertThat(up.kind, is(DataModel.FEATURES));
-    assertThat(up.key, equalTo("flag1"));
-    ItemDescriptor flag1 = up.item;
-    
-    assertJsonEquals(flagJson(expectedFlag, 2), flagJson(flag1));
+    // First apply is initial full (empty); second is the update with flag1
+    updates.applies.take();
+    ChangeSet<ItemDescriptor> changeSet = updates.applies.poll(START_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    assertThat(changeSet, notNullValue());
+    Map<String, ItemDescriptor> flags = getFlagsFromChangeSet(changeSet);
+    ItemDescriptor flag1 = flags.get("flag1");
+    assertThat(flag1, not(nullValue()));
+    assertJsonEquals(flagJson(expectedFlag, 1), flagJson(flag1));
   }
 
   @Test
@@ -139,18 +145,18 @@ public class TestDataTest {
 
     DataSource ds = td.build(clientContext("", new LDConfig.Builder().build(), updates));
     Future<Void> started = ds.start();
-    
-    assertThat(started.isDone(), is(true));
-    assertThat(updates.valid, is(true));
+    started.get(START_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
+    assertThat(updates.valid, is(true));
     td.update(td.flag("flag1").on(true));
-    
-    assertThat(updates.upserts.size(), equalTo(1));
-    UpsertParams up = updates.upserts.take();
-    assertThat(up.kind, is(DataModel.FEATURES));
-    assertThat(up.key, equalTo("flag1"));
-    ItemDescriptor flag1 = up.item;
-    
+
+    // First apply is initial full (flag1 v1); second is the update to flag1 v2
+    updates.applies.take();
+    ChangeSet<ItemDescriptor> changeSet = updates.applies.poll(START_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    assertThat(changeSet, notNullValue());
+    Map<String, ItemDescriptor> flags = getFlagsFromChangeSet(changeSet);
+    ItemDescriptor flag1 = flags.get("flag1");
+    assertThat(flag1, not(nullValue()));
     expectedFlag.on(true).version(2);
     assertJsonEquals(flagJson(expectedFlag, 2), flagJson(flag1));
   }
@@ -161,24 +167,29 @@ public class TestDataTest {
 
     try (final DataSource ds = td.build(clientContext("", new LDConfig.Builder().build(), updates))) {
       final Future<Void> started = ds.start();
-      assertThat(started.isDone(), is(true));
+      started.get(START_TIMEOUT_SECONDS, TimeUnit.SECONDS);
       assertThat(updates.valid, is(true));
 
       td.update(td.flag("foo").on(false).valueForAll(LDValue.of("bar")));
       td.delete("foo");
 
-      assertThat(updates.upserts.size(), equalTo(2));
-      UpsertParams up = updates.upserts.take();
-      assertThat(up.kind, is(DataModel.FEATURES));
-      assertThat(up.key, equalTo("foo"));
-      assertThat(up.item.getVersion(), equalTo(1));
-      assertThat(up.item.getItem(), notNullValue());
+      // First apply is initial full (empty); second is update with foo v1; third is delete (foo v2 tombstone)
+      updates.applies.take();
+      ChangeSet<ItemDescriptor> addSet = updates.applies.poll(START_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+      assertThat(addSet, notNullValue());
+      Map<String, ItemDescriptor> addFlags = getFlagsFromChangeSet(addSet);
+      ItemDescriptor fooV1 = addFlags.get("foo");
+      assertThat(fooV1, not(nullValue()));
+      assertThat(fooV1.getVersion(), equalTo(1));
+      assertThat(fooV1.getItem(), notNullValue());
 
-      up = updates.upserts.take();
-      assertThat(up.kind, is(DataModel.FEATURES));
-      assertThat(up.key, equalTo("foo"));
-      assertThat(up.item.getVersion(), equalTo(2));
-      assertThat(up.item.getItem(), nullValue());
+      ChangeSet<ItemDescriptor> deleteSet = updates.applies.poll(START_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+      assertThat(deleteSet, notNullValue());
+      Map<String, ItemDescriptor> deleteFlags = getFlagsFromChangeSet(deleteSet);
+      ItemDescriptor fooV2 = deleteFlags.get("foo");
+      assertThat(fooV2, not(nullValue()));
+      assertThat(fooV2.getVersion(), equalTo(2));
+      assertThat(fooV2.getItem(), nullValue());
     }
   }
 
@@ -433,15 +444,20 @@ public class TestDataTest {
     expectedFlag = configureExpectedFlag.apply(expectedFlag);
 
     TestData td = TestData.dataSource();
-    
+
     DataSource ds = td.build(clientContext("", new LDConfig.Builder().build(), updates));
-    ds.start();
-    
+    Future<Void> started = ds.start();
+    started.get(START_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+
     td.update(configureFlag.apply(td.flag("flagkey")));
-    
-    assertThat(updates.upserts.size(), equalTo(1));
-    UpsertParams up = updates.upserts.take();
-    ItemDescriptor flag = up.item;
+
+    // First apply is initial full (empty); second is the update with the flag
+    updates.applies.take();
+    ChangeSet<ItemDescriptor> changeSet = updates.applies.poll(START_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    assertThat(changeSet, notNullValue());
+    Map<String, ItemDescriptor> flags = getFlagsFromChangeSet(changeSet);
+    ItemDescriptor flag = flags.get("flagkey");
+    assertThat(flag, not(nullValue()));
     assertJsonEquals(flagJson(expectedFlag, 1), flagJson(flag));
   }
 
@@ -452,7 +468,21 @@ public class TestDataTest {
   private static String flagJson(ItemDescriptor flag) {
     return DataModel.FEATURES.serialize(flag);
   }
-  
+
+  /** Extracts the feature-flag key-to-descriptor map from a change set (Full or Partial). */
+  private static Map<String, ItemDescriptor> getFlagsFromChangeSet(ChangeSet<ItemDescriptor> changeSet) {
+    Map<String, ItemDescriptor> flags = new HashMap<>();
+    for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> entry : changeSet.getData()) {
+      if (entry.getKey().equals(DataModel.FEATURES)) {
+        for (Map.Entry<String, ItemDescriptor> item : entry.getValue().getItems()) {
+          flags.put(item.getKey(), item.getValue());
+        }
+        break;
+      }
+    }
+    return flags;
+  }
+
   private static class UpsertParams {
     final DataKind kind;
     final String key;

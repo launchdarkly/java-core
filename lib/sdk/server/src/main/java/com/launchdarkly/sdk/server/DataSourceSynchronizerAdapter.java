@@ -133,7 +133,8 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
                             DataStoreTypes.ChangeSetType.Full,
                             Selector.EMPTY,
                             allData.getData(),
-                            null);
+                            null,
+                            allData.shouldPersist());
             resultQueue.put(FDv2SourceResult.changeSet(changeSet, false));
             return true;
         }
@@ -153,7 +154,9 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
                             DataStoreTypes.ChangeSetType.Partial,
                             Selector.EMPTY,
                             data,
-                            null);
+                            null,
+                            true // default to true as this adapter is used for adapting FDv1 data sources which are always persistent
+                        );
             resultQueue.put(FDv2SourceResult.changeSet(changeSet, false));
             return true;
         }
