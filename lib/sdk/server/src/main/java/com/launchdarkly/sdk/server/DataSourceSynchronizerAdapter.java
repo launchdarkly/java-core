@@ -134,7 +134,8 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
                             Selector.EMPTY,
                             allData.getData(),
                             null,
-                            allData.shouldPersist());
+                            allData.shouldPersist()
+                        );
             resultQueue.put(FDv2SourceResult.changeSet(changeSet, false));
             return true;
         }

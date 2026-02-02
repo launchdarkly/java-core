@@ -3,6 +3,7 @@ package com.launchdarkly.sdk.server;
 import com.google.common.collect.ImmutableMap;
 import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
+import com.launchdarkly.sdk.server.integrations.DataSystemModes;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
 
@@ -76,6 +77,19 @@ public class LDClientOfflineTest extends BaseTest {
       FeatureFlagsState state = client.allFlagsState(user);
       assertTrue(state.isValid());
       assertEquals(ImmutableMap.<String, LDValue>of("key", LDValue.of(true)), state.toValuesMap());
+    }
+  }
+
+  @Test
+  public void offlineWithFDv2DataSystemIsInitializedAndReportsValidStatus() throws IOException {
+    LDConfig config = baseConfig()
+        .dataSystem(new DataSystemModes().defaultMode())
+        .offline(true)
+        .build();
+    try (LDClient client = new LDClient("SDK_KEY", config)) {
+      assertTrue(client.dataSystem instanceof FDv2DataSystem);
+      assertTrue(client.isInitialized());
+      assertEquals(DataSourceStatusProvider.State.VALID, client.getDataSourceStatusProvider().getStatus().getState());
     }
   }
 }
