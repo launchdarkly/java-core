@@ -1,8 +1,8 @@
 package com.launchdarkly.sdk.server.integrations;
 
 import com.launchdarkly.sdk.LDValue;
-import com.launchdarkly.sdk.server.integrations.FileDataSourceImpl.DataBuilder;
-import com.launchdarkly.sdk.server.integrations.FileDataSourceImpl.DataLoader;
+import com.launchdarkly.sdk.server.integrations.FileDataSourceBase.DataBuilder;
+import com.launchdarkly.sdk.server.integrations.FileDataSourceBase.DataLoader;
 import com.launchdarkly.sdk.server.integrations.FileDataSourceParsing.FileDataException;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
@@ -158,23 +158,23 @@ public class DataLoaderTest {
         resourceFilePath("segment-only.json"),
         resourceFilePath("value-only.json")
         ).sources);
-    
+
     DataBuilder data1 = new DataBuilder(FileData.DuplicateKeysHandling.FAIL);
     ds.load(data1);
-    assertVersionsMatch(data1.build(), 1);
-    
+    assertVersionsMatch(new FullDataSet<>(data1.build()), 1);
+
     DataBuilder data2 = new DataBuilder(FileData.DuplicateKeysHandling.FAIL);
     ds.load(data2);
-    assertVersionsMatch(data2.build(), 2);
+    assertVersionsMatch(new FullDataSet<>(data2.build()), 2);
   }
-  
+
   private void assertDataHasItemsOfKind(DataKind kind) {
-    Map<String, ItemDescriptor> items = toDataMap(builder.build()).get(kind);
+    Map<String, ItemDescriptor> items = toDataMap(new FullDataSet<>(builder.build())).get(kind);
     if (items == null || items.size() == 0) {
       Assert.fail("expected at least one item in \"" + kind.getName() + "\", received: " + builder.build());
     }
   }
-  
+
   private void assertVersionsMatch(FullDataSet<ItemDescriptor> data, int expectedVersion) {
     for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> kv1: data.getData()) {
       DataKind kind = kv1.getKey();
@@ -187,9 +187,9 @@ public class DataLoaderTest {
       }
     }
   }
-  
+
   private JsonTestValue getItemAsJson(DataBuilder builder, DataKind kind, String key) {
-    ItemDescriptor flag = toDataMap(builder.build()).get(kind).get(key);
+    ItemDescriptor flag = toDataMap(new FullDataSet<>(builder.build())).get(kind).get(key);
     return jsonOf(kind.serialize(flag));
   }
 }

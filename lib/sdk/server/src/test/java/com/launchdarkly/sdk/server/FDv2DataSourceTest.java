@@ -3,6 +3,7 @@ package com.launchdarkly.sdk.server;
 import com.google.common.collect.ImmutableList;
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.logging.Logs;
+import com.launchdarkly.sdk.internal.collections.IterableAsyncQueue;
 import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Initializer;
