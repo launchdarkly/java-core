@@ -180,10 +180,6 @@ public final class TestDataV2 implements DataSourceBuilder<Synchronizer> {
    * synchronizer is having problems (for example, a network failure interrupting the streaming connection). It
    * does not actually stop the {@code TestDataV2} synchronizer from working, so even if you have simulated
    * an outage, calling {@link #update(TestData.FlagBuilder)} will still send updates.
-   * <p>
-   * The mapping from legacy {@link DataSourceStatusProvider.State} to FDv2 status results matches
-   * {@link com.launchdarkly.sdk.server.DataSourceSynchronizerAdapter}: OFF with error → terminalError,
-   * OFF with null → shutdown, INTERRUPTED → interrupted, VALID/INITIALIZING → no event.
    *
    * @param newState one of the constants defined by {@link com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.State}
    * @param newError an {@link com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.ErrorInfo} instance,

@@ -281,6 +281,8 @@ public final class TestData implements ComponentConfigurer<DataSource> {
       this.on = from.on;
       this.fallthroughVariation = from.fallthroughVariation;
       this.variations = new CopyOnWriteArrayList<>(from.variations);
+      this.samplingRatio = from.samplingRatio;
+      this.migrationCheckRatio = from.migrationCheckRatio;
       for (ContextKind contextKind: from.targets.keySet()) {
         this.targets.put(contextKind, new TreeMap<>(from.targets.get(contextKind)));
       }
