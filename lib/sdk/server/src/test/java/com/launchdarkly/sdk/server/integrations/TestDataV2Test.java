@@ -108,6 +108,8 @@ public class TestDataV2Test {
     ItemDescriptor flag2 = flags.get("flag2");
     assertThat(flag1, not(nullValue()));
     assertThat(flag2, not(nullValue()));
+    assertThat(flag1.getVersion(), equalTo(1));
+    assertThat(flag2.getVersion(), equalTo(1));
 
     assertJsonEquals(flagJson(expectedFlag1, 1), flagJson(flag1));
     assertJsonEquals(flagJson(expectedFlag2, 1), flagJson(flag2));
@@ -134,10 +136,11 @@ public class TestDataV2Test {
     assertThat(items.size(), equalTo(1));
     ItemDescriptor flag1 = items.get("flag1");
     assertThat(flag1, not(nullValue()));
+    assertThat(flag1.getVersion(), equalTo(1));
 
     ModelBuilders.FlagBuilder expectedFlag = flagBuilder("flag1").version(1).salt("")
         .on(true).offVariation(1).fallthroughVariation(0).variations(true, false);
-    assertJsonEquals(flagJson(expectedFlag, 2), flagJson(flag1));
+    assertJsonEquals(flagJson(expectedFlag, 1), flagJson(flag1));
   }
 
   @Test
@@ -158,6 +161,7 @@ public class TestDataV2Test {
     ChangeSet<ItemDescriptor> changeSet = updateResult.getChangeSet();
     Map<String, ItemDescriptor> items = ImmutableMap.copyOf(get(changeSet.getData(), 0).getValue().getItems());
     ItemDescriptor flag1 = items.get("flag1");
+    assertThat(flag1.getVersion(), equalTo(2));
 
     ModelBuilders.FlagBuilder expectedFlag = flagBuilder("flag1").version(2).salt("")
         .on(true).offVariation(1).fallthroughVariation(0).variations(true, false)
@@ -253,6 +257,7 @@ public class TestDataV2Test {
     ChangeSet<ItemDescriptor> changeSet = result.getChangeSet();
     Map<String, ItemDescriptor> items = ImmutableMap.copyOf(get(changeSet.getData(), 0).getValue().getItems());
     ItemDescriptor flag = items.get("flagkey");
+    assertThat(flag.getVersion(), equalTo(1));
     assertJsonEquals(flagJson(expectedFlag, 1), flagJson(flag));
   }
 

@@ -362,8 +362,6 @@ public final class TestDataV2 implements DataSourceBuilder<Synchronizer> {
             queue.addFirst(FDv2SourceResult.changeSet(makeFullChangeSet(), false));
           }
         }
-      }
-      synchronized (queueLock) {
         if (!queue.isEmpty()) {
           return CompletableFuture.completedFuture(queue.removeFirst());
         }
