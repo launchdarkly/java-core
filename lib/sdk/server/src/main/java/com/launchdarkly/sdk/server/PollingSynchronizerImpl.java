@@ -1,7 +1,7 @@
 package com.launchdarkly.sdk.server;
 
 import com.launchdarkly.logging.LDLogger;
-import com.launchdarkly.sdk.collections.IterableAsyncQueue;
+import com.launchdarkly.sdk.internal.collections.IterableAsyncQueue;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.SelectorSource;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;

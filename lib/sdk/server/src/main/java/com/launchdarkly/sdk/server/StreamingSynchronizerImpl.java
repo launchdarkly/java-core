@@ -12,7 +12,7 @@ import com.launchdarkly.eventsource.StreamException;
 import com.launchdarkly.eventsource.StreamHttpErrorException;
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.logging.LogValues;
-import com.launchdarkly.sdk.collections.IterableAsyncQueue;
+import com.launchdarkly.sdk.internal.collections.IterableAsyncQueue;
 import com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event;
 import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ProtocolHandler;
 import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
