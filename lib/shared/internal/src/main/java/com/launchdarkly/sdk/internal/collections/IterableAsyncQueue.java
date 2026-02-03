@@ -1,4 +1,4 @@
-package com.launchdarkly.sdk.collections;
+package com.launchdarkly.sdk.internal.collections;
 
 import java.util.LinkedList;
 import java.util.concurrent.CompletableFuture;
