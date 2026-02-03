@@ -2,6 +2,13 @@
 
 All notable changes to the project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [2.3.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-common-2.2.1...launchdarkly-java-sdk-common-2.3.0) (2026-02-03)
+
+
+### Features
+
+* Move iterable async queue to internal. ([#125](https://github.com/launchdarkly/java-core/issues/125)) ([971f4b3](https://github.com/launchdarkly/java-core/commit/971f4b357575405afe23cf3441f8835dea45a30e))
+
 ## [2.2.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-common-2.2.0...launchdarkly-java-sdk-common-2.2.1) (2026-01-30)
 
 
