@@ -1,31 +1,28 @@
 package com.launchdarkly.sdk.server.integrations;
 
 import com.google.common.collect.ImmutableMap;
+import com.launchdarkly.sdk.internal.collections.IterableAsyncQueue;
 import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
 import com.launchdarkly.sdk.server.DataModel;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
-import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.State;
 import com.launchdarkly.sdk.server.subsystems.DataSourceBuildInputs;
 import com.launchdarkly.sdk.server.subsystems.DataSourceBuilder;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSetType;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 import java.time.Instant;
 import java.util.AbstractMap;
 import java.util.Collections;
-import java.util.LinkedList;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.TreeMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -149,7 +146,7 @@ public final class TestDataV2 implements DataSourceBuilder<Synchronizer> {
    * <p>
    * Any subsequent changes to this {@link TestData.FlagBuilder} instance do not affect the test data,
    * unless you call {@link #update(TestData.FlagBuilder)} again.
-   * 
+   *
    * @param flagBuilder a flag configuration builder
    * @return the same {@code TestDataV2} instance
    * @see #flag(String)
@@ -158,7 +155,7 @@ public final class TestDataV2 implements DataSourceBuilder<Synchronizer> {
     String key = flagBuilder.key;
     TestData.FlagBuilder clonedBuilder = new TestData.FlagBuilder(flagBuilder);
     ItemDescriptor newItem = null;
-    
+
     synchronized (lock) {
       ItemDescriptor oldItem = currentFlags.get(key);
       int oldVersion = oldItem == null ? 0 : oldItem.getVersion();
@@ -166,7 +163,7 @@ public final class TestDataV2 implements DataSourceBuilder<Synchronizer> {
       currentFlags.put(key, newItem);
       currentBuilders.put(key, clonedBuilder);
     }
-    
+
     pushToSynchronizers(FDv2SourceResult.changeSet(makePartialChangeSet(key, newItem), false));
 
     return this;
@@ -211,45 +208,6 @@ public final class TestDataV2 implements DataSourceBuilder<Synchronizer> {
     }
     return this;
   }
-
-  /**
-   * Waits until the given condition returns true or the timeout elapses.
-   * <p>
-   * Use this after calling {@link #update(TestData.FlagBuilder)}, {@link #delete(String)}, or
-   * {@link #updateStatus(DataSourceStatusProvider.State, DataSourceStatusProvider.ErrorInfo)}
-   * when using TestDataV2 with an {@code LDClient}, so that your assertions see the updated state.
-   * The synchronizer may apply updates asynchronously.
-   *
-   * @param timeout maximum time to wait
-   * @param unit unit for the timeout
-   * @param condition condition to poll; when it returns true, this method returns
-   * @throws InterruptedException if the current thread is interrupted while waiting
-   * @throws AssertionError if the condition does not become true before the timeout
-   */
-  public void awaitPropagation(long timeout, TimeUnit unit, BooleanSupplier condition)
-      throws InterruptedException {
-    long deadlineMs = System.currentTimeMillis() + unit.toMillis(timeout);
-    while (System.currentTimeMillis() < deadlineMs) {
-      if (condition.getAsBoolean()) {
-        return;
-      }
-      Thread.sleep(20);
-    }
-    throw new AssertionError("Update did not propagate within " + timeout + " " + unit);
-  }
-
-  /**
-   * Waits until the given condition returns true or the default timeout (5 seconds) elapses.
-   * <p>
-   * Equivalent to {@link #awaitPropagation(long, TimeUnit, BooleanSupplier)} with a 5-second timeout.
-   *
-   * @param condition condition to poll; when it returns true, this method returns
-   * @throws InterruptedException if the current thread is interrupted while waiting
-   * @throws AssertionError if the condition does not become true before the timeout
-   */
-  public void awaitPropagation(BooleanSupplier condition) throws InterruptedException {
-    awaitPropagation(5, TimeUnit.SECONDS, condition);
-  }
   
   /**
    * Configures whether test data should be persisted to persistent stores.
@@ -289,7 +247,12 @@ public final class TestDataV2 implements DataSourceBuilder<Synchronizer> {
 
   private void pushToSynchronizers(FDv2SourceResult result) {
     for (TestDataV2SynchronizerImpl sync : synchronizerInstances) {
-      sync.put(result);
+      CompletableFuture<Void> completion = new CompletableFuture<>();
+      FDv2SourceResult wrappedResult = result.withCompletion(v -> {
+        completion.complete(null);
+        return null;
+      });
+      sync.put(wrappedResult, completion);
     }
   }
   
@@ -328,54 +291,33 @@ public final class TestDataV2 implements DataSourceBuilder<Synchronizer> {
    * Synchronizer implementation that queues initial and incremental change sets from TestDataV2.
    */
   private final class TestDataV2SynchronizerImpl implements Synchronizer {
-    private final Object queueLock = new Object();
-    private final LinkedList<FDv2SourceResult> queue = new LinkedList<>();
-    private final LinkedList<CompletableFuture<FDv2SourceResult>> pendingFutures = new LinkedList<>();
+    private final IterableAsyncQueue<FDv2SourceResult> resultQueue = new IterableAsyncQueue<>();
     private final CompletableFuture<FDv2SourceResult> shutdownFuture = new CompletableFuture<>();
-    private volatile boolean closed;
-    private volatile boolean initialSent;
 
-    void put(FDv2SourceResult result) {
-      synchronized (queueLock) {
-        if (closed) return;
-        CompletableFuture<FDv2SourceResult> waiter = pendingFutures.pollFirst();
-        if (waiter != null) {
-          waiter.complete(result);
-        } else {
-          queue.addLast(result);
-        }
+    private final AtomicBoolean initialSent = new AtomicBoolean(false);
+
+    void put(FDv2SourceResult result, CompletableFuture<Void> completion) {
+      resultQueue.put(result);
+      try {
+        CompletableFuture.anyOf(completion, shutdownFuture).get();
+      } catch (Exception e) {
+        // Completion interrupted or canceled
       }
     }
 
     @Override
     public CompletableFuture<FDv2SourceResult> next() {
-      synchronized (queueLock) {
-        if (!initialSent) {
-          initialSent = true;
-          // Prepend full changeset so it is delivered before any partial changesets that
-          // accumulated from update()/delete() calls made before next() was first called.
-          if (!closed) {
-            queue.addFirst(FDv2SourceResult.changeSet(makeFullChangeSet(), false));
-          }
-        }
-        if (!queue.isEmpty()) {
-          return CompletableFuture.completedFuture(queue.removeFirst());
-        }
-        CompletableFuture<FDv2SourceResult> future = new CompletableFuture<>();
-        pendingFutures.addLast(future);
-        if (closed) {
-          future.complete(FDv2SourceResult.shutdown());
-        }
-        return CompletableFuture.anyOf(shutdownFuture, future).thenApply(r -> (FDv2SourceResult) r);
+      if (!initialSent.getAndSet(true)) {
+        // Send full changeset first, before any partial changesets that
+        // accumulated from update()/delete() calls made before next() was first called.
+        resultQueue.put(FDv2SourceResult.changeSet(makeFullChangeSet(), false));
       }
+      return CompletableFuture.anyOf(shutdownFuture, resultQueue.take())
+          .thenApply(r -> (FDv2SourceResult) r);
     }
 
     @Override
     public void close() {
-      synchronized (queueLock) {
-        if (closed) return;
-        closed = true;
-      }
       shutdownFuture.complete(FDv2SourceResult.shutdown());
       closedSynchronizerInstance(this);
     }

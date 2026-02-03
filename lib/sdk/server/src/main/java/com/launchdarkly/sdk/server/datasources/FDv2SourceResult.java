@@ -1,6 +1,10 @@
 package com.launchdarkly.sdk.server.datasources;
+
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes;
+
+import java.io.Closeable;
+import java.util.function.Function;
 
 /**
  * This type is currently experimental and not subject to semantic versioning.
@@ -8,7 +12,8 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes;
  * The result type for FDv2 initializers and synchronizers. An FDv2 initializer produces a single result, while
  * an FDv2 synchronizer produces a stream of results.
  */
-public class FDv2SourceResult {
+public class FDv2SourceResult implements Closeable {
+
     public enum State {
         /**
          * The data source has encountered an interruption and will attempt to reconnect. This isn't intended to be used
@@ -67,49 +72,86 @@ public class FDv2SourceResult {
     private final Status status;
 
     private final ResultType resultType;
-    
+
     private final boolean fdv1Fallback;
 
-    private FDv2SourceResult(DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet, Status status, ResultType resultType, boolean fdv1Fallback) {
+    private final Function<Void, Void> completionCallback;
+
+    private FDv2SourceResult(
+        DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet,
+        Status status, ResultType resultType,
+        boolean fdv1Fallback,
+        Function<Void, Void> completionCallback
+    ) {
         this.changeSet = changeSet;
         this.status = status;
         this.resultType = resultType;
         this.fdv1Fallback = fdv1Fallback;
+        this.completionCallback = completionCallback;
     }
 
     public static FDv2SourceResult interrupted(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback) {
+        return interrupted(errorInfo, fdv1Fallback, null);
+    }
+
+    public static FDv2SourceResult interrupted(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
         return new FDv2SourceResult(
-          null,
-          new Status(State.INTERRUPTED, errorInfo),
-          ResultType.STATUS,
-          fdv1Fallback);
+            null,
+            new Status(State.INTERRUPTED, errorInfo),
+            ResultType.STATUS,
+            fdv1Fallback,
+            completionCallback);
     }
 
     public static FDv2SourceResult shutdown() {
+        return shutdown(null);
+    }
+
+    public static FDv2SourceResult shutdown(Function<Void, Void> completionCallback) {
         return new FDv2SourceResult(null,
-          new Status(State.SHUTDOWN, null),
-          ResultType.STATUS,
-          false);
+            new Status(State.SHUTDOWN, null),
+            ResultType.STATUS,
+            false,
+            completionCallback);
     }
 
     public static FDv2SourceResult terminalError(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback) {
+        return terminalError(errorInfo, fdv1Fallback, null);
+    }
+
+    public static FDv2SourceResult terminalError(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
         return new FDv2SourceResult(null,
-          new Status(State.TERMINAL_ERROR, errorInfo),
-          ResultType.STATUS,
-          fdv1Fallback);
+            new Status(State.TERMINAL_ERROR, errorInfo),
+            ResultType.STATUS,
+            fdv1Fallback,
+            completionCallback);
     }
 
     public static FDv2SourceResult changeSet(DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet, boolean fdv1Fallback) {
-        return new FDv2SourceResult(changeSet, null, ResultType.CHANGE_SET, fdv1Fallback);
+        return changeSet(changeSet, fdv1Fallback, null);
+    }
+
+    public static FDv2SourceResult changeSet(DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
+        return new FDv2SourceResult(
+            changeSet,
+            null,
+            ResultType.CHANGE_SET,
+            fdv1Fallback,
+            completionCallback);
     }
 
     public static FDv2SourceResult goodbye(String reason, boolean fdv1Fallback) {
+        return goodbye(reason, fdv1Fallback, null);
+    }
+
+    public static FDv2SourceResult goodbye(String reason, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
         // TODO: Goodbye reason.
         return new FDv2SourceResult(
-          null,
-          new Status(State.GOODBYE, null),
-          ResultType.STATUS,
-          fdv1Fallback);
+            null,
+            new Status(State.GOODBYE, null),
+            ResultType.STATUS,
+            fdv1Fallback,
+            completionCallback);
     }
 
     public ResultType getResultType() {
@@ -126,5 +168,32 @@ public class FDv2SourceResult {
 
     public boolean isFdv1Fallback() {
         return fdv1Fallback;
+    }
+
+    /**
+     * Creates a new result wrapping this one with an additional completion callback.
+     * <p>
+     * The new completion callback will be invoked when the result is closed, followed by
+     * the original completion callback (if any).
+     *
+     * @param newCallback the completion callback to add
+     * @return a new FDv2SourceResult with the added completion callback
+     */
+    public FDv2SourceResult withCompletion(Function<Void, Void> newCallback) {
+        Function<Void, Void> combinedCallback = v -> {
+            newCallback.apply(null);
+            if (completionCallback != null) {
+                completionCallback.apply(null);
+            }
+            return null;
+        };
+        return new FDv2SourceResult(changeSet, status, resultType, fdv1Fallback, combinedCallback);
+    }
+
+    @Override
+    public void close() {
+        if(completionCallback != null) {
+            completionCallback.apply(null);
+        }
     }
 }
