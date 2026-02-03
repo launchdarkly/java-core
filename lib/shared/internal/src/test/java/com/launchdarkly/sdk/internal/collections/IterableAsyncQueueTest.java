@@ -1,4 +1,4 @@
-package com.launchdarkly.sdk.collections;
+package com.launchdarkly.sdk.internal.collections;
 
 import org.junit.Test;
 
