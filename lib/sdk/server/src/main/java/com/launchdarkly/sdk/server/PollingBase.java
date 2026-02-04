@@ -138,7 +138,9 @@ class PollingBase {
                         return oneShot ? FDv2SourceResult.terminalError(info, fdv1Fallback) : FDv2SourceResult.interrupted(info, fdv1Fallback);
                     }
                     case GOODBYE:
-                        return FDv2SourceResult.goodbye(((FDv2ProtocolHandler.FDv2ActionGoodbye) res).getReason(), fdv1Fallback);
+                        String reason = ((FDv2ProtocolHandler.FDv2ActionGoodbye) res).getReason();
+                        logger.info("Goodbye was received from the LaunchDarkly connection with reason: '{}'.", reason);
+                        return FDv2SourceResult.goodbye(reason, fdv1Fallback);
                     case NONE:
                         break;
                     case INTERNAL_ERROR: {

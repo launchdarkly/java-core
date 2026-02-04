@@ -279,8 +279,9 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 break;
 
             case GOODBYE:
-                FDv2ProtocolHandler.FDv2ActionGoodbye goodbye = (FDv2ProtocolHandler.FDv2ActionGoodbye) action;
-                result = FDv2SourceResult.goodbye(goodbye.getReason(), getFallback(event));
+                String reason = ((FDv2ProtocolHandler.FDv2ActionGoodbye) action).getReason();
+                logger.info("Goodbye was received from the LaunchDarkly connection with reason: '{}'.", reason);
+                result = FDv2SourceResult.goodbye(reason, getFallback(event));
                 // We drop this current connection and attempt to restart the stream.
                 restartStream();
                 break;
