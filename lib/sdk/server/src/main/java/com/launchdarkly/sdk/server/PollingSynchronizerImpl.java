@@ -71,8 +71,14 @@ class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
             } else {
                 resultQueue.put(res);
             }
-        } catch (InterruptedException | ExecutionException e) {
-            // TODO: Determine if handling is needed.
+        } catch (InterruptedException e) {
+            // This would likely be the result of a shutdown, so we are just logging this for debugging purposes.
+            // Same with the ExecutionException below.
+            logger.debug("Polling thread interrupted: {}", e.toString());
+            Thread.currentThread().interrupt();
+        }
+        catch(ExecutionException e) {
+            logger.debug("Polling thread execution exception: {}", e.toString());
         }
     }
 
