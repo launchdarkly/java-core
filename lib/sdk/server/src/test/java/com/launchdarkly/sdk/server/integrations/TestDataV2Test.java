@@ -52,6 +52,41 @@ public class TestDataV2Test {
 
   private final CapturingDataSourceUpdates updates = new CapturingDataSourceUpdates();
 
+  /**
+   * Helper class that consumes FDv2SourceResult objects in a background thread.
+   * This is necessary because update() and delete() block until results are closed,
+   * so we can't call sync.next() on the same thread.
+   */
+  private static class ResultConsumer {
+    private final BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+    private final Thread consumerThread;
+    private volatile boolean stopped = false;
+
+    ResultConsumer(Synchronizer sync) {
+      consumerThread = new Thread(() -> {
+        while (!stopped) {
+          try {
+            FDv2SourceResult result = sync.next().get(5, TimeUnit.SECONDS);
+            result.close(); // Close immediately to unblock put()
+            results.put(result);
+          } catch (Exception e) {
+            break;
+          }
+        }
+      });
+      consumerThread.start();
+    }
+
+    FDv2SourceResult next() throws Exception {
+      return results.poll(5, TimeUnit.SECONDS);
+    }
+
+    void stop() {
+      stopped = true;
+      consumerThread.interrupt();
+    }
+  }
+
   private DataSourceBuildInputs dataSourceBuildInputs() {
     ClientContext context = clientContext("", new LDConfig.Builder().build(), updates);
     SelectorSource selectorSource = () -> Selector.EMPTY;
@@ -70,8 +105,9 @@ public class TestDataV2Test {
   public void initializesWithEmptyData() throws Exception {
     TestDataV2 td = TestDataV2.synchronizer();
     Synchronizer sync = td.build(dataSourceBuildInputs());
+    ResultConsumer consumer = new ResultConsumer(sync);
 
-    FDv2SourceResult result = sync.next().get(5, TimeUnit.SECONDS);
+    FDv2SourceResult result = consumer.next();
 
     assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
     ChangeSet<ItemDescriptor> changeSet = result.getChangeSet();
@@ -80,6 +116,8 @@ public class TestDataV2Test {
     assertThat(changeSet.getData(), iterableWithSize(1));
     assertThat(get(changeSet.getData(), 0).getKey(), equalTo(DataModel.FEATURES));
     assertThat(get(changeSet.getData(), 0).getValue().getItems(), emptyIterable());
+
+    consumer.stop();
   }
 
   @Test
@@ -89,7 +127,9 @@ public class TestDataV2Test {
       .update(td.flag("flag2").on(false));
 
     Synchronizer sync = td.build(dataSourceBuildInputs());
-    FDv2SourceResult result = sync.next().get(5, TimeUnit.SECONDS);
+    ResultConsumer consumer = new ResultConsumer(sync);
+
+    FDv2SourceResult result = consumer.next();
 
     assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
     ChangeSet<ItemDescriptor> changeSet = result.getChangeSet();
@@ -113,20 +153,23 @@ public class TestDataV2Test {
 
     assertJsonEquals(flagJson(expectedFlag1, 1), flagJson(flag1));
     assertJsonEquals(flagJson(expectedFlag2, 1), flagJson(flag2));
+
+    consumer.stop();
   }
 
   @Test
   public void addsFlag() throws Exception {
     TestDataV2 td = TestDataV2.synchronizer();
     Synchronizer sync = td.build(dataSourceBuildInputs());
+    ResultConsumer consumer = new ResultConsumer(sync);
 
-    FDv2SourceResult initResult = sync.next().get(5, TimeUnit.SECONDS);
+    FDv2SourceResult initResult = consumer.next();
     assertThat(initResult.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
     assertThat(initResult.getChangeSet().getType(), equalTo(ChangeSetType.Full));
 
     td.update(td.flag("flag1").on(true));
 
-    FDv2SourceResult updateResult = sync.next().get(5, TimeUnit.SECONDS);
+    FDv2SourceResult updateResult = consumer.next();
     assertThat(updateResult.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
     ChangeSet<ItemDescriptor> changeSet = updateResult.getChangeSet();
     assertThat(changeSet.getType(), equalTo(ChangeSetType.Partial));
@@ -141,6 +184,8 @@ public class TestDataV2Test {
     ModelBuilders.FlagBuilder expectedFlag = flagBuilder("flag1").version(1).salt("")
         .on(true).offVariation(1).fallthroughVariation(0).variations(true, false);
     assertJsonEquals(flagJson(expectedFlag, 1), flagJson(flag1));
+
+    consumer.stop();
   }
 
   @Test
@@ -152,12 +197,14 @@ public class TestDataV2Test {
       .ifMatch("name", LDValue.of("Lucy")).thenReturn(true));
 
     Synchronizer sync = td.build(dataSourceBuildInputs());
-    FDv2SourceResult initResult = sync.next().get(5, TimeUnit.SECONDS);
+    ResultConsumer consumer = new ResultConsumer(sync);
+
+    FDv2SourceResult initResult = consumer.next();
     assertThat(initResult.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
 
     td.update(td.flag("flag1").on(true));
 
-    FDv2SourceResult updateResult = sync.next().get(5, TimeUnit.SECONDS);
+    FDv2SourceResult updateResult = consumer.next();
     ChangeSet<ItemDescriptor> changeSet = updateResult.getChangeSet();
     Map<String, ItemDescriptor> items = ImmutableMap.copyOf(get(changeSet.getData(), 0).getValue().getItems());
     ItemDescriptor flag1 = items.get("flag1");
@@ -168,29 +215,33 @@ public class TestDataV2Test {
         .addTarget(0, "a").addContextTarget(ContextKind.DEFAULT, 0)
         .addRule("rule0", 0, "{\"contextKind\":\"user\",\"attribute\":\"name\",\"op\":\"in\",\"values\":[\"Lucy\"]}");
     assertJsonEquals(flagJson(expectedFlag, 2), flagJson(flag1));
+
+    consumer.stop();
   }
 
   @Test
   public void deletesFlag() throws Exception {
     TestDataV2 td = TestDataV2.synchronizer();
     Synchronizer sync = td.build(dataSourceBuildInputs());
+    ResultConsumer consumer = new ResultConsumer(sync);
 
-    sync.next().get(5, TimeUnit.SECONDS);
+    consumer.next(); // Consume initial result
 
     td.update(td.flag("foo").on(false).valueForAll(LDValue.of("bar")));
-    FDv2SourceResult addResult = sync.next().get(5, TimeUnit.SECONDS);
+    FDv2SourceResult addResult = consumer.next();
     assertThat(addResult.getChangeSet().getType(), equalTo(ChangeSetType.Partial));
     Map<String, ItemDescriptor> addItems = ImmutableMap.copyOf(get(addResult.getChangeSet().getData(), 0).getValue().getItems());
     assertThat(addItems.get("foo").getVersion(), equalTo(1));
     assertThat(addItems.get("foo").getItem(), notNullValue());
 
     td.delete("foo");
-    FDv2SourceResult deleteResult = sync.next().get(5, TimeUnit.SECONDS);
+    FDv2SourceResult deleteResult = consumer.next();
     assertThat(deleteResult.getChangeSet().getType(), equalTo(ChangeSetType.Partial));
     Map<String, ItemDescriptor> deleteItems = ImmutableMap.copyOf(get(deleteResult.getChangeSet().getData(), 0).getValue().getItems());
     assertThat(deleteItems.get("foo").getVersion(), equalTo(2));
     assertThat(deleteItems.get("foo").getItem(), nullValue());
 
+    consumer.stop();
     sync.close();
   }
 
@@ -248,17 +299,21 @@ public class TestDataV2Test {
 
     TestDataV2 td = TestDataV2.synchronizer();
     Synchronizer sync = td.build(dataSourceBuildInputs());
-    sync.next().get(5, TimeUnit.SECONDS);
+    ResultConsumer consumer = new ResultConsumer(sync);
+
+    consumer.next(); // Consume initial result
 
     td.update(configureFlag.apply(td.flag("flagkey")));
 
-    FDv2SourceResult result = sync.next().get(5, TimeUnit.SECONDS);
+    FDv2SourceResult result = consumer.next();
     assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
     ChangeSet<ItemDescriptor> changeSet = result.getChangeSet();
     Map<String, ItemDescriptor> items = ImmutableMap.copyOf(get(changeSet.getData(), 0).getValue().getItems());
     ItemDescriptor flag = items.get("flagkey");
     assertThat(flag.getVersion(), equalTo(1));
     assertJsonEquals(flagJson(expectedFlag, 1), flagJson(flag));
+
+    consumer.stop();
   }
 
   private static String flagJson(ModelBuilders.FlagBuilder flagBuilder, int version) {

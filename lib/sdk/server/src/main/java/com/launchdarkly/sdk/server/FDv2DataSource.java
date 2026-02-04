@@ -159,38 +159,39 @@ class FDv2DataSource implements DataSource {
         Initializer initializer = sourceManager.getNextInitializerAndSetActive();
         while(initializer != null) {
             try {
-                FDv2SourceResult result = initializer.run().get();
-                switch (result.getResultType()) {
-                    case CHANGE_SET:
-                        dataSourceUpdates.apply(result.getChangeSet());
-                        anyDataReceived = true;
-                        if (!result.getChangeSet().getSelector().isEmpty()) {
-                            // We received data with a selector, so we end the initialization process.
-                            dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
-                            startFuture.complete(true);
-                            return;
-                        }
-                        break;
-                    case STATUS:
-                        FDv2SourceResult.Status status = result.getStatus();
-                        switch(status.getState()) {
-                            case INTERRUPTED:
-                            case TERMINAL_ERROR:
-                                // The data source updates handler will filter the state during initializing, but this
-                                // will make the error information available.
-                                dataSourceUpdates.updateStatus(
-                                    // While the error was terminal to the individual initializer, it isn't terminal
-                                    // to the data source as a whole.
-                                    DataSourceStatusProvider.State.INTERRUPTED,
-                                    status.getErrorInfo());
-                                break;
-                            case SHUTDOWN:
-                            case GOODBYE:
-                                // We don't need to inform anyone of these statuses.
-                                logger.debug("Ignoring status {} from initializer", result.getStatus().getState());
-                                break;
-                        }
-                        break;
+                try(FDv2SourceResult result = initializer.run().get()) {
+                    switch (result.getResultType()) {
+                        case CHANGE_SET:
+                            dataSourceUpdates.apply(result.getChangeSet());
+                            anyDataReceived = true;
+                            if (!result.getChangeSet().getSelector().isEmpty()) {
+                                // We received data with a selector, so we end the initialization process.
+                                dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
+                                startFuture.complete(true);
+                                return;
+                            }
+                            break;
+                        case STATUS:
+                            FDv2SourceResult.Status status = result.getStatus();
+                            switch (status.getState()) {
+                                case INTERRUPTED:
+                                case TERMINAL_ERROR:
+                                    // The data source updates handler will filter the state during initializing, but this
+                                    // will make the error information available.
+                                    dataSourceUpdates.updateStatus(
+                                        // While the error was terminal to the individual initializer, it isn't terminal
+                                        // to the data source as a whole.
+                                        DataSourceStatusProvider.State.INTERRUPTED,
+                                        status.getErrorInfo());
+                                    break;
+                                case SHUTDOWN:
+                                case GOODBYE:
+                                    // We don't need to inform anyone of these statuses.
+                                    logger.debug("Ignoring status {} from initializer", result.getStatus().getState());
+                                    break;
+                            }
+                            break;
+                    }
                 }
             } catch (ExecutionException | InterruptedException | CancellationException e) {
                 // We don't expect these conditions to happen in practice.
@@ -205,7 +206,7 @@ class FDv2DataSource implements DataSource {
                         new Date().toInstant()));
                 logger.warn("Error running initializer: {}", e.toString());
             }
-            initializer = sourceManager.getNextInitializerAndSetActive();
+        initializer = sourceManager.getNextInitializerAndSetActive();
         }
         // We received data without a selector, and we have exhausted initializers, so we are going to
         // consider ourselves initialized.
@@ -286,55 +287,56 @@ class FDv2DataSource implements DataSource {
                                 continue;
                             }
 
-                            FDv2SourceResult result = (FDv2SourceResult) res;
-                            conditions.inform(result);
+                            try (FDv2SourceResult result = (FDv2SourceResult) res) {
+                                conditions.inform(result);
 
-                            switch (result.getResultType()) {
-                                case CHANGE_SET:
-                                    dataSourceUpdates.apply(result.getChangeSet());
-                                    dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
-                                    // This could have been completed by any data source. But if it has not been completed before
-                                    // now, then we complete it.
-                                    startFuture.complete(true);
-                                    break;
-                                case STATUS:
-                                    FDv2SourceResult.Status status = result.getStatus();
-                                    switch (status.getState()) {
-                                        case INTERRUPTED:
-                                            // Handled by conditions.
-                                            dataSourceUpdates.updateStatus(
-                                                DataSourceStatusProvider.State.INTERRUPTED,
-                                                status.getErrorInfo());
-                                            break;
-                                        case SHUTDOWN:
-                                            // We should be overall shutting down.
-                                            logger.debug("Synchronizer shutdown.");
-                                            return;
-                                        case TERMINAL_ERROR:
-                                            sourceManager.blockCurrentSynchronizer();
-                                            running = false;
-                                            dataSourceUpdates.updateStatus(
-                                                DataSourceStatusProvider.State.INTERRUPTED,
-                                                status.getErrorInfo());
-                                            break;
-                                        case GOODBYE:
-                                            // We let the synchronizer handle this internally.
-                                            break;
-                                    }
-                                    break;
-                            }
-                            // We have been requested to fall back to FDv1. We handle whatever message was associated,
-                            // close the synchronizer, and then fallback.
-                            // Only trigger fallback if we're not already running the FDv1 fallback synchronizer.
-                            if (
-                                result.isFdv1Fallback() &&
-                                    sourceManager.hasFDv1Fallback() &&
-                                    // This shouldn't happen in practice, an FDv1 source shouldn't request fallback
-                                    // to FDv1. But if it does, then we will discard its request.
-                                    !sourceManager.isCurrentSynchronizerFDv1Fallback()
-                            ) {
-                                sourceManager.fdv1Fallback();
-                                running = false;
+                                switch (result.getResultType()) {
+                                    case CHANGE_SET:
+                                        dataSourceUpdates.apply(result.getChangeSet());
+                                        dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
+                                        // This could have been completed by any data source. But if it has not been completed before
+                                        // now, then we complete it.
+                                        startFuture.complete(true);
+                                        break;
+                                    case STATUS:
+                                        FDv2SourceResult.Status status = result.getStatus();
+                                        switch (status.getState()) {
+                                            case INTERRUPTED:
+                                                // Handled by conditions.
+                                                dataSourceUpdates.updateStatus(
+                                                    DataSourceStatusProvider.State.INTERRUPTED,
+                                                    status.getErrorInfo());
+                                                break;
+                                            case SHUTDOWN:
+                                                // We should be overall shutting down.
+                                                logger.debug("Synchronizer shutdown.");
+                                                return;
+                                            case TERMINAL_ERROR:
+                                                sourceManager.blockCurrentSynchronizer();
+                                                running = false;
+                                                dataSourceUpdates.updateStatus(
+                                                    DataSourceStatusProvider.State.INTERRUPTED,
+                                                    status.getErrorInfo());
+                                                break;
+                                            case GOODBYE:
+                                                // We let the synchronizer handle this internally.
+                                                break;
+                                        }
+                                        break;
+                                }
+                                // We have been requested to fall back to FDv1. We handle whatever message was associated,
+                                // close the synchronizer, and then fallback.
+                                // Only trigger fallback if we're not already running the FDv1 fallback synchronizer.
+                                if (
+                                    result.isFdv1Fallback() &&
+                                        sourceManager.hasFDv1Fallback() &&
+                                        // This shouldn't happen in practice, an FDv1 source shouldn't request fallback
+                                        // to FDv1. But if it does, then we will discard its request.
+                                        !sourceManager.isCurrentSynchronizerFDv1Fallback()
+                                ) {
+                                    sourceManager.fdv1Fallback();
+                                    running = false;
+                                }
                             }
                         }
                     }
