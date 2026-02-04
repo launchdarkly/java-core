@@ -2,6 +2,18 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.11.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.10.2...launchdarkly-java-server-sdk-7.11.0) (2026-02-04)
+
+
+### Features
+
+* **experimental:** Release EAP support for FDv2 data system. ([6d7000b](https://github.com/launchdarkly/java-core/commit/6d7000b38ec7faf0760184b546b1dd4896c42dc9))
+
+
+### Bug Fixes
+
+* Fix an issue that would prevent using FileData with `autoReload(true)` for a file in the current working directory. ([b50f684](https://github.com/launchdarkly/java-core/commit/b50f6847696e7c0956276911556ac78613f9fb4e))
+
 ## [7.10.2](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.10.1...launchdarkly-java-server-sdk-7.10.2) (2025-08-26)
 
 
