@@ -67,7 +67,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             // First changeset
@@ -103,7 +104,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -131,7 +133,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -159,7 +162,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                 testLogger,
                 selectorSource,
                     null,
-                Duration.ofMillis(100)
+                Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
         );
 
         CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -192,7 +196,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -223,7 +228,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> nextFuture = synchronizer.next();
@@ -262,7 +268,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -304,7 +311,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             // First result should be goodbye
@@ -353,7 +361,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -391,7 +400,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -445,7 +455,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             // First result should be an error from the 503
@@ -505,7 +516,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             // Error event should be logged but not queued, so we should get the changeset
@@ -543,7 +555,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -583,7 +596,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -616,7 +630,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             // Call close multiple times - should not throw exceptions
@@ -652,7 +667,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -687,7 +703,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     "myFilter",
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -728,7 +745,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     "testFilter",
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -767,7 +785,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     "",
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -806,7 +825,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -846,7 +866,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -881,7 +902,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -911,7 +933,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -948,7 +971,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -986,7 +1010,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -1023,7 +1048,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -1061,7 +1087,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     testLogger,
                     selectorSource,
                     null,
-                    Duration.ofMillis(100)
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();

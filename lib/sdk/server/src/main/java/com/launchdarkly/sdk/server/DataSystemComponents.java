@@ -97,7 +97,8 @@ public final class DataSystemComponents {
               context.getBaseLogger(),
               context.getSelectorSource(),
               payloadFilter,
-              initialReconnectDelay
+              initialReconnectDelay,
+              context.getThreadPriority()
       );
     }
   }
