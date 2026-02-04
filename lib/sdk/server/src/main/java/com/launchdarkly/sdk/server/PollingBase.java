@@ -119,7 +119,8 @@ class PollingBase {
                             );
                             return FDv2SourceResult.changeSet(converted, fdv1Fallback);
                         } catch (Exception e) {
-                            // TODO: Do we need to be more specific about the exception type here?
+                            // Whatever exception happened here means we couldn't handle the data. So we are going to
+                            // treat that as invalid data.
                             DataSourceStatusProvider.ErrorInfo info = new DataSourceStatusProvider.ErrorInfo(
                                     DataSourceStatusProvider.ErrorKind.INVALID_DATA,
                                     0,
