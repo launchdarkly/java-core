@@ -144,6 +144,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
             assertEquals(FDv2SourceResult.State.INTERRUPTED, result.getStatus().getState());
             assertEquals(DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE, result.getStatus().getErrorInfo().getKind());
+            assertNull(result.getStatus().getReason());
 
             synchronizer.close();
         }
@@ -244,6 +245,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
             assertEquals(FDv2SourceResult.State.SHUTDOWN, result.getStatus().getState());
             assertNull(result.getStatus().getErrorInfo());
+            assertNull(result.getStatus().getReason());
         }
     }
 
@@ -322,6 +324,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             assertNotNull(result1);
             assertEquals(FDv2SourceResult.ResultType.STATUS, result1.getResultType());
             assertEquals(FDv2SourceResult.State.GOODBYE, result1.getStatus().getState());
+            assertEquals("service-unavailable", result1.getStatus().getReason());
 
             // Second result should be a changeset from the restarted stream
             CompletableFuture<FDv2SourceResult> result2Future = synchronizer.next();

@@ -54,6 +54,8 @@ public class FDv2SourceResult implements Closeable {
         private final State state;
         private final DataSourceStatusProvider.ErrorInfo errorInfo;
 
+        private final String reason;
+
         public State getState() {
             return state;
         }
@@ -62,9 +64,34 @@ public class FDv2SourceResult implements Closeable {
             return errorInfo;
         }
 
-        public Status(State state, DataSourceStatusProvider.ErrorInfo errorInfo) {
+        Status(State state, DataSourceStatusProvider.ErrorInfo errorInfo, String reason) {
             this.state = state;
             this.errorInfo = errorInfo;
+            this.reason = reason;
+        }
+
+        public static Status goodbye(String reason) {
+            return new Status(State.GOODBYE, null, reason);
+        }
+
+        public static Status interrupted(DataSourceStatusProvider.ErrorInfo errorInfo) {
+            return new Status(State.INTERRUPTED, errorInfo, null);
+        }
+
+        public static Status terminalError(DataSourceStatusProvider.ErrorInfo errorInfo) {
+            return new Status(State.TERMINAL_ERROR, errorInfo, null);
+        }
+
+        public static Status shutdown() {
+            return new Status(State.SHUTDOWN, null, null);
+        }
+
+        /**
+         * If the state is GOODBYE, then this will be the reason. Otherwise, it will be null.
+         * @return the reason, or null
+         */
+        public String getReason() {
+            return reason;
         }
     }
 
@@ -97,7 +124,7 @@ public class FDv2SourceResult implements Closeable {
     public static FDv2SourceResult interrupted(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
         return new FDv2SourceResult(
             null,
-            new Status(State.INTERRUPTED, errorInfo),
+            Status.interrupted(errorInfo),
             ResultType.STATUS,
             fdv1Fallback,
             completionCallback);
@@ -109,7 +136,7 @@ public class FDv2SourceResult implements Closeable {
 
     public static FDv2SourceResult shutdown(Function<Void, Void> completionCallback) {
         return new FDv2SourceResult(null,
-            new Status(State.SHUTDOWN, null),
+            Status.shutdown(),
             ResultType.STATUS,
             false,
             completionCallback);
@@ -121,7 +148,7 @@ public class FDv2SourceResult implements Closeable {
 
     public static FDv2SourceResult terminalError(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
         return new FDv2SourceResult(null,
-            new Status(State.TERMINAL_ERROR, errorInfo),
+            Status.terminalError(errorInfo),
             ResultType.STATUS,
             fdv1Fallback,
             completionCallback);
@@ -145,10 +172,9 @@ public class FDv2SourceResult implements Closeable {
     }
 
     public static FDv2SourceResult goodbye(String reason, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
-        // TODO: Goodbye reason.
         return new FDv2SourceResult(
             null,
-            new Status(State.GOODBYE, null),
+            Status.goodbye(reason),
             ResultType.STATUS,
             fdv1Fallback,
             completionCallback);
