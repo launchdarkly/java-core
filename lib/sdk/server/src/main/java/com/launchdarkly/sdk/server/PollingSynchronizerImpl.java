@@ -17,8 +17,6 @@ class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
 
     private final IterableAsyncQueue<FDv2SourceResult> resultQueue = new IterableAsyncQueue<>();
 
-    private final LDLogger logger;
-
     public PollingSynchronizerImpl(
             FDv2Requestor requestor,
             LDLogger logger,
@@ -27,7 +25,6 @@ class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
             Duration pollInterval
     ) {
         super(requestor, logger.subLogger(Loggers.POLLING_SYNCHRONIZER));
-        this.logger = logger;
         this.selectorSource = selectorSource;
 
         synchronized (this) {
@@ -74,10 +71,14 @@ class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
             } else {
                 resultQueue.put(res);
             }
-        } catch (InterruptedException | ExecutionException e) {
-            // If this happens, then the thread running the poll has been interrupted, or the task has been canceled.
+        } catch (InterruptedException e) {
             // This would likely be the result of a shutdown, so we are just logging this for debugging purposes.
+            // Same with the ExecutionException below.
             logger.debug("Polling thread interrupted: {}", e.toString());
+            Thread.currentThread().interrupt();
+        }
+        catch(ExecutionException e) {
+            logger.debug("Polling thread execution exception: {}", e.toString());
         }
     }
 

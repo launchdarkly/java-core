@@ -17,7 +17,7 @@ import static com.launchdarkly.sdk.internal.http.HttpErrors.*;
 
 class PollingBase {
     private final FDv2Requestor requestor;
-    private final LDLogger logger;
+    protected final LDLogger logger;
 
     public PollingBase(FDv2Requestor requestor, LDLogger logger) {
         this.requestor = requestor;
