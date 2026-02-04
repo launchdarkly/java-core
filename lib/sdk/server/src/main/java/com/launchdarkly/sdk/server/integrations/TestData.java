@@ -249,8 +249,8 @@ public final class TestData implements ComponentConfigurer<DataSource> {
   }
   
   /**
-   * A builder for feature flag configurations to be used with {@link TestData}.
-   * 
+   * A builder for feature flag configurations to be used with {@link TestData} and {@link TestDataV2}.
+   *
    * @see TestData#flag(String)
    * @see TestData#update(FlagBuilder)
    */
@@ -269,18 +269,20 @@ public final class TestData implements ComponentConfigurer<DataSource> {
     final Map<ContextKind, Map<Integer, ImmutableSet<String>>> targets = new TreeMap<>(); // TreeMap enforces ordering for test determinacy
     final List<FlagRuleBuilder> rules = new ArrayList<>();
     
-    private FlagBuilder(String key) {
+    FlagBuilder(String key) {
       this.key = key;
       this.on = true;
       this.variations = new CopyOnWriteArrayList<>();
     }
     
-    private FlagBuilder(FlagBuilder from) {
+    FlagBuilder(FlagBuilder from) {
       this.key = from.key;
       this.offVariation = from.offVariation;
       this.on = from.on;
       this.fallthroughVariation = from.fallthroughVariation;
       this.variations = new CopyOnWriteArrayList<>(from.variations);
+      this.samplingRatio = from.samplingRatio;
+      this.migrationCheckRatio = from.migrationCheckRatio;
       for (ContextKind contextKind: from.targets.keySet()) {
         this.targets.put(contextKind, new TreeMap<>(from.targets.get(contextKind)));
       }
@@ -811,6 +813,8 @@ public final class TestData implements ComponentConfigurer<DataSource> {
      * {@link #thenReturn(int)} to finish defining the rule.
      */
     public final class FlagRuleBuilder {
+      // TODO: Move FlagRuleBuilder to TestDataV2 when TestData is deprecated
+
       final List<Clause> clauses = new ArrayList<>();
       int variation;
 

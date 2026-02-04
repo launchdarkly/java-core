@@ -95,6 +95,8 @@ public class TestDataTest {
     ItemDescriptor flag2 = flags.get("flag2");
     assertThat(flag1, not(nullValue()));
     assertThat(flag2, not(nullValue()));
+    assertThat(flag1.getVersion(), equalTo(1));
+    assertThat(flag2.getVersion(), equalTo(1));
     
     assertJsonEquals(flagJson(expectedFlag1, 1), flagJson(flag1));
     assertJsonEquals(flagJson(expectedFlag2, 1), flagJson(flag2));
@@ -119,8 +121,8 @@ public class TestDataTest {
     assertThat(up.kind, is(DataModel.FEATURES));
     assertThat(up.key, equalTo("flag1"));
     ItemDescriptor flag1 = up.item;
-    
-    assertJsonEquals(flagJson(expectedFlag, 2), flagJson(flag1));
+    assertThat(flag1.getVersion(), equalTo(1));
+    assertJsonEquals(flagJson(expectedFlag, 1), flagJson(flag1));
   }
 
   @Test
@@ -150,7 +152,7 @@ public class TestDataTest {
     assertThat(up.kind, is(DataModel.FEATURES));
     assertThat(up.key, equalTo("flag1"));
     ItemDescriptor flag1 = up.item;
-    
+    assertThat(flag1.getVersion(), equalTo(2));
     expectedFlag.on(true).version(2);
     assertJsonEquals(flagJson(expectedFlag, 2), flagJson(flag1));
   }
@@ -442,6 +444,7 @@ public class TestDataTest {
     assertThat(updates.upserts.size(), equalTo(1));
     UpsertParams up = updates.upserts.take();
     ItemDescriptor flag = up.item;
+    assertThat(flag.getVersion(), equalTo(1));
     assertJsonEquals(flagJson(expectedFlag, 1), flagJson(flag));
   }
 
