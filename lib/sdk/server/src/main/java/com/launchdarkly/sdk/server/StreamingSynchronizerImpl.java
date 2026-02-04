@@ -61,6 +61,8 @@ class StreamingSynchronizerImpl implements Synchronizer {
 
     private final AtomicBoolean started = new AtomicBoolean(false);
 
+    private final int threadPriority;
+
     public StreamingSynchronizerImpl(
             HttpProperties httpProperties,
             URI baseUri,
@@ -68,7 +70,8 @@ class StreamingSynchronizerImpl implements Synchronizer {
             LDLogger logger,
             SelectorSource selectorSource,
             String payloadFilter,
-            Duration initialReconnectDelaySeconds
+            Duration initialReconnectDelaySeconds,
+            int threadPriority
     ) {
         this.httpProperties = httpProperties;
         this.selectorSource = selectorSource;
@@ -76,6 +79,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
         this.payloadFilter = payloadFilter;
         this.streamUri = HttpHelpers.concatenateUriPath(baseUri, requestPath);
         this.initialReconnectDelay = initialReconnectDelaySeconds;
+        this.threadPriority = threadPriority;
 
         // The stream will lazily start when `next` is called.
     }
@@ -173,8 +177,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
             }
         });
         thread.setName("LaunchDarkly-FDv2-streaming-synchronizer");
-        // TODO: Implement thread priority.
-        //streamThread.setPriority();
+        thread.setPriority(threadPriority);
         thread.setDaemon(true);
         return thread;
     }
