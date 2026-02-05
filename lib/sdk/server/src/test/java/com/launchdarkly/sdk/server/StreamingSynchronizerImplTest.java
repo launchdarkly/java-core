@@ -1,5 +1,7 @@
 package com.launchdarkly.sdk.server;
 
+import com.launchdarkly.sdk.LDValue;
+import com.launchdarkly.sdk.internal.events.DiagnosticStore;
 import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
 import com.launchdarkly.sdk.internal.http.HttpProperties;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
@@ -16,11 +18,16 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static com.launchdarkly.sdk.server.ComponentsImpl.toHttpProperties;
+import static com.launchdarkly.sdk.server.TestComponents.basicDiagnosticStore;
 import static com.launchdarkly.sdk.server.TestComponents.clientContext;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -68,7 +75,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             // First changeset
@@ -105,7 +113,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -134,7 +143,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -164,7 +174,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                 selectorSource,
                     null,
                 Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
         );
 
         CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -198,7 +209,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -230,7 +242,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> nextFuture = synchronizer.next();
@@ -271,7 +284,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -314,7 +328,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             // First result should be goodbye
@@ -365,7 +380,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -404,7 +420,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -459,7 +476,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             // First result should be an error from the 503
@@ -520,7 +538,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             // Error event should be logged but not queued, so we should get the changeset
@@ -559,7 +578,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -600,7 +620,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -634,7 +655,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             // Call close multiple times - should not throw exceptions
@@ -671,7 +693,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -707,7 +730,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     "myFilter",
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -749,7 +773,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     "testFilter",
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -789,7 +814,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     "",
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -829,7 +855,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -870,7 +897,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -906,7 +934,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -937,7 +966,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -975,7 +1005,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -1014,7 +1045,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -1052,7 +1084,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -1091,7 +1124,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     selectorSource,
                     null,
                     Duration.ofMillis(100),
-                    Thread.NORM_PRIORITY
+                    Thread.NORM_PRIORITY,
+                    null
             );
 
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
@@ -1102,6 +1136,219 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             assertEquals(FDv2SourceResult.State.INTERRUPTED, result.getStatus().getState());
             assertEquals(DataSourceStatusProvider.ErrorKind.INVALID_DATA, result.getStatus().getErrorInfo().getKind());
             assertEquals(true, result.isFdv1Fallback());
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void streamInitDiagnosticRecordedOnSuccessfulChangeset() throws Exception {
+        DiagnosticStore diagnosticStore = basicDiagnosticStore();
+        long startTime = System.currentTimeMillis();
+
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.SSE.start(),
+                Handlers.SSE.event(serverIntent),
+                Handlers.SSE.event(payloadTransferred),
+                Handlers.SSE.leaveOpen()))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY,
+                    diagnosticStore
+            );
+
+            CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
+            FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+            assertNotNull(result);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+
+            long timeAfterOpen = System.currentTimeMillis();
+            LDValue event = diagnosticStore.createEventAndReset(0, 0).getJsonValue();
+            LDValue streamInits = event.get("streamInits");
+            assertEquals(1, streamInits.size());
+            LDValue init = streamInits.get(0);
+            assertFalse(init.get("failed").booleanValue());
+            assertThat(init.get("timestamp").longValue(),
+                allOf(greaterThanOrEqualTo(startTime), lessThanOrEqualTo(timeAfterOpen)));
+            assertThat(init.get("durationMillis").longValue(), lessThanOrEqualTo(timeAfterOpen - startTime));
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void streamInitDiagnosticRecordedOnErrorDuringInit() throws Exception {
+        DiagnosticStore diagnosticStore = basicDiagnosticStore();
+        long startTime = System.currentTimeMillis();
+
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+
+        // First connection: 503 error, second connection: successful changeset
+        try (HttpServer server = HttpServer.start(Handlers.sequential(
+                Handlers.status(503),
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred),
+                        Handlers.SSE.leaveOpen())))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY,
+                    diagnosticStore
+            );
+
+            // First result should be the error
+            CompletableFuture<FDv2SourceResult> result1Future = synchronizer.next();
+            FDv2SourceResult result1 = result1Future.get(5, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.ResultType.STATUS, result1.getResultType());
+
+            // Second result should be the successful changeset
+            CompletableFuture<FDv2SourceResult> result2Future = synchronizer.next();
+            FDv2SourceResult result2 = result2Future.get(5, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result2.getResultType());
+
+            long timeAfterOpen = System.currentTimeMillis();
+            LDValue event = diagnosticStore.createEventAndReset(0, 0).getJsonValue();
+
+            LDValue streamInits = event.get("streamInits");
+            assertEquals(2, streamInits.size());
+            LDValue init0 = streamInits.get(0);
+            assertTrue(init0.get("failed").booleanValue());
+            assertThat(init0.get("timestamp").longValue(),
+                allOf(greaterThanOrEqualTo(startTime), lessThanOrEqualTo(timeAfterOpen)));
+            assertThat(init0.get("durationMillis").longValue(), lessThanOrEqualTo(timeAfterOpen - startTime));
+
+            LDValue init1 = streamInits.get(1);
+            assertFalse(init1.get("failed").booleanValue());
+            assertThat(init1.get("timestamp").longValue(),
+                allOf(greaterThanOrEqualTo(init0.get("timestamp").longValue()), lessThanOrEqualTo(timeAfterOpen)));
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void streamRestartNotRecordedAsFailed() throws Exception {
+        DiagnosticStore diagnosticStore = basicDiagnosticStore();
+
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred1 = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+        String goodbyeEvent = makeEvent("goodbye", "{\"reason\":\"service-unavailable\"}");
+        String payloadTransferred2 = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:101)\",\"version\":101}");
+
+        // First connection: changeset + goodbye, second connection: changeset
+        try (HttpServer server = HttpServer.start(Handlers.sequential(
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred1),
+                        Handlers.SSE.event(goodbyeEvent),
+                        Handlers.SSE.leaveOpen()),
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred2),
+                        Handlers.SSE.leaveOpen())))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY,
+                    diagnosticStore
+            );
+
+            // First changeset
+            CompletableFuture<FDv2SourceResult> result1Future = synchronizer.next();
+            FDv2SourceResult result1 = result1Future.get(5, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result1.getResultType());
+
+            // Goodbye
+            CompletableFuture<FDv2SourceResult> result2Future = synchronizer.next();
+            FDv2SourceResult result2 = result2Future.get(5, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.ResultType.STATUS, result2.getResultType());
+            assertEquals(FDv2SourceResult.State.GOODBYE, result2.getStatus().getState());
+
+            // Second changeset after reconnect
+            CompletableFuture<FDv2SourceResult> result3Future = synchronizer.next();
+            FDv2SourceResult result3 = result3Future.get(5, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result3.getResultType());
+
+            LDValue event = diagnosticStore.createEventAndReset(0, 0).getJsonValue();
+            LDValue streamInits = event.get("streamInits");
+            assertEquals(2, streamInits.size());
+            // Both inits should be successful (goodbye is a deliberate restart, not a failure)
+            assertFalse(streamInits.get(0).get("failed").booleanValue());
+            assertFalse(streamInits.get(1).get("failed").booleanValue());
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void nullDiagnosticStoreDoesNotCauseError() throws Exception {
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.SSE.start(),
+                Handlers.SSE.event(serverIntent),
+                Handlers.SSE.event(payloadTransferred),
+                Handlers.SSE.leaveOpen()))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY,
+                    null  // null diagnosticStore
+            );
+
+            CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
+            FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
+
+            assertNotNull(result);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertNotNull(result.getChangeSet());
 
             synchronizer.close();
         }
