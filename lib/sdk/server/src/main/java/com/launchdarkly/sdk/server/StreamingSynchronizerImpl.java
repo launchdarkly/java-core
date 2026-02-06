@@ -288,8 +288,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                             Instant.now()
                     );
                     result = FDv2SourceResult.interrupted(conversionError, getFallback(event));
-                    recordStreamInit(true);  // Record failed init before restarting
-                    restartStream();
+                    restartStream(true);
                 }
                 break;
 
@@ -305,7 +304,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 logger.info("Goodbye was received from the LaunchDarkly connection with reason: '{}'.", reason);
                 result = FDv2SourceResult.goodbye(reason, getFallback(event));
                 // We drop this current connection and attempt to restart the stream.
-                restartStream();
+                restartStream(false);  // Not a failure - deliberate server-initiated restart
                 break;
 
             case INTERNAL_ERROR:
@@ -329,8 +328,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 );
                 result = FDv2SourceResult.interrupted(internalError, getFallback(event));
                 if(kind == DataSourceStatusProvider.ErrorKind.INVALID_DATA) {
-                    recordStreamInit(true);  // Record failed init before restarting
-                    restartStream();
+                    restartStream(true);
                 }
                 break;
 
@@ -353,8 +351,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 Instant.now()
         );
         resultQueue.put(FDv2SourceResult.interrupted(errorInfo, getFallback(event)));
-        recordStreamInit(true);  // Record failed init before restarting
-        restartStream();
+        restartStream(true);
     }
 
     private boolean handleError(StreamException e) {
@@ -402,8 +399,9 @@ class StreamingSynchronizerImpl implements Synchronizer {
         return true; // allow reconnect
     }
 
-    private void restartStream() {
+    private void restartStream(boolean failed) {
         Objects.requireNonNull(eventSource, "eventSource must not be null");
+        recordStreamInit(failed);
         streamStarted = System.currentTimeMillis();
         eventSource.interrupt();
         protocolHandler.reset();
