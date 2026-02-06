@@ -169,6 +169,8 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 logger.error("Stream thread ended with exception: {}", LogValues.exceptionSummary(e));
                 logger.debug(LogValues.exceptionTrace(e));
 
+                recordStreamInit(true);  // Record failed init for unexpected thread exception
+
                 DataSourceStatusProvider.ErrorInfo errorInfo = new DataSourceStatusProvider.ErrorInfo(
                         DataSourceStatusProvider.ErrorKind.UNKNOWN,
                         0,
@@ -273,6 +275,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                               event.getHeaders().value(HeaderConstants.ENVIRONMENT_ID.getHeaderName()),
                               true);
                     recordStreamInit(false);
+                    // Reset to 0 after successful init to prevent duplicate recordings until next restart
                     streamStarted = 0;
                     result = FDv2SourceResult.changeSet(converted, getFallback(event));
                 } catch (Exception e) {
@@ -285,6 +288,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                             Instant.now()
                     );
                     result = FDv2SourceResult.interrupted(conversionError, getFallback(event));
+                    recordStreamInit(true);  // Record failed init before restarting
                     restartStream();
                 }
                 break;
@@ -325,6 +329,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 );
                 result = FDv2SourceResult.interrupted(internalError, getFallback(event));
                 if(kind == DataSourceStatusProvider.ErrorKind.INVALID_DATA) {
+                    recordStreamInit(true);  // Record failed init before restarting
                     restartStream();
                 }
                 break;
@@ -348,18 +353,17 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 Instant.now()
         );
         resultQueue.put(FDv2SourceResult.interrupted(errorInfo, getFallback(event)));
+        recordStreamInit(true);  // Record failed init before restarting
         restartStream();
     }
 
     private boolean handleError(StreamException e) {
-        boolean streamFailed = true;
-        if (e instanceof StreamClosedByCallerException) {
-            // We closed it ourselves (shutdown was called or stream was deliberately restarted)
-            streamFailed = false;
-        }
+        // Check if this was a deliberate shutdown/restart rather than an actual error
+        boolean streamFailed = !(e instanceof StreamClosedByCallerException);
         recordStreamInit(streamFailed);
 
         if (e instanceof StreamClosedByCallerException) {
+            // We closed it ourselves (shutdown was called or stream was deliberately restarted)
             return false;
         }
 
@@ -400,6 +404,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
 
     private void restartStream() {
         Objects.requireNonNull(eventSource, "eventSource must not be null");
+        streamStarted = System.currentTimeMillis();
         eventSource.interrupt();
         protocolHandler.reset();
     }

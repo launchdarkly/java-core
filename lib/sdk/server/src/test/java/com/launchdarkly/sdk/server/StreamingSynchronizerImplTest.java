@@ -1354,4 +1354,288 @@ public class StreamingSynchronizerImplTest extends BaseTest {
         }
     }
 
+    @Test
+    public void multipleRestartsRecordMultipleDiagnostics() throws Exception {
+        DiagnosticStore diagnosticStore = basicDiagnosticStore();
+
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred1 = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+        String goodbyeEvent1 = makeEvent("goodbye", "{\"reason\":\"service-unavailable\"}");
+        String payloadTransferred2 = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:101)\",\"version\":101}");
+        String goodbyeEvent2 = makeEvent("goodbye", "{\"reason\":\"service-unavailable\"}");
+        String payloadTransferred3 = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:102)\",\"version\":102}");
+
+        // Three connections: changeset+goodbye, changeset+goodbye, changeset
+        try (HttpServer server = HttpServer.start(Handlers.sequential(
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred1),
+                        Handlers.SSE.event(goodbyeEvent1),
+                        Handlers.SSE.leaveOpen()),
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred2),
+                        Handlers.SSE.event(goodbyeEvent2),
+                        Handlers.SSE.leaveOpen()),
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred3),
+                        Handlers.SSE.leaveOpen())))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY,
+                    diagnosticStore
+            );
+
+            // First changeset
+            CompletableFuture<FDv2SourceResult> result1Future = synchronizer.next();
+            FDv2SourceResult result1 = result1Future.get(5, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result1.getResultType());
+
+            // First goodbye
+            CompletableFuture<FDv2SourceResult> result2Future = synchronizer.next();
+            FDv2SourceResult result2 = result2Future.get(5, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.ResultType.STATUS, result2.getResultType());
+
+            // Second changeset
+            CompletableFuture<FDv2SourceResult> result3Future = synchronizer.next();
+            FDv2SourceResult result3 = result3Future.get(5, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result3.getResultType());
+
+            // Second goodbye
+            CompletableFuture<FDv2SourceResult> result4Future = synchronizer.next();
+            FDv2SourceResult result4 = result4Future.get(5, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.ResultType.STATUS, result4.getResultType());
+
+            // Third changeset
+            CompletableFuture<FDv2SourceResult> result5Future = synchronizer.next();
+            FDv2SourceResult result5 = result5Future.get(5, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result5.getResultType());
+
+            LDValue event = diagnosticStore.createEventAndReset(0, 0).getJsonValue();
+            LDValue streamInits = event.get("streamInits");
+            assertEquals(3, streamInits.size());
+            // All three inits should be successful
+            assertFalse(streamInits.get(0).get("failed").booleanValue());
+            assertFalse(streamInits.get(1).get("failed").booleanValue());
+            assertFalse(streamInits.get(2).get("failed").booleanValue());
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void streamRestartAfterInvalidDataRecordsMultipleDiagnostics() throws Exception {
+        DiagnosticStore diagnosticStore = basicDiagnosticStore();
+
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String invalidPayload = makeEvent("payload-transferred", "{malformed json}");
+        String validPayload = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+
+        // First connection: invalid data, second connection: valid changeset
+        try (HttpServer server = HttpServer.start(Handlers.sequential(
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(invalidPayload),
+                        Handlers.SSE.leaveOpen()),
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(validPayload),
+                        Handlers.SSE.leaveOpen())))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY,
+                    diagnosticStore
+            );
+
+            // First result should be interrupted due to invalid data
+            CompletableFuture<FDv2SourceResult> result1Future = synchronizer.next();
+            FDv2SourceResult result1 = result1Future.get(5, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.ResultType.STATUS, result1.getResultType());
+            assertEquals(FDv2SourceResult.State.INTERRUPTED, result1.getStatus().getState());
+
+            // Second result should be the valid changeset
+            CompletableFuture<FDv2SourceResult> result2Future = synchronizer.next();
+            FDv2SourceResult result2 = result2Future.get(5, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result2.getResultType());
+
+            LDValue event = diagnosticStore.createEventAndReset(0, 0).getJsonValue();
+            LDValue streamInits = event.get("streamInits");
+            assertEquals(2, streamInits.size());
+            // First init should be failed (invalid data), second should be successful
+            assertTrue(streamInits.get(0).get("failed").booleanValue());
+            assertFalse(streamInits.get(1).get("failed").booleanValue());
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void multipleErrorsRecordMultipleDiagnostics() throws Exception {
+        DiagnosticStore diagnosticStore = basicDiagnosticStore();
+        long startTime = System.currentTimeMillis();
+
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+
+        // Three connections: 503, 503, successful changeset
+        try (HttpServer server = HttpServer.start(Handlers.sequential(
+                Handlers.status(503),
+                Handlers.status(503),
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred),
+                        Handlers.SSE.leaveOpen())))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY,
+                    diagnosticStore
+            );
+
+            // First error
+            CompletableFuture<FDv2SourceResult> result1Future = synchronizer.next();
+            FDv2SourceResult result1 = result1Future.get(5, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.ResultType.STATUS, result1.getResultType());
+
+            // Second error
+            CompletableFuture<FDv2SourceResult> result2Future = synchronizer.next();
+            FDv2SourceResult result2 = result2Future.get(5, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.ResultType.STATUS, result2.getResultType());
+
+            // Successful changeset
+            CompletableFuture<FDv2SourceResult> result3Future = synchronizer.next();
+            FDv2SourceResult result3 = result3Future.get(5, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result3.getResultType());
+
+            long timeAfterOpen = System.currentTimeMillis();
+            LDValue event = diagnosticStore.createEventAndReset(0, 0).getJsonValue();
+            LDValue streamInits = event.get("streamInits");
+            assertEquals(3, streamInits.size());
+
+            // First two inits should be failed, last should be successful
+            LDValue init0 = streamInits.get(0);
+            assertTrue(init0.get("failed").booleanValue());
+            assertThat(init0.get("timestamp").longValue(),
+                allOf(greaterThanOrEqualTo(startTime), lessThanOrEqualTo(timeAfterOpen)));
+
+            LDValue init1 = streamInits.get(1);
+            assertTrue(init1.get("failed").booleanValue());
+            assertThat(init1.get("timestamp").longValue(),
+                allOf(greaterThanOrEqualTo(init0.get("timestamp").longValue()), lessThanOrEqualTo(timeAfterOpen)));
+
+            LDValue init2 = streamInits.get(2);
+            assertFalse(init2.get("failed").booleanValue());
+            assertThat(init2.get("timestamp").longValue(),
+                allOf(greaterThanOrEqualTo(init1.get("timestamp").longValue()), lessThanOrEqualTo(timeAfterOpen)));
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void errorAfterSuccessfulChangesetRecordsNewDiagnostic() throws Exception {
+        DiagnosticStore diagnosticStore = basicDiagnosticStore();
+
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred1 = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+        String goodbyeEvent = makeEvent("goodbye", "{\"reason\":\"service-unavailable\"}");
+
+        // First connection: successful changeset + goodbye, second connection: 503 error, third connection: successful
+        try (HttpServer server = HttpServer.start(Handlers.sequential(
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred1),
+                        Handlers.SSE.event(goodbyeEvent),
+                        Handlers.SSE.leaveOpen()),
+                Handlers.status(503),
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred1),
+                        Handlers.SSE.leaveOpen())))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY,
+                    diagnosticStore
+            );
+
+            // First successful changeset
+            CompletableFuture<FDv2SourceResult> result1Future = synchronizer.next();
+            FDv2SourceResult result1 = result1Future.get(5, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result1.getResultType());
+
+            // Goodbye
+            CompletableFuture<FDv2SourceResult> result2Future = synchronizer.next();
+            FDv2SourceResult result2 = result2Future.get(5, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.ResultType.STATUS, result2.getResultType());
+
+            // Error
+            CompletableFuture<FDv2SourceResult> result3Future = synchronizer.next();
+            FDv2SourceResult result3 = result3Future.get(5, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.ResultType.STATUS, result3.getResultType());
+
+            // Second successful changeset
+            CompletableFuture<FDv2SourceResult> result4Future = synchronizer.next();
+            FDv2SourceResult result4 = result4Future.get(5, TimeUnit.SECONDS);
+            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result4.getResultType());
+
+            LDValue event = diagnosticStore.createEventAndReset(0, 0).getJsonValue();
+            LDValue streamInits = event.get("streamInits");
+            assertEquals(3, streamInits.size());
+            // First init: successful, second init: failed (503), third init: successful
+            assertFalse(streamInits.get(0).get("failed").booleanValue());
+            assertTrue(streamInits.get(1).get("failed").booleanValue());
+            assertFalse(streamInits.get(2).get("failed").booleanValue());
+
+            synchronizer.close();
+        }
+    }
+
 }
