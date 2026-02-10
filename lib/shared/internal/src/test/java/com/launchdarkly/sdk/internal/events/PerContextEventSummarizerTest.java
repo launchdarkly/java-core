@@ -23,7 +23,7 @@ public class PerContextEventSummarizerTest {
 
   @Test
   public void summarizeEventCreatesNewSummarizerForNewContext() {
-    PerContextEventSummarizer mcs = new PerContextEventSummarizer();
+  PerContextEventSummarizer mcs = new PerContextEventSummarizer();
 
     mcs.summarizeEvent(1000, "flag1", 11, 1, LDValue.of("value1"), LDValue.of("default1"), context1);
 

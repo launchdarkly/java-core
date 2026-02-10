@@ -624,9 +624,7 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
       } else {
         logger.debug("Skipped flushing because all workers are busy");
         // All the workers are busy so we can't flush now; keep the events in our state
-        if (!payload.summaries.isEmpty()) {
-          outbox.summarizer.restoreTo(payload.summaries);
-        }
+        outbox.summarizer.restoreTo(payload.summaries);
         synchronized(busyFlushWorkersCount) {
           busyFlushWorkersCount.decrementAndGet();
           busyFlushWorkersCount.notify();
