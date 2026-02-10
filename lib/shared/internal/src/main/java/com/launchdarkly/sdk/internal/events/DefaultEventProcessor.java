@@ -624,16 +624,8 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
       } else {
         logger.debug("Skipped flushing because all workers are busy");
         // All the workers are busy so we can't flush now; keep the events in our state
-        if (outbox.perContextSummarization) {
-          // Per-context mode: restore all summaries
-          if (outbox.multiContextSummarizer != null && !payload.summaries.isEmpty()) {
-            outbox.multiContextSummarizer.restoreTo(payload.summaries);
-          }
-        } else {
-          // Single summary mode: restore single summary
-          if (outbox.summarizer != null && !payload.summaries.isEmpty()) {
-            outbox.summarizer.restoreTo(payload.summaries.get(0));
-          }
+        if (!payload.summaries.isEmpty()) {
+          outbox.summarizer.restoreTo(payload.summaries);
         }
         synchronized(busyFlushWorkersCount) {
           busyFlushWorkersCount.decrementAndGet();
@@ -677,9 +669,7 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
   
   private static final class EventBuffer {
     final List<Event> events = new ArrayList<>();
-    final EventSummarizer summarizer; // used when perContextSummarization is false
-    final MultiContextEventSummarizer multiContextSummarizer; // used when perContextSummarization is true
-    private final boolean perContextSummarization;
+    final EventSummarizerInterface summarizer;
     private final int capacity;
     private final LDLogger logger;
     private boolean capacityExceeded = false;
@@ -687,15 +677,10 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
 
     EventBuffer(int capacity, boolean perContextSummarization, LDLogger logger) {
       this.capacity = capacity;
-      this.perContextSummarization = perContextSummarization;
       this.logger = logger;
-      if (perContextSummarization) {
-        this.summarizer = null;
-        this.multiContextSummarizer = new MultiContextEventSummarizer();
-      } else {
-        this.summarizer = new EventSummarizer();
-        this.multiContextSummarizer = null;
-      }
+      this.summarizer = perContextSummarization
+          ? new PerContextEventSummarizer()
+          : new AggregatedEventSummarizer();
     }
 
     void add(Event e) {
@@ -712,35 +697,19 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
     }
 
     void addToSummary(Event.FeatureRequest e) {
-      if (perContextSummarization) {
-        multiContextSummarizer.summarizeEvent(
-            e.getCreationDate(),
-            e.getKey(),
-            e.getVersion(),
-            e.getVariation(),
-            e.getValue(),
-            e.getDefaultVal(),
-            e.getContext()
-            );
-      } else {
-        summarizer.summarizeEvent(
-            e.getCreationDate(),
-            e.getKey(),
-            e.getVersion(),
-            e.getVariation(),
-            e.getValue(),
-            e.getDefaultVal(),
-            e.getContext()
-            );
-      }
+      summarizer.summarizeEvent(
+          e.getCreationDate(),
+          e.getKey(),
+          e.getVersion(),
+          e.getVariation(),
+          e.getValue(),
+          e.getDefaultVal(),
+          e.getContext()
+      );
     }
 
     boolean isEmpty() {
-      if (perContextSummarization) {
-        return events.isEmpty() && multiContextSummarizer.isEmpty();
-      } else {
-        return events.isEmpty() && summarizer.isEmpty();
-      }
+      return events.isEmpty() && summarizer.isEmpty();
     }
 
     long getAndClearDroppedCount() {
@@ -751,23 +720,13 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
 
     FlushPayload getPayload() {
       Event[] eventsOut = events.toArray(new Event[events.size()]);
-      List<EventSummarizer.EventSummary> summaries;
-      if (perContextSummarization) {
-        summaries = multiContextSummarizer.getSummariesAndReset();
-      } else {
-        EventSummarizer.EventSummary summary = summarizer.getSummaryAndReset();
-        summaries = java.util.Collections.singletonList(summary);
-      }
+      List<EventSummarizer.EventSummary> summaries = summarizer.getSummariesAndReset();
       return new FlushPayload(eventsOut, summaries);
     }
 
     void clear() {
       events.clear();
-      if (perContextSummarization) {
-        multiContextSummarizer.clear();
-      } else {
-        summarizer.clear();
-      }
+      summarizer.clear();
     }
   }
 

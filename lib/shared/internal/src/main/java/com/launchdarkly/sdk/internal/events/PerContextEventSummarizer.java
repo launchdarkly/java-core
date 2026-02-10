@@ -9,16 +9,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Manages per-context event summarization. Maintains separate EventSummarizer instances
+ * Generates separate summary events per context. Maintains separate EventSummarizer instances
  * for each unique context, allowing generation of multiple summary events per flush interval.
+ * <p>
+ * This implementation creates one summary event per context, each including the context
+ * information, enabling "who got what when" analytics.
  * <p>
  * Note that the methods of this class are deliberately not thread-safe, because they should
  * always be called from EventProcessor's single message-processing thread.
  */
-final class MultiContextEventSummarizer {
+final class PerContextEventSummarizer implements EventSummarizerInterface {
   private final Map<LDContext, EventSummarizer> summarizersByContext;
 
-  MultiContextEventSummarizer() {
+  PerContextEventSummarizer() {
     this.summarizersByContext = new HashMap<>();
   }
 
@@ -33,7 +36,8 @@ final class MultiContextEventSummarizer {
    * @param defaultValue the application default value
    * @param context the evaluation context
    */
-  void summarizeEvent(
+  @Override
+  public void summarizeEvent(
       long timestamp,
       String flagKey,
       int flagVersion,
@@ -58,7 +62,8 @@ final class MultiContextEventSummarizer {
    *
    * @return list of summary states, one for each context that had events
    */
-  List<EventSummarizer.EventSummary> getSummariesAndReset() {
+  @Override
+  public List<EventSummarizer.EventSummary> getSummariesAndReset() {
     List<EventSummarizer.EventSummary> summaries = new ArrayList<>();
     for (EventSummarizer summarizer : summarizersByContext.values()) {
       EventSummarizer.EventSummary summary = summarizer.getSummaryAndReset();
@@ -76,7 +81,8 @@ final class MultiContextEventSummarizer {
    *
    * @param previousSummaries the list of summaries to restore
    */
-  void restoreTo(List<EventSummarizer.EventSummary> previousSummaries) {
+  @Override
+  public void restoreTo(List<EventSummarizer.EventSummary> previousSummaries) {
     summarizersByContext.clear();
     for (EventSummarizer.EventSummary summary : previousSummaries) {
       if (summary.context != null && !summary.isEmpty()) {
@@ -92,7 +98,8 @@ final class MultiContextEventSummarizer {
    *
    * @return true if all contexts have empty state
    */
-  boolean isEmpty() {
+  @Override
+  public boolean isEmpty() {
     for (EventSummarizer summarizer : summarizersByContext.values()) {
       if (!summarizer.isEmpty()) {
         return false;
@@ -104,7 +111,8 @@ final class MultiContextEventSummarizer {
   /**
    * Clears all summarizers and context tracking.
    */
-  void clear() {
+  @Override
+  public void clear() {
     summarizersByContext.clear();
   }
 }

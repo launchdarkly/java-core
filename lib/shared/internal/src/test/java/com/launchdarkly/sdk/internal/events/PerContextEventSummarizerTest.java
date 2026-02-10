@@ -16,14 +16,14 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-public class MultiContextEventSummarizerTest {
+public class PerContextEventSummarizerTest {
   private static final LDContext context1 = LDContext.create("user-key-1");
   private static final LDContext context2 = LDContext.create("user-key-2");
   private static final LDContext context3 = LDContext.builder("org-key-1").kind("organization").build();
 
   @Test
   public void summarizeEventCreatesNewSummarizerForNewContext() {
-    MultiContextEventSummarizer mcs = new MultiContextEventSummarizer();
+    PerContextEventSummarizer mcs = new PerContextEventSummarizer();
 
     mcs.summarizeEvent(1000, "flag1", 11, 1, LDValue.of("value1"), LDValue.of("default1"), context1);
 
@@ -35,7 +35,7 @@ public class MultiContextEventSummarizerTest {
 
   @Test
   public void summarizeEventRoutesToCorrectContextSummarizer() {
-    MultiContextEventSummarizer mcs = new MultiContextEventSummarizer();
+    PerContextEventSummarizer mcs = new PerContextEventSummarizer();
 
     // Add events for two different contexts
     mcs.summarizeEvent(1000, "flag1", 11, 1, LDValue.of("value1"), LDValue.of("default1"), context1);
@@ -58,7 +58,7 @@ public class MultiContextEventSummarizerTest {
 
   @Test
   public void summarizeEventAccumulatesForSameContext() {
-    MultiContextEventSummarizer mcs = new MultiContextEventSummarizer();
+    PerContextEventSummarizer mcs = new PerContextEventSummarizer();
 
     // Add multiple events for the same context
     mcs.summarizeEvent(1000, "flag1", 11, 1, LDValue.of("value1"), LDValue.of("default1"), context1);
@@ -78,7 +78,7 @@ public class MultiContextEventSummarizerTest {
 
   @Test
   public void multipleDifferentContextsProduceMultipleSummaries() {
-    MultiContextEventSummarizer mcs = new MultiContextEventSummarizer();
+    PerContextEventSummarizer mcs = new PerContextEventSummarizer();
 
     // Add events for three different contexts
     mcs.summarizeEvent(1000, "flag1", 11, 1, LDValue.of("value1"), LDValue.of("default1"), context1);
@@ -100,7 +100,7 @@ public class MultiContextEventSummarizerTest {
 
   @Test
   public void getSummariesAndResetClearsState() {
-    MultiContextEventSummarizer mcs = new MultiContextEventSummarizer();
+    PerContextEventSummarizer mcs = new PerContextEventSummarizer();
 
     mcs.summarizeEvent(1000, "flag1", 11, 1, LDValue.of("value1"), LDValue.of("default1"), context1);
 
@@ -116,13 +116,13 @@ public class MultiContextEventSummarizerTest {
 
   @Test
   public void isEmptyReturnsTrueWhenNoEvents() {
-    MultiContextEventSummarizer mcs = new MultiContextEventSummarizer();
+    PerContextEventSummarizer mcs = new PerContextEventSummarizer();
     assertTrue(mcs.isEmpty());
   }
 
   @Test
   public void isEmptyReturnsFalseWhenEventsExist() {
-    MultiContextEventSummarizer mcs = new MultiContextEventSummarizer();
+    PerContextEventSummarizer mcs = new PerContextEventSummarizer();
 
     mcs.summarizeEvent(1000, "flag1", 11, 1, LDValue.of("value1"), LDValue.of("default1"), context1);
 
@@ -131,7 +131,7 @@ public class MultiContextEventSummarizerTest {
 
   @Test
   public void clearRemovesAllSummaries() {
-    MultiContextEventSummarizer mcs = new MultiContextEventSummarizer();
+    PerContextEventSummarizer mcs = new PerContextEventSummarizer();
 
     mcs.summarizeEvent(1000, "flag1", 11, 1, LDValue.of("value1"), LDValue.of("default1"), context1);
     mcs.summarizeEvent(1001, "flag2", 22, 2, LDValue.of("value2"), LDValue.of("default2"), context2);
@@ -147,7 +147,7 @@ public class MultiContextEventSummarizerTest {
 
   @Test
   public void getSummariesAndResetFiltersEmptySummaries() {
-    MultiContextEventSummarizer mcs = new MultiContextEventSummarizer();
+    PerContextEventSummarizer mcs = new PerContextEventSummarizer();
 
     // Add events
     mcs.summarizeEvent(1000, "flag1", 11, 1, LDValue.of("value1"), LDValue.of("default1"), context1);
@@ -163,7 +163,7 @@ public class MultiContextEventSummarizerTest {
 
   @Test
   public void contextWithSameKeyButDifferentKindCreatesMultipleSummaries() {
-    MultiContextEventSummarizer mcs = new MultiContextEventSummarizer();
+    PerContextEventSummarizer mcs = new PerContextEventSummarizer();
 
     LDContext userContext = LDContext.builder("same-key").kind("user").build();
     LDContext orgContext = LDContext.builder("same-key").kind("organization").build();
@@ -177,7 +177,7 @@ public class MultiContextEventSummarizerTest {
 
   @Test
   public void multiKindContextCreatesOneSummary() {
-    MultiContextEventSummarizer mcs = new MultiContextEventSummarizer();
+    PerContextEventSummarizer mcs = new PerContextEventSummarizer();
 
     LDContext multiContext = LDContext.createMulti(
         LDContext.create("user-key"),
@@ -195,7 +195,7 @@ public class MultiContextEventSummarizerTest {
 
   @Test
   public void timestampsAreTrackedPerContext() {
-    MultiContextEventSummarizer mcs = new MultiContextEventSummarizer();
+    PerContextEventSummarizer mcs = new PerContextEventSummarizer();
 
     mcs.summarizeEvent(1000, "flag1", 11, 1, LDValue.of("value1"), LDValue.of("default1"), context1);
     mcs.summarizeEvent(2000, "flag2", 22, 2, LDValue.of("value2"), LDValue.of("default2"), context2);
@@ -215,7 +215,7 @@ public class MultiContextEventSummarizerTest {
 
   @Test
   public void contextKindsAreTrackedPerContext() {
-    MultiContextEventSummarizer mcs = new MultiContextEventSummarizer();
+    PerContextEventSummarizer mcs = new PerContextEventSummarizer();
 
     LDContext multiContext1 = LDContext.createMulti(
         LDContext.create("user-key-1"),
@@ -247,7 +247,7 @@ public class MultiContextEventSummarizerTest {
 
   @Test
   public void manyContextsHandledCorrectly() {
-    MultiContextEventSummarizer mcs = new MultiContextEventSummarizer();
+    PerContextEventSummarizer mcs = new PerContextEventSummarizer();
     int contextCount = 100;
 
     // Add events for many different contexts
@@ -269,7 +269,7 @@ public class MultiContextEventSummarizerTest {
 
   @Test
   public void restoreToRestoresPreviousState() {
-    MultiContextEventSummarizer mcs = new MultiContextEventSummarizer();
+    PerContextEventSummarizer mcs = new PerContextEventSummarizer();
 
     // Add events for two contexts
     mcs.summarizeEvent(1000, "flag1", 11, 1, LDValue.of("value1"), LDValue.of("default1"), context1);
@@ -303,7 +303,7 @@ public class MultiContextEventSummarizerTest {
 
   @Test
   public void restoreToHandlesEmptySummaries() {
-    MultiContextEventSummarizer mcs = new MultiContextEventSummarizer();
+    PerContextEventSummarizer mcs = new PerContextEventSummarizer();
 
     // Add an event
     mcs.summarizeEvent(1000, "flag1", 11, 1, LDValue.of("value1"), LDValue.of("default1"), context1);
@@ -321,7 +321,7 @@ public class MultiContextEventSummarizerTest {
 
   @Test
   public void restoreToPreservesCountsAndTimestamps() {
-    MultiContextEventSummarizer mcs = new MultiContextEventSummarizer();
+    PerContextEventSummarizer mcs = new PerContextEventSummarizer();
 
     // Add multiple events for same flag/context
     mcs.summarizeEvent(1000, "flag1", 11, 1, LDValue.of("value1"), LDValue.of("default1"), context1);
@@ -351,7 +351,7 @@ public class MultiContextEventSummarizerTest {
 
   @Test
   public void restoreToAllowsContinuedAccumulation() {
-    MultiContextEventSummarizer mcs = new MultiContextEventSummarizer();
+    PerContextEventSummarizer mcs = new PerContextEventSummarizer();
 
     // Add events
     mcs.summarizeEvent(1000, "flag1", 11, 1, LDValue.of("value1"), LDValue.of("default1"), context1);
