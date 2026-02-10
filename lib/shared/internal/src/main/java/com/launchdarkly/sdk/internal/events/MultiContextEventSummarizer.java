@@ -71,6 +71,23 @@ final class MultiContextEventSummarizer {
   }
 
   /**
+   * Restores the summarizer state from a previous snapshot. This is used when a flush
+   * operation fails and we need to keep the summary data for the next attempt.
+   *
+   * @param previousSummaries the list of summaries to restore
+   */
+  void restoreTo(List<EventSummarizer.EventSummary> previousSummaries) {
+    summarizersByContext.clear();
+    for (EventSummarizer.EventSummary summary : previousSummaries) {
+      if (summary.context != null && !summary.isEmpty()) {
+        EventSummarizer summarizer = new EventSummarizer(summary.context);
+        summarizer.restoreTo(summary);
+        summarizersByContext.put(summary.context, summarizer);
+      }
+    }
+  }
+
+  /**
    * Returns true if there is no summary data for any context.
    *
    * @return true if all contexts have empty state

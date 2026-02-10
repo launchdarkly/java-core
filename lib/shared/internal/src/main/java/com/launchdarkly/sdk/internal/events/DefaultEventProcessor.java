@@ -624,9 +624,16 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
       } else {
         logger.debug("Skipped flushing because all workers are busy");
         // All the workers are busy so we can't flush now; keep the events in our state
-        // Only restore if using single summarizer (not per-context)
-        if (outbox.summarizer != null && !payload.summaries.isEmpty()) {
-          outbox.summarizer.restoreTo(payload.summaries.get(0));
+        if (outbox.perContextSummarization) {
+          // Per-context mode: restore all summaries
+          if (outbox.multiContextSummarizer != null && !payload.summaries.isEmpty()) {
+            outbox.multiContextSummarizer.restoreTo(payload.summaries);
+          }
+        } else {
+          // Single summary mode: restore single summary
+          if (outbox.summarizer != null && !payload.summaries.isEmpty()) {
+            outbox.summarizer.restoreTo(payload.summaries.get(0));
+          }
         }
         synchronized(busyFlushWorkersCount) {
           busyFlushWorkersCount.decrementAndGet();
