@@ -70,7 +70,6 @@ import sdktest.Representations.SdkConfigHookParams;
 import sdktest.Representations.SdkConfigParams;
 import sdktest.Representations.SdkConfigDataSystemParams;
 import sdktest.Representations.SdkConfigDataInitializerParams;
-import sdktest.Representations.SdkConfigSynchronizersParams;
 import sdktest.Representations.SdkConfigSynchronizerParams;
 import sdktest.Representations.SdkConfigPollingParams;
 import sdktest.Representations.SdkConfigStreamingParams;
@@ -542,34 +541,23 @@ public class SdkClientEntity {
         }
       }
 
-      // Configure synchronizers
-      if (params.dataSystem.synchronizers != null) {
-        List<DataSourceBuilder<Synchronizer>> synchronizers = new ArrayList<>();
 
-        // Primary synchronizer
-        if (params.dataSystem.synchronizers.primary != null) {
-          DataSourceBuilder<Synchronizer> primary = createSynchronizer(params.dataSystem.synchronizers.primary, params.dataSystem.payloadFilter);
-          if (primary != null) {
-            synchronizers.add(primary);
+      if (params.dataSystem.synchronizers != null && params.dataSystem.synchronizers.length > 0) {
+        List<DataSourceBuilder<Synchronizer>> synchronizerBuilders = new ArrayList<>();
+        for (SdkConfigSynchronizerParams syncParams : params.dataSystem.synchronizers) {
+          DataSourceBuilder<Synchronizer> sync = createSynchronizer(syncParams, params.dataSystem.payloadFilter);
+          if (sync != null) {
+            synchronizerBuilders.add(sync);
           }
         }
-
-        // Secondary synchronizer (optional)
-        if (params.dataSystem.synchronizers.secondary != null) {
-          DataSourceBuilder<Synchronizer> secondary = createSynchronizer(params.dataSystem.synchronizers.secondary, params.dataSystem.payloadFilter);
-          if (secondary != null) {
-            synchronizers.add(secondary);
-          }
-        }
-
-        if (!synchronizers.isEmpty()) {
-          dataSystemBuilder.synchronizers(synchronizers.toArray(new DataSourceBuilder[0]));
+        if (!synchronizerBuilders.isEmpty()) {
+          dataSystemBuilder.synchronizers(synchronizerBuilders.toArray(new DataSourceBuilder[0]));
         }
       }
 
-      // Configure FDv1 fallback synchronizer
+      // Configure FDv1 fallback synchronizer (pick first polling, else first synchronizer)
       SdkConfigSynchronizerParams fallbackSynchronizer =
-          selectFallbackSynchronizer(params.dataSystem);
+          selectFallbackSynchronizer(params.dataSystem.synchronizers);
       if (fallbackSynchronizer != null) {
         // Set global polling endpoints if the fallback synchronizer has polling with custom base URI
         if (fallbackSynchronizer.polling != null &&
@@ -624,32 +612,21 @@ public class SdkClientEntity {
 
   /**
    * Selects the best synchronizer configuration to use for FDv1 fallback.
-   * Prefers polling synchronizers, falls back to primary synchronizer.
+   * Prefers the first polling synchronizer in the list, otherwise the first synchronizer.
    */
   private static SdkConfigSynchronizerParams selectFallbackSynchronizer(
-      SdkConfigDataSystemParams dataSystemParams) {
-
-    // Prefer secondary polling synchronizer
-    if (dataSystemParams.synchronizers != null &&
-        dataSystemParams.synchronizers.secondary != null &&
-        dataSystemParams.synchronizers.secondary.polling != null) {
-      return dataSystemParams.synchronizers.secondary;
+      SdkConfigSynchronizerParams[] synchronizers) {
+    if (synchronizers == null || synchronizers.length == 0) {
+      return null;
     }
-
-    // Fall back to primary polling synchronizer
-    if (dataSystemParams.synchronizers != null &&
-        dataSystemParams.synchronizers.primary != null &&
-        dataSystemParams.synchronizers.primary.polling != null) {
-      return dataSystemParams.synchronizers.primary;
+    // Prefer first polling synchronizer (FDv1 fallback is polling-based)
+    for (SdkConfigSynchronizerParams sync : synchronizers) {
+      if (sync.polling != null) {
+        return sync;
+      }
     }
-
-    // Fall back to primary synchronizer (even if streaming)
-    if (dataSystemParams.synchronizers != null &&
-        dataSystemParams.synchronizers.primary != null) {
-      return dataSystemParams.synchronizers.primary;
-    }
-
-    return null;
+    // Otherwise use first synchronizer (streaming; FDv1 will use default polling config)
+    return synchronizers[0];
   }
 
   /**

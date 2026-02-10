@@ -133,7 +133,8 @@ public abstract class Representations {
     SdkConfigDataStoreParams store;
     Integer storeMode;
     SdkConfigDataInitializerParams[] initializers;
-    SdkConfigSynchronizersParams synchronizers;
+    /** List of synchronizers (matches servicedef DataSystem.Synchronizers). */
+    SdkConfigSynchronizerParams[] synchronizers;
     String payloadFilter;
   }
 
@@ -159,11 +160,6 @@ public abstract class Representations {
 
   public static class SdkConfigDataInitializerParams {
     SdkConfigPollingParams polling;
-  }
-
-  public static class SdkConfigSynchronizersParams {
-    SdkConfigSynchronizerParams primary;
-    SdkConfigSynchronizerParams secondary;
   }
 
   public static class SdkConfigSynchronizerParams {
