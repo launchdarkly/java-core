@@ -17,22 +17,22 @@ interface EventSummarizerInterface {
   /**
    * Adds information about an evaluation to the summary.
    *
-   * @param timestamp the millisecond timestamp
-   * @param flagKey the flag key
-   * @param flagVersion the flag version, or -1 if the flag is unknown
-   * @param variation the result variation, or -1 if none
-   * @param value the result value
+   * @param timestamp    the millisecond timestamp
+   * @param flagKey      the flag key
+   * @param flagVersion  the flag version, or -1 if the flag is unknown
+   * @param variation    the result variation, or -1 if none
+   * @param value        the result value
    * @param defaultValue the application default value
-   * @param context the evaluation context
+   * @param context      the evaluation context
    */
   void summarizeEvent(
-      long timestamp,
-      String flagKey,
-      int flagVersion,
-      int variation,
-      LDValue value,
-      LDValue defaultValue,
-      LDContext context
+    long timestamp,
+    String flagKey,
+    int flagVersion,
+    int variation,
+    LDValue value,
+    LDValue defaultValue,
+    LDContext context
   );
 
   /**
@@ -44,7 +44,7 @@ interface EventSummarizerInterface {
 
   /**
    * Restores the summarizer state from a previous snapshot. This is used when a flush
-   * operation fails and we need to keep the summary data for the next attempt.
+   * operation fails, and we need to keep the summary data for the next attempt.
    *
    * @param previousSummaries the list of summaries to restore
    */

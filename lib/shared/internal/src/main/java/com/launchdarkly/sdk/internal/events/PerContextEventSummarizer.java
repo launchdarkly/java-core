@@ -11,6 +11,7 @@ import java.util.Map;
 /**
  * Generates separate summary events per context. Maintains separate EventSummarizer instances
  * for each unique context, allowing generation of multiple summary events per flush interval.
+ * This implementation is intended for use by client-side SDKs.
  * <p>
  * This implementation creates one summary event per context, each including the context
  * information, enabling "who got what when" analytics.
@@ -28,30 +29,26 @@ final class PerContextEventSummarizer implements EventSummarizerInterface {
   /**
    * Adds information about an evaluation to the appropriate context's summarizer.
    *
-   * @param timestamp the millisecond timestamp
-   * @param flagKey the flag key
-   * @param flagVersion the flag version, or -1 if the flag is unknown
-   * @param variation the result variation, or -1 if none
-   * @param value the result value
+   * @param timestamp    the millisecond timestamp
+   * @param flagKey      the flag key
+   * @param flagVersion  the flag version, or -1 if the flag is unknown
+   * @param variation    the result variation, or -1 if none
+   * @param value        the result value
    * @param defaultValue the application default value
-   * @param context the evaluation context
+   * @param context      the evaluation context
    */
   @Override
   public void summarizeEvent(
-      long timestamp,
-      String flagKey,
-      int flagVersion,
-      int variation,
-      LDValue value,
-      LDValue defaultValue,
-      LDContext context
-      ) {
+    long timestamp,
+    String flagKey,
+    int flagVersion,
+    int variation,
+    LDValue value,
+    LDValue defaultValue,
+    LDContext context
+  ) {
     // Get or create summarizer for this context
-    EventSummarizer summarizer = summarizersByContext.get(context);
-    if (summarizer == null) {
-      summarizer = new EventSummarizer(context);
-      summarizersByContext.put(context, summarizer);
-    }
+    EventSummarizer summarizer = summarizersByContext.computeIfAbsent(context, EventSummarizer::new);
 
     // Delegate to the per-context summarizer
     summarizer.summarizeEvent(timestamp, flagKey, flagVersion, variation, value, defaultValue, context);
@@ -77,7 +74,7 @@ final class PerContextEventSummarizer implements EventSummarizerInterface {
 
   /**
    * Restores the summarizer state from a previous snapshot. This is used when a flush
-   * operation fails and we need to keep the summary data for the next attempt.
+   * operation fails, and we need to keep the summary data for the next attempt.
    *
    * @param previousSummaries the list of summaries to restore
    */
@@ -96,7 +93,7 @@ final class PerContextEventSummarizer implements EventSummarizerInterface {
   /**
    * Returns true if there is no summary data for any context.
    *
-   * @return true if all contexts have empty state
+   * @return true if all contexts have are empty
    */
   @Override
   public boolean isEmpty() {

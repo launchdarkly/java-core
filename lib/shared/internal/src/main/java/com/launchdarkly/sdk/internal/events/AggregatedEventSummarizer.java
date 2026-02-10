@@ -9,11 +9,9 @@ import java.util.List;
 
 /**
  * Aggregates events from all contexts into a single summary event.
- * This provides a unified interface for both aggregated and per-context summarization,
- * eliminating conditional branching in the event processor.
  * <p>
  * This implementation combines all flag evaluations across all contexts into one
- * summary event (without context information), which is the traditional behavior.
+ * summary event (without context information), which is the behavior for server-side SDKs.
  * <p>
  * Note that the methods of this class are deliberately not thread-safe, because they should
  * always be called from EventProcessor's single message-processing thread.
@@ -27,13 +25,13 @@ final class AggregatedEventSummarizer implements EventSummarizerInterface {
 
   @Override
   public void summarizeEvent(
-      long timestamp,
-      String flagKey,
-      int flagVersion,
-      int variation,
-      LDValue value,
-      LDValue defaultValue,
-      LDContext context
+    long timestamp,
+    String flagKey,
+    int flagVersion,
+    int variation,
+    LDValue value,
+    LDValue defaultValue,
+    LDContext context
   ) {
     summarizer.summarizeEvent(timestamp, flagKey, flagVersion, variation, value, defaultValue, context);
   }
