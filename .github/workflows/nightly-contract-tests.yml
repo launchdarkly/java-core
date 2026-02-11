@@ -1,0 +1,62 @@
+name: Nightly Contract Tests
+
+on:
+  schedule:
+    - cron: "0 4 * * *" # every day at 4am UTC
+  workflow_dispatch:
+
+jobs:
+  nightly-contract-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Shared CI Steps
+        uses: ./.github/actions/ci
+        with:
+          workspace_path: 'lib/sdk/server'
+          java_version: 8
+
+      - name: Build Contract Tests
+        shell: bash
+        run: make build-contract-tests -C lib/sdk/server
+
+      - name: Start Contract Test Service
+        shell: bash
+        run: make start-contract-test-service-bg -C lib/sdk/server
+
+      - name: Run Contract Tests with Long-Running Tests
+        shell: bash
+        run: make run-contract-tests -C lib/sdk/server TEST_HARNESS_PARAMS="-enable-long-running-tests"
+
+  notify-slack-on-failure:
+    runs-on: ubuntu-latest
+    if: ${{ always() && needs.nightly-contract-tests.result == 'failure' }}
+    needs:
+      - nightly-contract-tests
+    steps:
+      - name: Send Slack notification
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ":warning: *Nightly Contract Tests Failed* :warning:\nThe nightly contract tests (with long-running tests enabled) failed on `main`."
+                  },
+                  "accessory": {
+                    "type": "button",
+                    "text": {
+                      "type": "plain_text",
+                      "text": "View failed run"
+                    },
+                    "url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  }
+                }
+              ]
+            }
