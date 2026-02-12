@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.12.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.11.0...launchdarkly-java-server-sdk-7.12.0) (2026-02-12)
+
+
+### Features
+
+* Support stream init diagnostics events for FDv2. ([#133](https://github.com/launchdarkly/java-core/issues/133)) ([cb01449](https://github.com/launchdarkly/java-core/commit/cb014492a210cde548bacd3e41ab505ea08e0b1a))
+
 ## [7.11.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.10.2...launchdarkly-java-server-sdk-7.11.0) (2026-02-04)
 
 
