@@ -4,5 +4,5 @@
   "lib/shared/common": "2.3.0",
   "lib/shared/internal": "1.7.0",
   "lib/shared/test-helpers": "2.1.0",
-  "lib/sdk/server": "7.11.0"
+  "lib/sdk/server": "7.12.0"
 }
