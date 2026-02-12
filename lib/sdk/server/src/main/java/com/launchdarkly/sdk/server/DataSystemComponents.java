@@ -98,7 +98,8 @@ public final class DataSystemComponents {
               context.getSelectorSource(),
               payloadFilter,
               initialReconnectDelay,
-              context.getThreadPriority()
+              context.getThreadPriority(),
+              context.getDiagnosticStore()
       );
     }
   }

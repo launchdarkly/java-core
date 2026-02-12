@@ -13,6 +13,7 @@ import com.launchdarkly.eventsource.StreamHttpErrorException;
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.logging.LogValues;
 import com.launchdarkly.sdk.internal.collections.IterableAsyncQueue;
+import com.launchdarkly.sdk.internal.events.DiagnosticStore;
 import com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event;
 import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ProtocolHandler;
 import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
@@ -62,6 +63,8 @@ class StreamingSynchronizerImpl implements Synchronizer {
     private final AtomicBoolean started = new AtomicBoolean(false);
 
     private final int threadPriority;
+    private final DiagnosticStore diagnosticStore;
+    private volatile long streamStarted = 0;
 
     public StreamingSynchronizerImpl(
             HttpProperties httpProperties,
@@ -71,7 +74,8 @@ class StreamingSynchronizerImpl implements Synchronizer {
             SelectorSource selectorSource,
             String payloadFilter,
             Duration initialReconnectDelaySeconds,
-            int threadPriority
+            int threadPriority,
+            DiagnosticStore diagnosticStore
     ) {
         this.httpProperties = httpProperties;
         this.selectorSource = selectorSource;
@@ -80,6 +84,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
         this.streamUri = HttpHelpers.concatenateUriPath(baseUri, requestPath);
         this.initialReconnectDelay = initialReconnectDelaySeconds;
         this.threadPriority = threadPriority;
+        this.diagnosticStore = diagnosticStore;
 
         // The stream will lazily start when `next` is called.
     }
@@ -143,6 +148,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
     @NotNull
     private Thread getRunThread() {
         Thread thread = new Thread(() -> {
+            streamStarted = System.currentTimeMillis();
             try {
                 for (StreamEvent event : eventSource.anyEvents()) {
                     if (!handleEvent(event)) {
@@ -162,6 +168,8 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 }
                 logger.error("Stream thread ended with exception: {}", LogValues.exceptionSummary(e));
                 logger.debug(LogValues.exceptionTrace(e));
+
+                recordStreamInit(true);  // Record failed init for unexpected thread exception
 
                 DataSourceStatusProvider.ErrorInfo errorInfo = new DataSourceStatusProvider.ErrorInfo(
                         DataSourceStatusProvider.ErrorKind.UNKNOWN,
@@ -215,6 +223,13 @@ class StreamingSynchronizerImpl implements Synchronizer {
         shutdownFuture.complete(FDv2SourceResult.shutdown());
     }
 
+    private void recordStreamInit(boolean failed) {
+        if (diagnosticStore != null && streamStarted != 0) {
+            diagnosticStore.recordStreamInit(streamStarted,
+                System.currentTimeMillis() - streamStarted, failed);
+        }
+    }
+
     private boolean handleEvent(StreamEvent event) {
         if (event instanceof MessageEvent) {
             handleMessage((MessageEvent) event);
@@ -259,6 +274,9 @@ class StreamingSynchronizerImpl implements Synchronizer {
                               logger,
                               event.getHeaders().value(HeaderConstants.ENVIRONMENT_ID.getHeaderName()),
                               true);
+                    recordStreamInit(false);
+                    // Reset to 0 after successful init to prevent duplicate recordings until next restart
+                    streamStarted = 0;
                     result = FDv2SourceResult.changeSet(converted, getFallback(event));
                 } catch (Exception e) {
                     logger.error("Failed to convert FDv2 changeset: {}", LogValues.exceptionSummary(e));
@@ -270,7 +288,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                             Instant.now()
                     );
                     result = FDv2SourceResult.interrupted(conversionError, getFallback(event));
-                    restartStream();
+                    restartStream(true);
                 }
                 break;
 
@@ -286,7 +304,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 logger.info("Goodbye was received from the LaunchDarkly connection with reason: '{}'.", reason);
                 result = FDv2SourceResult.goodbye(reason, getFallback(event));
                 // We drop this current connection and attempt to restart the stream.
-                restartStream();
+                restartStream(false);  // Not a failure - deliberate server-initiated restart
                 break;
 
             case INTERNAL_ERROR:
@@ -310,7 +328,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 );
                 result = FDv2SourceResult.interrupted(internalError, getFallback(event));
                 if(kind == DataSourceStatusProvider.ErrorKind.INVALID_DATA) {
-                    restartStream();
+                    restartStream(true);
                 }
                 break;
 
@@ -333,12 +351,16 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 Instant.now()
         );
         resultQueue.put(FDv2SourceResult.interrupted(errorInfo, getFallback(event)));
-        restartStream();
+        restartStream(true);
     }
 
     private boolean handleError(StreamException e) {
+        // Check if this was a deliberate shutdown/restart rather than an actual error
+        boolean streamFailed = !(e instanceof StreamClosedByCallerException);
+        recordStreamInit(streamFailed);
+
         if (e instanceof StreamClosedByCallerException) {
-            // We closed it ourselves (shutdown was called)
+            // We closed it ourselves (shutdown was called or stream was deliberately restarted)
             return false;
         }
 
@@ -358,6 +380,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
             } else {
                 // Queue as INTERRUPTED to indicate temporary failure
                 resultQueue.put(FDv2SourceResult.interrupted(errorInfo, getFallback(e)));
+                streamStarted = System.currentTimeMillis();
                 return true; // allow reconnect
             }
         }
@@ -372,11 +395,14 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 Instant.now()
         );
         resultQueue.put(FDv2SourceResult.interrupted(errorInfo, getFallback(e)));
+        streamStarted = System.currentTimeMillis();
         return true; // allow reconnect
     }
 
-    private void restartStream() {
+    private void restartStream(boolean failed) {
         Objects.requireNonNull(eventSource, "eventSource must not be null");
+        recordStreamInit(failed);
+        streamStarted = System.currentTimeMillis();
         eventSource.interrupt();
         protocolHandler.reset();
     }
