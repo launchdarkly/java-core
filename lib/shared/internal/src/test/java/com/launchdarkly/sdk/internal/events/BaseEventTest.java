@@ -333,6 +333,7 @@ public abstract class BaseEventTest extends BaseTest {
     private boolean initiallyInBackground = false;
     private boolean initiallyOffline = false;
     private Set<AttributeRef> privateAttributes = new HashSet<>();
+    private boolean perContextSummarization = false;
 
     public EventsConfiguration build() {
       return new EventsConfiguration(
@@ -347,7 +348,8 @@ public abstract class BaseEventTest extends BaseTest {
           flushIntervalMillis,
           initiallyInBackground,
           initiallyOffline,
-          privateAttributes
+          privateAttributes,
+          perContextSummarization
           );
     }
 
@@ -408,6 +410,11 @@ public abstract class BaseEventTest extends BaseTest {
 
     public EventsConfigurationBuilder privateAttributes(Set<AttributeRef> privateAttributes) {
       this.privateAttributes = privateAttributes;
+      return this;
+    }
+
+    public EventsConfigurationBuilder perContextSummarization(boolean perContextSummarization) {
+      this.perContextSummarization = perContextSummarization;
       return this;
     }
   }

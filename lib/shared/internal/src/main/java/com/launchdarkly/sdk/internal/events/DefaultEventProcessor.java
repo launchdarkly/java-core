@@ -363,7 +363,7 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
       // all the workers are busy.
       final BlockingQueue<FlushPayload> payloadQueue = new ArrayBlockingQueue<>(1);
 
-      final EventBuffer outbox = new EventBuffer(eventsConfig.capacity, logger);
+      final EventBuffer outbox = new EventBuffer(eventsConfig.capacity, eventsConfig.perContextSummarization, logger);
       this.contextDeduplicator = eventsConfig.contextDeduplicator;
       
       Thread mainThread = threadFactory.newThread(new Thread() {
@@ -608,7 +608,13 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
       }
       FlushPayload payload = outbox.getPayload();
       if (diagnosticStore != null) {
-        int eventCount = payload.events.length + (payload.summary.isEmpty() ? 0 : 1);
+        int summaryCount = 0;
+        for (EventSummary summary : payload.summaries) {
+          if (!summary.isEmpty()) {
+            summaryCount++;
+          }
+        }
+        int eventCount = payload.events.length + summaryCount;
         diagnosticStore.recordEventsInBatch(eventCount);
       }
       busyFlushWorkersCount.incrementAndGet();
@@ -618,7 +624,7 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
       } else {
         logger.debug("Skipped flushing because all workers are busy");
         // All the workers are busy so we can't flush now; keep the events in our state
-        outbox.summarizer.restoreTo(payload.summary);
+        outbox.summarizer.restoreTo(payload.summaries);
         synchronized(busyFlushWorkersCount) {
           busyFlushWorkersCount.decrementAndGet();
           busyFlushWorkersCount.notify();
@@ -661,15 +667,18 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
   
   private static final class EventBuffer {
     final List<Event> events = new ArrayList<>();
-    final EventSummarizer summarizer = new EventSummarizer();
+    final EventSummarizerInterface summarizer;
     private final int capacity;
     private final LDLogger logger;
     private boolean capacityExceeded = false;
     private long droppedEventCount = 0;
 
-    EventBuffer(int capacity, LDLogger logger) {
+    EventBuffer(int capacity, boolean perContextSummarization, LDLogger logger) {
       this.capacity = capacity;
       this.logger = logger;
+      this.summarizer = perContextSummarization
+          ? new PerContextEventSummarizer()
+          : new AggregatedEventSummarizer();
     }
 
     void add(Event e) {
@@ -694,7 +703,7 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
           e.getValue(),
           e.getDefaultVal(),
           e.getContext()
-          );
+      );
     }
 
     boolean isEmpty() {
@@ -709,8 +718,8 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
 
     FlushPayload getPayload() {
       Event[] eventsOut = events.toArray(new Event[events.size()]);
-      EventSummarizer.EventSummary summary = summarizer.getSummaryAndReset();
-      return new FlushPayload(eventsOut, summary);
+      List<EventSummarizer.EventSummary> summaries = summarizer.getSummariesAndReset();
+      return new FlushPayload(eventsOut, summaries);
     }
 
     void clear() {
@@ -721,11 +730,11 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
 
   private static final class FlushPayload {
     final Event[] events;
-    final EventSummary summary;
+    final List<EventSummary> summaries;
 
-    FlushPayload(Event[] events, EventSummary summary) {
+    FlushPayload(Event[] events, List<EventSummary> summaries) {
       this.events = events;
-      this.summary = summary;
+      this.summaries = summaries;
     }
   }
 
@@ -774,7 +783,7 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
         try {
           ByteArrayOutputStream buffer = new ByteArrayOutputStream(INITIAL_OUTPUT_BUFFER_SIZE);
           Writer writer = new BufferedWriter(new OutputStreamWriter(buffer, Charset.forName("UTF-8")), INITIAL_OUTPUT_BUFFER_SIZE);
-          int outputEventCount = formatter.writeOutputEvents(payload.events, payload.summary, writer);
+          int outputEventCount = formatter.writeOutputEvents(payload.events, payload.summaries, writer);
           writer.flush();
           EventSender.Result result = eventsConfig.eventSender.sendAnalyticsEvents(
               buffer.toByteArray(),
