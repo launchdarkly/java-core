@@ -2,6 +2,13 @@
 
 All notable changes to the project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [1.8.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.7.0...launchdarkly-java-sdk-internal-1.8.0) (2026-02-12)
+
+
+### Features
+
+* Add optional support for per-context summary events. ([#135](https://github.com/launchdarkly/java-core/issues/135)) ([3913d6f](https://github.com/launchdarkly/java-core/commit/3913d6f905b53c5f81bc7d5d044f332343b07182))
+
 ## [1.7.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.6.1...launchdarkly-java-sdk-internal-1.7.0) (2026-02-03)
 
 
