@@ -43,7 +43,7 @@ jobs:
       - nightly-contract-tests
     steps:
       - name: Send Slack notification
-        uses: slackapi/slack-github-action@8eec7b3b943e15be5302493bb90a15bafa6973c6 # v2.1.0
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           webhook-type: incoming-webhook
@@ -73,7 +73,7 @@ jobs:
     if: ${{ inputs.test_slack_notification == true || inputs.test_slack_notification == 'true' }}
     steps:
       - name: Send test Slack notification
-        uses: slackapi/slack-github-action@v2.1.0
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           webhook-type: incoming-webhook
