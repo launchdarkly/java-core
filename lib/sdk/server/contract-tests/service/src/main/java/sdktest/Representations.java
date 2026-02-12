@@ -27,6 +27,7 @@ public abstract class Representations {
     Long startWaitTimeMs;
     boolean initCanFail;
     SdkConfigStreamParams streaming;
+    SdkConfigPollingParams polling;
     SdkConfigEventParams events;
     SdkConfigBigSegmentsParams bigSegments;
     SdkConfigTagParams tags;
@@ -170,6 +171,7 @@ public abstract class Representations {
   public static class SdkConfigPollingParams {
     URI baseUri;
     Long pollIntervalMs;
+    String filter;
   }
 
   public static class SdkConfigStreamingParams {

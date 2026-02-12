@@ -401,6 +401,16 @@ public class SdkClientEntity {
       }
       dataSource.payloadFilter(params.streaming.filter);
       builder.dataSource(dataSource);
+    } else if (params.polling != null && params.dataSystem == null) {
+      // v2 harness: top-level polling only (no dataSystem); use FDv1 polling data source
+      PollingDataSourceBuilder pollingDataSource = Components.pollingDataSource();
+      if (params.polling.pollIntervalMs != null) {
+        pollingDataSource.pollInterval(Duration.ofMillis(params.polling.pollIntervalMs));
+      }
+      if (params.polling.filter != null && !params.polling.filter.isEmpty()) {
+        pollingDataSource.payloadFilter(params.polling.filter);
+      }
+      builder.dataSource(pollingDataSource);
     }
 
     if (params.events == null) {
@@ -463,6 +473,11 @@ public class SdkClientEntity {
         endpoints.events(params.serviceEndpoints.events);
       }
     }
+
+    if (params.polling != null && params.polling.baseUri != null && !params.polling.baseUri.toString().trim().isEmpty()) {
+      endpoints.polling(params.polling.baseUri);
+    }
+
     builder.serviceEndpoints(endpoints);
 
     if (params.hooks != null && params.hooks.hooks != null) {
