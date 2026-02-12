@@ -1,11 +1,15 @@
 name: Contract Tests
-description: Runs Contract Tests
+description: Runs Contract Tests (builds, starts service, runs SDK contract test harness)
 inputs:
   workspace_path:
-    description: 'Path to the package.'
+    description: 'Path to the package (e.g. lib/sdk/server).'
     required: true
   token:
     description: 'Github token, used for contract tests'
+    required: false
+    default: ''
+  test_harness_params:
+    description: 'Optional extra parameters for the SDK test harness (e.g. -enable-long-running-tests). Passed as TEST_HARNESS_PARAMS to make.'
     required: false
     default: ''
 
@@ -14,4 +18,4 @@ runs:
   steps:
     - name: Run contract tests
       shell: bash
-      run: make contract-tests -C ${{ inputs.workspace_path }}
+      run: make contract-tests -C ${{ inputs.workspace_path }} TEST_HARNESS_PARAMS="${{ inputs.test_harness_params }}"

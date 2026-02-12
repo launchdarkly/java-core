@@ -41,6 +41,7 @@ public class TestService {
     "service-endpoints",
     "strongly-typed",
     "tags",
+    "server-side-polling"
   };
 
   static final Gson gson = new GsonBuilder().serializeNulls().create();
