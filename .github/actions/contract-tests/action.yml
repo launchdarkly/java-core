@@ -8,8 +8,12 @@ inputs:
     description: 'Github token, used for contract tests'
     required: false
     default: ''
-  test_harness_params:
-    description: 'Optional extra parameters for the SDK test harness (e.g. -enable-long-running-tests). Passed as TEST_HARNESS_PARAMS to make.'
+  test_harness_params_v2:
+    description: 'Optional extra parameters for the SDK test harness v2. Passed as TEST_HARNESS_PARAMS_V2 to make.'
+    required: false
+    default: ''
+  test_harness_params_v3:
+    description: 'Optional extra parameters for the SDK test harness v3 (e.g. -enable-long-running-tests). Passed as TEST_HARNESS_PARAMS_V3 to make.'
     required: false
     default: ''
 
@@ -18,4 +22,4 @@ runs:
   steps:
     - name: Run contract tests
       shell: bash
-      run: make contract-tests -C ${{ inputs.workspace_path }} TEST_HARNESS_PARAMS="${{ inputs.test_harness_params }}"
+      run: make contract-tests -C ${{ inputs.workspace_path }} TEST_HARNESS_PARAMS_V2="${{ inputs.test_harness_params_v2 }}" TEST_HARNESS_PARAMS_V3="${{ inputs.test_harness_params_v3 }}"

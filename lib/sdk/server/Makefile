@@ -14,8 +14,9 @@ SUPPRESSION_FILE=contract-tests/test-suppressions.txt
 SUPPRESSION_FILE_FDV2=contract-tests/test-suppressions-fdv2.txt
 
 # Add any extra sdk-test-harness parameters here, such as -skip for tests that are
-# temporarily not working.
-TEST_HARNESS_PARAMS=
+# v2 and v3 params are separated because v3 supports additional parameters that v2 does not.
+TEST_HARNESS_PARAMS_V2=
+TEST_HARNESS_PARAMS_V3=
 
 build-contract-tests:
 	@cd contract-tests && ../gradlew installDist
@@ -30,10 +31,10 @@ start-contract-test-service-bg:
 run-contract-tests:
 	@echo "Running SDK contract test v2..."
 	@curl -s https://raw.githubusercontent.com/launchdarkly/sdk-test-harness/v2/downloader/run.sh \
-      | VERSION=v2 PARAMS="-url http://localhost:$(TEST_SERVICE_PORT) -debug -skip-from=$(SUPPRESSION_FILE) $(TEST_HARNESS_PARAMS)" sh
+      | VERSION=v2 PARAMS="-url http://localhost:$(TEST_SERVICE_PORT) -debug -skip-from=$(SUPPRESSION_FILE) $(TEST_HARNESS_PARAMS_V2)" sh
 	@echo "Running SDK contract test v3.0.0-alpha.1..."
 	@curl -s https://raw.githubusercontent.com/launchdarkly/sdk-test-harness/v3.0.0-alpha.3/downloader/run.sh \
-      | VERSION=v3.0.0-alpha.3 PARAMS="-url http://localhost:$(TEST_SERVICE_PORT) -debug -stop-service-at-end -skip-from=$(SUPPRESSION_FILE_FDV2) $(TEST_HARNESS_PARAMS)" sh
+      | VERSION=v3.0.0-alpha.3 PARAMS="-url http://localhost:$(TEST_SERVICE_PORT) -debug -stop-service-at-end -skip-from=$(SUPPRESSION_FILE_FDV2) $(TEST_HARNESS_PARAMS_V3)" sh
 
 contract-tests: build-contract-tests start-contract-test-service-bg run-contract-tests
 

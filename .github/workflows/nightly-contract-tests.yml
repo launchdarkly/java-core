@@ -34,7 +34,7 @@ jobs:
         with:
           workspace_path: 'lib/sdk/server'
           token: ${{ secrets.GITHUB_TOKEN }}
-          test_harness_params: '-enable-long-running-tests'
+          test_harness_params_v3: '-enable-long-running-tests'
 
   notify-slack-on-failure:
     runs-on: ubuntu-latest
