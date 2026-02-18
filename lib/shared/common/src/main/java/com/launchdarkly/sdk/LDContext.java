@@ -58,7 +58,7 @@ public final class LDContext implements JsonSerializable {
   final String key;
   final String fullyQualifiedKey;
   final String name;
-  final AttributeMap attributes;
+  final Attributes attributes;
   final boolean anonymous;
   final List<AttributeRef> privateAttributes;
   
@@ -68,7 +68,7 @@ public final class LDContext implements JsonSerializable {
       String key,
       String fullyQualifiedKey,
       String name,
-      AttributeMap attributes,
+      Attributes attributes,
       boolean anonymous,
       List<AttributeRef> privateAttributes
       ) {
@@ -100,7 +100,7 @@ public final class LDContext implements JsonSerializable {
       ContextKind kind,
       String key,
       String name,
-      AttributeMap attributes,
+      Attributes attributes,
       boolean anonymous,
       List<AttributeRef> privateAttributes,
       boolean allowEmptyKey // allowEmptyKey is true only when deserializing old-style user JSON
@@ -300,7 +300,7 @@ public final class LDContext implements JsonSerializable {
         return failed(Errors.CONTEXT_NO_KEY);
       }
     }
-    AttributeMap attributes = null;
+    Attributes attributes = null;
     for (UserAttribute a: UserAttribute.OPTIONAL_STRING_ATTRIBUTES) {
       if (a == UserAttribute.NAME) {
         continue;
@@ -308,14 +308,14 @@ public final class LDContext implements JsonSerializable {
       LDValue value = user.getAttribute(a);
       if (!value.isNull()) {
         if (attributes == null) {
-          attributes = new AttributeMap(); 
+          attributes = new Attributes.OfMap(); 
         }
         attributes.put(a.getName(), value);
       }
     }
     if (user.custom != null && !user.custom.isEmpty()) {
       if (attributes == null) {
-        attributes = new AttributeMap(); 
+        attributes = new Attributes.OfMap(); 
       }
       for (Map.Entry<UserAttribute, LDValue> kv: user.custom.entrySet()) {
         attributes.put(kv.getKey().getName(), kv.getValue());
