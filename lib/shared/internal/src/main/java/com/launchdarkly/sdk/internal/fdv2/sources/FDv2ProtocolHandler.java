@@ -1,5 +1,6 @@
 package com.launchdarkly.sdk.internal.fdv2.sources;
 
+import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.internal.fdv2.payloads.DeleteObject;
 import com.launchdarkly.sdk.internal.fdv2.payloads.Error;
 import com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event;
