@@ -1,6 +1,7 @@
 package com.launchdarkly.sdk.internal.fdv2.sources;
 
 import com.google.gson.JsonElement;
+import com.launchdarkly.sdk.fdv2.Selector;
 
 import java.util.Collections;
 import java.util.List;
