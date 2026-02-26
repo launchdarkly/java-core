@@ -1,9 +1,16 @@
 package com.launchdarkly.sdk.server.datasources;
 
+import com.launchdarkly.sdk.fdv2.ChangeSet;
+import com.launchdarkly.sdk.fdv2.SourceResultType;
+import com.launchdarkly.sdk.fdv2.SourceSignal;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 
 import java.io.Closeable;
+import java.util.Map;
 import java.util.function.Function;
 
 /**
@@ -14,49 +21,15 @@ import java.util.function.Function;
  */
 public class FDv2SourceResult implements Closeable {
 
-    public enum State {
-        /**
-         * The data source has encountered an interruption and will attempt to reconnect. This isn't intended to be used
-         * with an initializer, and instead TERMINAL_ERROR should be used. When this status is used with an initializer,
-         * it will still be a terminal state.
-         */
-        INTERRUPTED,
-        /**
-         * The data source has been shut down and will not produce any further results.
-         */
-        SHUTDOWN,
-        /**
-         * The data source has encountered a terminal error and will not produce any further results.
-         */
-        TERMINAL_ERROR,
-        /**
-         * The data source has been instructed to disconnect and will not produce any further results.
-         */
-        GOODBYE,
-    }
-
-    public enum ResultType {
-        /**
-         * The source has emitted a change set. This implies that the source is valid.
-         */
-        CHANGE_SET,
-        /**
-         * The source is emitting a status which indicates a transition from being valid to being in some kind
-         * of error state. The source will emit a CHANGE_SET if it becomes valid again.
-         */
-        STATUS,
-    }
-
     /**
      * Represents a change in the status of the source.
      */
     public static class Status {
-        private final State state;
+        private final SourceSignal state;
         private final DataSourceStatusProvider.ErrorInfo errorInfo;
-
         private final String reason;
 
-        public State getState() {
+        public SourceSignal getState() {
             return state;
         }
 
@@ -64,26 +37,26 @@ public class FDv2SourceResult implements Closeable {
             return errorInfo;
         }
 
-        Status(State state, DataSourceStatusProvider.ErrorInfo errorInfo, String reason) {
+        Status(SourceSignal state, DataSourceStatusProvider.ErrorInfo errorInfo, String reason) {
             this.state = state;
             this.errorInfo = errorInfo;
             this.reason = reason;
         }
 
         public static Status goodbye(String reason) {
-            return new Status(State.GOODBYE, null, reason);
+            return new Status(SourceSignal.GOODBYE, null, reason);
         }
 
         public static Status interrupted(DataSourceStatusProvider.ErrorInfo errorInfo) {
-            return new Status(State.INTERRUPTED, errorInfo, null);
+            return new Status(SourceSignal.INTERRUPTED, errorInfo, null);
         }
 
         public static Status terminalError(DataSourceStatusProvider.ErrorInfo errorInfo) {
-            return new Status(State.TERMINAL_ERROR, errorInfo, null);
+            return new Status(SourceSignal.TERMINAL_ERROR, errorInfo, null);
         }
 
         public static Status shutdown() {
-            return new Status(State.SHUTDOWN, null, null);
+            return new Status(SourceSignal.SHUTDOWN, null, null);
         }
 
         /**
@@ -95,18 +68,15 @@ public class FDv2SourceResult implements Closeable {
         }
     }
 
-    private final DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet;
+    private final ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet;
     private final Status status;
-
-    private final ResultType resultType;
-
+    private final SourceResultType resultType;
     private final boolean fdv1Fallback;
-
     private final Function<Void, Void> completionCallback;
 
     private FDv2SourceResult(
-        DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet,
-        Status status, ResultType resultType,
+        ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet,
+        Status status, SourceResultType resultType,
         boolean fdv1Fallback,
         Function<Void, Void> completionCallback
     ) {
@@ -125,7 +95,7 @@ public class FDv2SourceResult implements Closeable {
         return new FDv2SourceResult(
             null,
             Status.interrupted(errorInfo),
-            ResultType.STATUS,
+            SourceResultType.STATUS,
             fdv1Fallback,
             completionCallback);
     }
@@ -137,7 +107,7 @@ public class FDv2SourceResult implements Closeable {
     public static FDv2SourceResult shutdown(Function<Void, Void> completionCallback) {
         return new FDv2SourceResult(null,
             Status.shutdown(),
-            ResultType.STATUS,
+            SourceResultType.STATUS,
             false,
             completionCallback);
     }
@@ -149,20 +119,20 @@ public class FDv2SourceResult implements Closeable {
     public static FDv2SourceResult terminalError(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
         return new FDv2SourceResult(null,
             Status.terminalError(errorInfo),
-            ResultType.STATUS,
+            SourceResultType.STATUS,
             fdv1Fallback,
             completionCallback);
     }
 
-    public static FDv2SourceResult changeSet(DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet, boolean fdv1Fallback) {
+    public static FDv2SourceResult changeSet(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet, boolean fdv1Fallback) {
         return changeSet(changeSet, fdv1Fallback, null);
     }
 
-    public static FDv2SourceResult changeSet(DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
+    public static FDv2SourceResult changeSet(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
         return new FDv2SourceResult(
             changeSet,
             null,
-            ResultType.CHANGE_SET,
+            SourceResultType.CHANGE_SET,
             fdv1Fallback,
             completionCallback);
     }
@@ -175,12 +145,12 @@ public class FDv2SourceResult implements Closeable {
         return new FDv2SourceResult(
             null,
             Status.goodbye(reason),
-            ResultType.STATUS,
+            SourceResultType.STATUS,
             fdv1Fallback,
             completionCallback);
     }
 
-    public ResultType getResultType() {
+    public SourceResultType getResultType() {
         return resultType;
     }
 
@@ -188,7 +158,7 @@ public class FDv2SourceResult implements Closeable {
         return status;
     }
 
-    public DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> getChangeSet() {
+    public ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> getChangeSet() {
         return changeSet;
     }
 
@@ -218,7 +188,7 @@ public class FDv2SourceResult implements Closeable {
 
     @Override
     public void close() {
-        if(completionCallback != null) {
+        if (completionCallback != null) {
             completionCallback.apply(null);
         }
     }

@@ -2,15 +2,16 @@ package com.launchdarkly.sdk.server.integrations;
 
 import com.google.common.collect.ImmutableMap;
 import com.launchdarkly.sdk.internal.collections.IterableAsyncQueue;
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.server.DataModel;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataSourceBuildInputs;
 import com.launchdarkly.sdk.server.subsystems.DataSourceBuilder;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSetType;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
+import com.launchdarkly.sdk.fdv2.ChangeSetType;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 import java.time.Instant;
@@ -254,7 +255,7 @@ public final class TestDataV2 implements DataSourceBuilder<Synchronizer> {
     }
   }
   
-  private ChangeSet<ItemDescriptor> makeFullChangeSet() {
+  private ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> makeFullChangeSet() {
     ImmutableMap<String, ItemDescriptor> copiedData;
     synchronized (lock) {
       copiedData = ImmutableMap.copyOf(currentFlags);
@@ -269,7 +270,7 @@ public final class TestDataV2 implements DataSourceBuilder<Synchronizer> {
         shouldPersist);
   }
 
-  private ChangeSet<ItemDescriptor> makePartialChangeSet(String key, ItemDescriptor item) {
+  private ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> makePartialChangeSet(String key, ItemDescriptor item) {
     return new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.EMPTY,

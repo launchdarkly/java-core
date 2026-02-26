@@ -2,6 +2,8 @@ package com.launchdarkly.sdk.server.integrations;
 
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.logging.LogValues;
+import com.launchdarkly.sdk.fdv2.SourceResultType;
+import com.launchdarkly.sdk.fdv2.SourceSignal;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.integrations.FileDataSourceBuilder.SourceInfo;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.State;
@@ -78,8 +80,8 @@ final class FileDataSourceImpl implements DataSource {
                 if (closed.get()) {
                     break;
                 }
-                if (result.getResultType() == FDv2SourceResult.ResultType.STATUS &&
-                    result.getStatus().getState() == FDv2SourceResult.State.SHUTDOWN) {
+                if (result.getResultType() == SourceResultType.STATUS &&
+                    result.getStatus().getState() == SourceSignal.SHUTDOWN) {
                     break;
                 }
                 processResult(result);
@@ -92,7 +94,7 @@ final class FileDataSourceImpl implements DataSource {
     }
 
     private void processResult(FDv2SourceResult result) {
-        if (result.getResultType() == FDv2SourceResult.ResultType.CHANGE_SET) {
+        if (result.getResultType() == SourceResultType.CHANGE_SET) {
             // Convert ChangeSet to FullDataSet for legacy init()
             FullDataSet<ItemDescriptor> fullData = new FullDataSet<>(
                 result.getChangeSet().getData(),
@@ -101,9 +103,9 @@ final class FileDataSourceImpl implements DataSource {
             dataSourceUpdates.init(fullData);
             dataSourceUpdates.updateStatus(State.VALID, null);
             inited.set(true);
-        } else if (result.getResultType() == FDv2SourceResult.ResultType.STATUS) {
+        } else if (result.getResultType() == SourceResultType.STATUS) {
             // Handle error/status results
-            if (result.getStatus().getState() != FDv2SourceResult.State.SHUTDOWN) {
+            if (result.getStatus().getState() != SourceSignal.SHUTDOWN) {
                 dataSourceUpdates.updateStatus(State.INTERRUPTED, result.getStatus().getErrorInfo());
             }
             // No terminal errors/shutdown for this adaptation.

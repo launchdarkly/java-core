@@ -1,9 +1,11 @@
 package com.launchdarkly.sdk.server.integrations;
 
 import com.launchdarkly.logging.LDLogger;
+import com.launchdarkly.sdk.fdv2.SourceResultType;
+import com.launchdarkly.sdk.fdv2.SourceSignal;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Initializer;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSetType;
+import com.launchdarkly.sdk.fdv2.ChangeSetType;
 
 import org.junit.Test;
 
@@ -30,7 +32,7 @@ public class FileInitializerTest {
             CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
-            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+            assertThat(result.getResultType(), equalTo(SourceResultType.CHANGE_SET));
             assertThat(result.getChangeSet(), notNullValue());
             assertThat(result.getChangeSet().getType(), equalTo(ChangeSetType.Full));
             assertNotNull(result.getChangeSet().getData());
@@ -46,8 +48,8 @@ public class FileInitializerTest {
             CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
-            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.STATUS));
-            assertThat(result.getStatus().getState(), equalTo(FDv2SourceResult.State.TERMINAL_ERROR));
+            assertThat(result.getResultType(), equalTo(SourceResultType.STATUS));
+            assertThat(result.getStatus().getState(), equalTo(SourceSignal.TERMINAL_ERROR));
             assertNotNull(result.getStatus().getErrorInfo());
         }
     }
@@ -64,8 +66,8 @@ public class FileInitializerTest {
         CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
-        assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.STATUS));
-        assertThat(result.getStatus().getState(), equalTo(FDv2SourceResult.State.SHUTDOWN));
+        assertThat(result.getResultType(), equalTo(SourceResultType.STATUS));
+        assertThat(result.getStatus().getState(), equalTo(SourceSignal.SHUTDOWN));
     }
 
     @Test
@@ -77,7 +79,7 @@ public class FileInitializerTest {
             CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
-            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+            assertThat(result.getResultType(), equalTo(SourceResultType.CHANGE_SET));
             assertThat(result.getChangeSet(), notNullValue());
         }
     }
@@ -96,7 +98,7 @@ public class FileInitializerTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             // Should succeed when ignoring duplicates
-            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+            assertThat(result.getResultType(), equalTo(SourceResultType.CHANGE_SET));
         }
     }
 
@@ -109,7 +111,7 @@ public class FileInitializerTest {
             CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
-            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+            assertThat(result.getResultType(), equalTo(SourceResultType.CHANGE_SET));
             assertThat(result.getChangeSet().shouldPersist(), equalTo(false));
         }
     }
@@ -124,7 +126,7 @@ public class FileInitializerTest {
             CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
-            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+            assertThat(result.getResultType(), equalTo(SourceResultType.CHANGE_SET));
             assertThat(result.getChangeSet().shouldPersist(), equalTo(true));
         }
     }
@@ -139,7 +141,7 @@ public class FileInitializerTest {
             CompletableFuture<FDv2SourceResult> resultFuture = initializer.run();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
-            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+            assertThat(result.getResultType(), equalTo(SourceResultType.CHANGE_SET));
             assertThat(result.getChangeSet().shouldPersist(), equalTo(false));
         }
     }
@@ -157,8 +159,8 @@ public class FileInitializerTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             // Should fail with terminal error when duplicate keys are not allowed
-            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.STATUS));
-            assertThat(result.getStatus().getState(), equalTo(FDv2SourceResult.State.TERMINAL_ERROR));
+            assertThat(result.getResultType(), equalTo(SourceResultType.STATUS));
+            assertThat(result.getStatus().getState(), equalTo(SourceSignal.TERMINAL_ERROR));
         }
     }
 }

@@ -1,5 +1,7 @@
 package com.launchdarkly.sdk.server;
 
+import com.launchdarkly.sdk.fdv2.SourceResultType;
+import com.launchdarkly.sdk.fdv2.SourceSignal;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 
 import java.io.Closeable;
@@ -120,13 +122,13 @@ class FDv2DataSourceConditions {
 
         @Override
         public void inform(FDv2SourceResult sourceResult) {
-            if (sourceResult.getResultType() == FDv2SourceResult.ResultType.CHANGE_SET) {
+            if (sourceResult.getResultType() == SourceResultType.CHANGE_SET) {
                 if (timerFuture != null) {
                     timerFuture.cancel(false);
                     timerFuture = null;
                 }
             }
-            if (sourceResult.getResultType() == FDv2SourceResult.ResultType.STATUS && sourceResult.getStatus().getState() == FDv2SourceResult.State.INTERRUPTED) {
+            if (sourceResult.getResultType() == SourceResultType.STATUS && sourceResult.getStatus().getState() == SourceSignal.INTERRUPTED) {
                 if (timerFuture == null) {
                     timerFuture = sharedExecutor.schedule(() -> {
                         resultFuture.complete(this);

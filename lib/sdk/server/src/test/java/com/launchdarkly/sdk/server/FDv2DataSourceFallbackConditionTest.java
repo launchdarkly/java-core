@@ -1,13 +1,20 @@
 package com.launchdarkly.sdk.server;
 
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.server.FDv2DataSourceConditions.Condition;
 import com.launchdarkly.sdk.server.FDv2DataSourceConditions.FallbackCondition;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
+import com.launchdarkly.sdk.fdv2.ChangeSetType;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 
 import org.junit.After;
+import java.util.Map;
+
 import org.junit.Test;
 
 import java.time.Instant;
@@ -32,9 +39,9 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
         }
     }
 
-    private DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> makeChangeSet() {
-        return new DataStoreTypes.ChangeSet<>(
-            DataStoreTypes.ChangeSetType.None,
+    private ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> makeChangeSet() {
+        return new ChangeSet<>(
+            ChangeSetType.None,
             Selector.EMPTY,
             null,
             null,
@@ -103,7 +110,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
         );
 
         // Cancel timer with CHANGE_SET
-        DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet = makeChangeSet();
+        ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = makeChangeSet();
         condition.inform(FDv2SourceResult.changeSet(changeSet, false));
 
         // Wait longer than the timeout period
@@ -121,7 +128,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
         CompletableFuture<Condition> resultFuture = condition.execute();
 
         // Inform with CHANGE_SET without starting a timer first
-        DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet = makeChangeSet();
+        ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = makeChangeSet();
         condition.inform(FDv2SourceResult.changeSet(changeSet, false));
 
         // Wait to ensure nothing happens
@@ -279,7 +286,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
         );
 
         // Cancel timer with CHANGE_SET
-        DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet = makeChangeSet();
+        ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = makeChangeSet();
         condition.inform(FDv2SourceResult.changeSet(changeSet, false));
 
         // Start timer again
@@ -318,7 +325,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
         assertSame(condition, result);
 
         // Inform with CHANGE_SET after timer has fired
-        DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet = makeChangeSet();
+        ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = makeChangeSet();
         condition.inform(FDv2SourceResult.changeSet(changeSet, false));
 
         // Future should remain complete
@@ -378,7 +385,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
         Thread.sleep(500);
 
         // Cancel with CHANGE_SET
-        DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet = makeChangeSet();
+        ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = makeChangeSet();
         condition.inform(FDv2SourceResult.changeSet(changeSet, false));
 
         // Wait past the original timeout
@@ -404,7 +411,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
         );
 
         // Cancel with multiple CHANGE_SETs
-        DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet = makeChangeSet();
+        ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = makeChangeSet();
         condition.inform(FDv2SourceResult.changeSet(changeSet, false));
         condition.inform(FDv2SourceResult.changeSet(changeSet, false));
         condition.inform(FDv2SourceResult.changeSet(changeSet, false));

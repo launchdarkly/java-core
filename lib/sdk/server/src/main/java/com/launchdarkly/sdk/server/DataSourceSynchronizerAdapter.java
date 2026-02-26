@@ -1,14 +1,19 @@
 package com.launchdarkly.sdk.server;
 
 import com.launchdarkly.sdk.internal.collections.IterableAsyncQueue;
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
+import com.launchdarkly.sdk.fdv2.ChangeSetType;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -127,11 +132,11 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
         }
 
         @Override
-        public boolean init(DataStoreTypes.FullDataSet<DataStoreTypes.ItemDescriptor> allData) {
+        public boolean init(DataStoreTypes.FullDataSet<ItemDescriptor> allData) {
             // Convert the full data set into a ChangeSet and emit it
-            DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet =
-                    new DataStoreTypes.ChangeSet<>(
-                            DataStoreTypes.ChangeSetType.Full,
+            ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet =
+                    new ChangeSet<>(
+                            ChangeSetType.Full,
                             Selector.EMPTY,
                             allData.getData(),
                             null,
@@ -142,18 +147,18 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
         }
 
         @Override
-        public boolean upsert(DataStoreTypes.DataKind kind, String key, DataStoreTypes.ItemDescriptor item) {
+        public boolean upsert(DataKind kind, String key, ItemDescriptor item) {
             // Convert the upsert into a ChangeSet with a single item and emit it
-            DataStoreTypes.KeyedItems<DataStoreTypes.ItemDescriptor> items =
-                    new DataStoreTypes.KeyedItems<>(Collections.<Map.Entry<String, DataStoreTypes.ItemDescriptor>>singletonList(
+            KeyedItems<ItemDescriptor> items =
+                    new KeyedItems<>(Collections.<Map.Entry<String, ItemDescriptor>>singletonList(
                             new AbstractMap.SimpleEntry<>(key, item)));
-            Iterable<Map.Entry<DataStoreTypes.DataKind, DataStoreTypes.KeyedItems<DataStoreTypes.ItemDescriptor>>> data =
-                    Collections.<Map.Entry<DataStoreTypes.DataKind, DataStoreTypes.KeyedItems<DataStoreTypes.ItemDescriptor>>>singletonList(
+            Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data =
+                    Collections.<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>singletonList(
                             new AbstractMap.SimpleEntry<>(kind, items));
 
-            DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet =
-                    new DataStoreTypes.ChangeSet<>(
-                            DataStoreTypes.ChangeSetType.Partial,
+            ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet =
+                    new ChangeSet<>(
+                            ChangeSetType.Partial,
                             Selector.EMPTY,
                             data,
                             null,

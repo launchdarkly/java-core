@@ -14,7 +14,7 @@ import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.StatusLis
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSinkV2;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
@@ -370,7 +370,7 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
   }
     
   @Override
-  public boolean apply(ChangeSet<ItemDescriptor> changeSet) {
+  public boolean apply(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet) {
     if (store instanceof TransactionalDataStore) {
       return applyToTransactionalStore((TransactionalDataStore) store, changeSet);
     }
@@ -380,7 +380,7 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
   }
   
   private boolean applyToTransactionalStore(TransactionalDataStore transactionalDataStore,
-      ChangeSet<ItemDescriptor> changeSet) {
+      ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet) {
     Map<DataKind, Map<String, ItemDescriptor>> oldData;
     // Getting the old values requires accessing the store, which can fail.
     // If there is a failure to read the store, then we stop treating it as a failure.
@@ -391,7 +391,7 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
       return false;
     }
     
-    ChangeSet<ItemDescriptor> sortedChangeSet = DataModelDependencies.sortChangeset(changeSet);
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> sortedChangeSet = DataModelDependencies.sortChangeset(changeSet);
     
     try {
       transactionalDataStore.apply(sortedChangeSet);
@@ -415,7 +415,7 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
     return true;
   }
   
-  private boolean applyToLegacyStore(ChangeSet<ItemDescriptor> sortedChangeSet) {
+  private boolean applyToLegacyStore(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> sortedChangeSet) {
     switch (sortedChangeSet.getType()) {
       case Full:
         return applyFullChangeSetToLegacyStore(sortedChangeSet);
@@ -427,16 +427,16 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
     }
   }
   
-  private boolean applyFullChangeSetToLegacyStore(ChangeSet<ItemDescriptor> unsortedChangeset) {
+  private boolean applyFullChangeSetToLegacyStore(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> unsortedChangeset) {
     // Convert ChangeSet to FullDataSet for legacy init path, preserving shouldPersist flag
     return init(new FullDataSet<>(unsortedChangeset.getData(), unsortedChangeset.shouldPersist()));
   }
   
-  private boolean applyPartialChangeSetToLegacyStore(ChangeSet<ItemDescriptor> changeSet) {
+  private boolean applyPartialChangeSetToLegacyStore(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet) {
     // Sorting isn't strictly required here, as upsert behavior didn't traditionally have it,
     // but it also doesn't hurt, and there could be cases where it results in slightly
     // greater store consistency for persistent stores.
-    ChangeSet<ItemDescriptor> sortedChangeset = DataModelDependencies.sortChangeset(changeSet);
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> sortedChangeset = DataModelDependencies.sortChangeset(changeSet);
     
     for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> kindItemsPair: sortedChangeset.getData()) {
       for (Map.Entry<String, ItemDescriptor> item: kindItemsPair.getValue().getItems()) {
@@ -471,7 +471,7 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
     }
   }
   
-  private Map<DataKind, Map<String, ItemDescriptor>> changeSetToMap(ChangeSet<ItemDescriptor> changeSet) {
+  private Map<DataKind, Map<String, ItemDescriptor>> changeSetToMap(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet) {
     Map<DataKind, Map<String, ItemDescriptor>> ret = new HashMap<>();
     for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> e: changeSet.getData()) {
       ret.put(e.getKey(), ImmutableMap.copyOf(e.getValue().getItems()));
@@ -481,7 +481,7 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
   
   private Set<KindAndKey> updateDependencyTrackerForChangesetAndDetermineChanges(
       Map<DataKind, Map<String, ItemDescriptor>> oldDataMap,
-      ChangeSet<ItemDescriptor> changeSet) {
+      ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet) {
     switch (changeSet.getType()) {
       case Full:
         return handleFullChangeset(oldDataMap, changeSet);
@@ -496,7 +496,7 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
   
   private Set<KindAndKey> handleFullChangeset(
       Map<DataKind, Map<String, ItemDescriptor>> oldDataMap,
-      ChangeSet<ItemDescriptor> changeSet) {
+      ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet) {
     dependencyTracker.reset();
     for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> kindEntry: changeSet.getData()) {
       DataKind kind = kindEntry.getKey();
@@ -516,7 +516,7 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
   
   private Set<KindAndKey> handlePartialChangeset(
       Map<DataKind, Map<String, ItemDescriptor>> oldDataMap,
-      ChangeSet<ItemDescriptor> changeSet) {
+      ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet) {
     if (oldDataMap == null) {
       // Update dependencies but don't track changes when no listeners
       for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> kindEntry: changeSet.getData()) {

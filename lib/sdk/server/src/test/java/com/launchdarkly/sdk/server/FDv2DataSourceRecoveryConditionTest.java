@@ -1,16 +1,22 @@
 package com.launchdarkly.sdk.server;
 
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.server.FDv2DataSourceConditions.Condition;
 import com.launchdarkly.sdk.server.FDv2DataSourceConditions.RecoveryCondition;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
+import com.launchdarkly.sdk.fdv2.ChangeSetType;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 
 import org.junit.After;
 import org.junit.Test;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -33,9 +39,9 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
         }
     }
 
-    private DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> makeChangeSet() {
-        return new DataStoreTypes.ChangeSet<>(
-            DataStoreTypes.ChangeSetType.None,
+    private ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> makeChangeSet() {
+        return new ChangeSet<>(
+            ChangeSetType.None,
             Selector.EMPTY,
             null,
             null,
@@ -125,7 +131,7 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
         CompletableFuture<Condition> resultFuture = condition.execute();
 
         // Inform with CHANGE_SET
-        DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet = makeChangeSet();
+        ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = makeChangeSet();
         condition.inform(FDv2SourceResult.changeSet(changeSet, false));
 
         // Timer should still fire after timeout (inform does nothing)
@@ -232,7 +238,7 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
         CompletableFuture<Condition> resultFuture = condition.execute();
 
         // Multiple inform calls
-        DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet = makeChangeSet();
+        ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = makeChangeSet();
         condition.inform(FDv2SourceResult.changeSet(changeSet, false));
         condition.inform(
             FDv2SourceResult.interrupted(

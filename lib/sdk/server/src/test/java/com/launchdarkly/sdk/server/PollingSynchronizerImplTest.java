@@ -1,6 +1,8 @@
 package com.launchdarkly.sdk.server;
 
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.fdv2.Selector;
+import com.launchdarkly.sdk.fdv2.SourceResultType;
+import com.launchdarkly.sdk.fdv2.SourceSignal;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.SelectorSource;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
@@ -108,7 +110,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             // Now the future should complete
             FDv2SourceResult result = nextFuture.get(5, TimeUnit.SECONDS);
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
 
             synchronizer.close();
         } finally {
@@ -144,7 +146,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
 
             FDv2SourceResult result = nextFuture.get(1, TimeUnit.SECONDS);
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
 
             synchronizer.close();
         } finally {
@@ -177,15 +179,15 @@ public class PollingSynchronizerImplTest extends BaseTest {
             // Should have at least 3-4 results queued
             FDv2SourceResult result1 = synchronizer.next().get(1, TimeUnit.SECONDS);
             assertNotNull(result1);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result1.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result1.getResultType());
 
             FDv2SourceResult result2 = synchronizer.next().get(1, TimeUnit.SECONDS);
             assertNotNull(result2);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result2.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result2.getResultType());
 
             FDv2SourceResult result3 = synchronizer.next().get(1, TimeUnit.SECONDS);
             assertNotNull(result3);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result3.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result3.getResultType());
 
             synchronizer.close();
         } finally {
@@ -218,8 +220,8 @@ public class PollingSynchronizerImplTest extends BaseTest {
             // next() should return shutdown result
             FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-            assertEquals(FDv2SourceResult.State.SHUTDOWN, result.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result.getResultType());
+            assertEquals(SourceSignal.SHUTDOWN, result.getStatus().getState());
         } finally {
             executor.shutdown();
         }
@@ -256,8 +258,8 @@ public class PollingSynchronizerImplTest extends BaseTest {
             // next() should complete with shutdown result
             FDv2SourceResult result = nextFuture.get(5, TimeUnit.SECONDS);
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-            assertEquals(FDv2SourceResult.State.SHUTDOWN, result.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result.getResultType());
+            assertEquals(SourceSignal.SHUTDOWN, result.getStatus().getState());
         } finally {
             executor.shutdown();
         }
@@ -298,8 +300,8 @@ public class PollingSynchronizerImplTest extends BaseTest {
             for (int i = 0; i < 10; i++) {
                 FDv2SourceResult result = synchronizer.next().get(1, TimeUnit.SECONDS);
                 assertNotNull(result);
-                if (result.getResultType() == FDv2SourceResult.ResultType.STATUS &&
-                        result.getStatus().getState() == FDv2SourceResult.State.SHUTDOWN) {
+                if (result.getResultType() == SourceResultType.STATUS &&
+                        result.getStatus().getState() == SourceSignal.SHUTDOWN) {
                     gotShutdown = true;
                     break;
                 }
@@ -378,19 +380,19 @@ public class PollingSynchronizerImplTest extends BaseTest {
             // First result should be success
             FDv2SourceResult result1 = synchronizer.next().get(1, TimeUnit.SECONDS);
             assertNotNull(result1);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result1.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result1.getResultType());
 
             // Second result should be the error (INTERRUPTED status)
             FDv2SourceResult result2 = synchronizer.next().get(1, TimeUnit.SECONDS);
             assertNotNull(result2);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result2.getResultType());
-            assertEquals(FDv2SourceResult.State.INTERRUPTED, result2.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result2.getResultType());
+            assertEquals(SourceSignal.INTERRUPTED, result2.getStatus().getState());
             assertEquals(DataSourceStatusProvider.ErrorKind.NETWORK_ERROR, result2.getStatus().getErrorInfo().getKind());
 
             // Third result should be success again
             FDv2SourceResult result3 = synchronizer.next().get(1, TimeUnit.SECONDS);
             assertNotNull(result3);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result3.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result3.getResultType());
 
             // Verify polling continued after error
             assertTrue("Should have at least 2 successful polls", successCount.get() >= 2);
@@ -473,7 +475,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             // Should get success results - null responses cause exceptions that are swallowed
             FDv2SourceResult result = synchronizer.next().get(1, TimeUnit.SECONDS);
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
 
             // Verify polling continued after null response
             assertTrue("Should have successful polls after null", successCount.get() >= 1);
@@ -556,8 +558,8 @@ public class PollingSynchronizerImplTest extends BaseTest {
             // First result should be terminal error
             FDv2SourceResult result1 = synchronizer.next().get(1, TimeUnit.SECONDS);
             assertNotNull(result1);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result1.getResultType());
-            assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result1.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result1.getResultType());
+            assertEquals(SourceSignal.TERMINAL_ERROR, result1.getStatus().getState());
             assertEquals(DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE, result1.getStatus().getErrorInfo().getKind());
 
             // Wait to see if polling continues
@@ -609,14 +611,14 @@ public class PollingSynchronizerImplTest extends BaseTest {
             // First result should be interrupted error
             FDv2SourceResult result1 = synchronizer.next().get(1, TimeUnit.SECONDS);
             assertNotNull(result1);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result1.getResultType());
-            assertEquals(FDv2SourceResult.State.INTERRUPTED, result1.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result1.getResultType());
+            assertEquals(SourceSignal.INTERRUPTED, result1.getStatus().getState());
             assertEquals(DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE, result1.getStatus().getErrorInfo().getKind());
 
             // Second result should be success (polling continued)
             FDv2SourceResult result2 = synchronizer.next().get(1, TimeUnit.SECONDS);
             assertNotNull(result2);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result2.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result2.getResultType());
 
             // Verify polling continued after recoverable error
             assertTrue("Should have at least 2 successful polls after recoverable error", successCount.get() >= 2);
@@ -664,17 +666,17 @@ public class PollingSynchronizerImplTest extends BaseTest {
 
             // Get first three interrupted results
             FDv2SourceResult result1 = synchronizer.next().get(1, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.State.INTERRUPTED, result1.getStatus().getState());
+            assertEquals(SourceSignal.INTERRUPTED, result1.getStatus().getState());
 
             FDv2SourceResult result2 = synchronizer.next().get(1, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.State.INTERRUPTED, result2.getStatus().getState());
+            assertEquals(SourceSignal.INTERRUPTED, result2.getStatus().getState());
 
             FDv2SourceResult result3 = synchronizer.next().get(1, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.State.INTERRUPTED, result3.getStatus().getState());
+            assertEquals(SourceSignal.INTERRUPTED, result3.getStatus().getState());
 
             // Fourth result should be success
             FDv2SourceResult result4 = synchronizer.next().get(1, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result4.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result4.getResultType());
 
             // Verify polling continued through multiple errors
             assertTrue("Should have made at least 4 calls", callCount.get() >= 4);
@@ -715,7 +717,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
 
             // First result should be terminal error
             FDv2SourceResult result1 = synchronizer.next().get(1, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result1.getStatus().getState());
+            assertEquals(SourceSignal.TERMINAL_ERROR, result1.getStatus().getState());
 
             // Wait to ensure no more polling
             Thread.sleep(200);
@@ -793,14 +795,14 @@ public class PollingSynchronizerImplTest extends BaseTest {
             // First result should be interrupted with INVALID_DATA error kind
             FDv2SourceResult result1 = synchronizer.next().get(1, TimeUnit.SECONDS);
             assertNotNull(result1);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result1.getResultType());
-            assertEquals(FDv2SourceResult.State.INTERRUPTED, result1.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result1.getResultType());
+            assertEquals(SourceSignal.INTERRUPTED, result1.getStatus().getState());
             assertEquals(DataSourceStatusProvider.ErrorKind.INVALID_DATA, result1.getStatus().getErrorInfo().getKind());
 
             // Second result should be success (polling continued)
             FDv2SourceResult result2 = synchronizer.next().get(1, TimeUnit.SECONDS);
             assertNotNull(result2);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result2.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result2.getResultType());
 
             // Verify polling continued after internal error
             assertTrue("Should have made at least 2 calls", callCount.get() >= 2);
@@ -857,14 +859,14 @@ public class PollingSynchronizerImplTest extends BaseTest {
             // First result should be interrupted with UNKNOWN error kind
             FDv2SourceResult result1 = synchronizer.next().get(1, TimeUnit.SECONDS);
             assertNotNull(result1);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result1.getResultType());
-            assertEquals(FDv2SourceResult.State.INTERRUPTED, result1.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result1.getResultType());
+            assertEquals(SourceSignal.INTERRUPTED, result1.getStatus().getState());
             assertEquals(DataSourceStatusProvider.ErrorKind.UNKNOWN, result1.getStatus().getErrorInfo().getKind());
 
             // Second result should be success (polling continued)
             FDv2SourceResult result2 = synchronizer.next().get(1, TimeUnit.SECONDS);
             assertNotNull(result2);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result2.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result2.getResultType());
 
             // Verify polling continued after internal error
             assertTrue("Should have made at least 2 calls", callCount.get() >= 2);
@@ -908,7 +910,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = synchronizer.next().get(1, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
             assertEquals(true, result.isFdv1Fallback());
 
             synchronizer.close();
@@ -938,7 +940,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = synchronizer.next().get(1, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
             assertEquals(false, result.isFdv1Fallback());
 
             synchronizer.close();
@@ -974,8 +976,8 @@ public class PollingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = synchronizer.next().get(1, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-            assertEquals(FDv2SourceResult.State.INTERRUPTED, result.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result.getResultType());
+            assertEquals(SourceSignal.INTERRUPTED, result.getStatus().getState());
             assertEquals(true, result.isFdv1Fallback());
 
             synchronizer.close();
@@ -1017,7 +1019,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = synchronizer.next().get(1, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
             assertNotNull(result.getChangeSet());
             assertEquals("test-env-789", result.getChangeSet().getEnvironmentId());
 
@@ -1061,7 +1063,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = synchronizer.next().get(1, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
             assertEquals(true, result.isFdv1Fallback());
             assertNotNull(result.getChangeSet());
             assertEquals("test-env-combined", result.getChangeSet().getEnvironmentId());

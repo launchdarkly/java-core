@@ -9,10 +9,12 @@ import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ChangeSet;
 import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ChangeSet.FDv2Change;
 import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ChangeSet.FDv2ChangeSetType;
 import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ChangeSet.FDv2ChangeType;
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSetType;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
+import com.launchdarkly.sdk.fdv2.ChangeSetType;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 
 import org.junit.Test;
@@ -58,7 +60,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     );
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, Selector.make(1, "state1"));
 
-    DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result =
         FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     assertEquals(ChangeSetType.Full, result.getType());
@@ -71,7 +73,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     );
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.PARTIAL, changes, Selector.make(1, "state1"));
 
-    DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result =
         FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     assertEquals(ChangeSetType.Partial, result.getType());
@@ -82,7 +84,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     List<FDv2Change> changes = ImmutableList.of();
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.NONE, changes, Selector.make(1, "state1"));
 
-    DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result =
         FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     assertEquals(ChangeSetType.None, result.getType());
@@ -94,7 +96,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     Selector selector = Selector.make(42, "test-state");
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, selector);
 
-    DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result =
         FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     assertEquals(selector.getVersion(), result.getSelector().getVersion());
@@ -106,7 +108,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     List<FDv2Change> changes = ImmutableList.of();
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, Selector.make(1, "state1"));
 
-    DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result =
         FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, "test-env-id", true);
 
     assertEquals("test-env-id", result.getEnvironmentId());
@@ -117,7 +119,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     List<FDv2Change> changes = ImmutableList.of();
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, Selector.make(1, "state1"));
 
-    DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result =
         FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     assertNull(result.getEnvironmentId());
@@ -130,12 +132,12 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     );
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, Selector.make(1, "state1"));
 
-    DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result =
         FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
-    Map.Entry<DataKind, KeyedItems<DataStoreTypes.ItemDescriptor>> flagData = findDataKind(result, "features");
+    Map.Entry<DataKind, KeyedItems<ItemDescriptor>> flagData = findDataKind(result, "features");
     assertNotNull(flagData);
-    Map.Entry<String, DataStoreTypes.ItemDescriptor> item = getFirstItem(flagData.getValue());
+    Map.Entry<String, ItemDescriptor> item = getFirstItem(flagData.getValue());
     assertEquals("flag1", item.getKey());
     assertNotNull(item.getValue().getItem());
     assertEquals(1, item.getValue().getVersion());
@@ -148,12 +150,12 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     );
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.PARTIAL, changes, Selector.make(1, "state1"));
 
-    DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result =
         FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
-    Map.Entry<DataKind, KeyedItems<DataStoreTypes.ItemDescriptor>> flagData = findDataKind(result, "features");
+    Map.Entry<DataKind, KeyedItems<ItemDescriptor>> flagData = findDataKind(result, "features");
     assertNotNull(flagData);
-    Map.Entry<String, DataStoreTypes.ItemDescriptor> item = getFirstItem(flagData.getValue());
+    Map.Entry<String, ItemDescriptor> item = getFirstItem(flagData.getValue());
     assertEquals("flag1", item.getKey());
     assertNull(item.getValue().getItem());
     assertEquals(5, item.getValue().getVersion());
@@ -167,10 +169,10 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     );
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, Selector.make(1, "state1"));
 
-    DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result =
         FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
-    Map.Entry<DataKind, KeyedItems<DataStoreTypes.ItemDescriptor>> flagData = findDataKind(result, "features");
+    Map.Entry<DataKind, KeyedItems<ItemDescriptor>> flagData = findDataKind(result, "features");
     assertNotNull(flagData);
     assertEquals(2, countItems(flagData.getValue()));
   }
@@ -183,7 +185,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     );
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, Selector.make(1, "state1"));
 
-    DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result =
         FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     assertEquals(2, countDataKinds(result));
@@ -199,7 +201,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     );
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, Selector.make(1, "state1"));
 
-    DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result =
         FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     assertEquals(1, countDataKinds(result));
@@ -215,10 +217,10 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     );
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, Selector.make(1, "state1"));
 
-    DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result =
         FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
-    Map.Entry<DataKind, KeyedItems<DataStoreTypes.ItemDescriptor>> flagData = findDataKind(result, "features");
+    Map.Entry<DataKind, KeyedItems<ItemDescriptor>> flagData = findDataKind(result, "features");
     assertNotNull(flagData);
     assertEquals(1, countItems(flagData.getValue()));
     assertEquals("flag2", getFirstItem(flagData.getValue()).getKey());
@@ -230,7 +232,7 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     List<FDv2Change> changes = ImmutableList.of();
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, Selector.make(1, "state1"));
 
-    DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result =
         FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     assertEquals(0, countDataKinds(result));
@@ -245,24 +247,24 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     );
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.PARTIAL, changes, Selector.make(1, "state1"));
 
-    DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result =
         FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
     assertEquals(2, countDataKinds(result));
 
-    Map.Entry<DataKind, KeyedItems<DataStoreTypes.ItemDescriptor>> flagData = findDataKind(result, "features");
+    Map.Entry<DataKind, KeyedItems<ItemDescriptor>> flagData = findDataKind(result, "features");
     assertNotNull(flagData);
     assertEquals(2, countItems(flagData.getValue()));
 
-    Map.Entry<String, DataStoreTypes.ItemDescriptor> flag1 = findItem(flagData.getValue(), "flag1");
+    Map.Entry<String, ItemDescriptor> flag1 = findItem(flagData.getValue(), "flag1");
     assertNotNull(flag1.getValue().getItem());
     assertEquals(1, flag1.getValue().getVersion());
 
-    Map.Entry<String, DataStoreTypes.ItemDescriptor> flag2 = findItem(flagData.getValue(), "flag2");
+    Map.Entry<String, ItemDescriptor> flag2 = findItem(flagData.getValue(), "flag2");
     assertNull(flag2.getValue().getItem());
     assertEquals(2, flag2.getValue().getVersion());
 
-    Map.Entry<DataKind, KeyedItems<DataStoreTypes.ItemDescriptor>> segmentData = findDataKind(result, "segments");
+    Map.Entry<DataKind, KeyedItems<ItemDescriptor>> segmentData = findDataKind(result, "segments");
     assertNotNull(segmentData);
     assertEquals(1, countItems(segmentData.getValue()));
   }
@@ -276,12 +278,12 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     );
     FDv2ChangeSet fdv2ChangeSet = new FDv2ChangeSet(FDv2ChangeSetType.FULL, changes, Selector.make(1, "state1"));
 
-    DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> result =
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result =
         FDv2ChangeSetTranslator.toChangeSet(fdv2ChangeSet, testLogger, null, true);
 
-    Map.Entry<DataKind, KeyedItems<DataStoreTypes.ItemDescriptor>> flagData = findDataKind(result, "features");
+    Map.Entry<DataKind, KeyedItems<ItemDescriptor>> flagData = findDataKind(result, "features");
     assertNotNull(flagData);
-    List<Map.Entry<String, DataStoreTypes.ItemDescriptor>> items = toList(flagData.getValue().getItems());
+    List<Map.Entry<String, ItemDescriptor>> items = toList(flagData.getValue().getItems());
     assertEquals("flag3", items.get(0).getKey());
     assertEquals("flag1", items.get(1).getKey());
     assertEquals("flag2", items.get(2).getKey());
@@ -289,9 +291,9 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
 
   // Helper methods
 
-  private Map.Entry<DataKind, KeyedItems<DataStoreTypes.ItemDescriptor>> findDataKind(
-      DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet, String kindName) {
-    for (Map.Entry<DataKind, KeyedItems<DataStoreTypes.ItemDescriptor>> entry : changeSet.getData()) {
+  private Map.Entry<DataKind, KeyedItems<ItemDescriptor>> findDataKind(
+      ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet, String kindName) {
+    for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> entry : changeSet.getData()) {
       if (entry.getKey().getName().equals(kindName)) {
         return entry;
       }
@@ -299,14 +301,14 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     return null;
   }
 
-  private Map.Entry<String, DataStoreTypes.ItemDescriptor> getFirstItem(
-      KeyedItems<DataStoreTypes.ItemDescriptor> keyedItems) {
+  private Map.Entry<String, ItemDescriptor> getFirstItem(
+      KeyedItems<ItemDescriptor> keyedItems) {
     return keyedItems.getItems().iterator().next();
   }
 
-  private Map.Entry<String, DataStoreTypes.ItemDescriptor> findItem(
-      KeyedItems<DataStoreTypes.ItemDescriptor> keyedItems, String key) {
-    for (Map.Entry<String, DataStoreTypes.ItemDescriptor> entry : keyedItems.getItems()) {
+  private Map.Entry<String, ItemDescriptor> findItem(
+      KeyedItems<ItemDescriptor> keyedItems, String key) {
+    for (Map.Entry<String, ItemDescriptor> entry : keyedItems.getItems()) {
       if (entry.getKey().equals(key)) {
         return entry;
       }
@@ -314,26 +316,26 @@ public class FDv2ChangeSetTranslatorTest extends BaseTest {
     return null;
   }
 
-  private int countItems(KeyedItems<DataStoreTypes.ItemDescriptor> keyedItems) {
+  private int countItems(KeyedItems<ItemDescriptor> keyedItems) {
     int count = 0;
-    for (@SuppressWarnings("unused") Map.Entry<String, DataStoreTypes.ItemDescriptor> entry : keyedItems.getItems()) {
+    for (@SuppressWarnings("unused") Map.Entry<String, ItemDescriptor> entry : keyedItems.getItems()) {
       count++;
     }
     return count;
   }
 
-  private int countDataKinds(DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet) {
+  private int countDataKinds(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet) {
     int count = 0;
-    for (@SuppressWarnings("unused") Map.Entry<DataKind, KeyedItems<DataStoreTypes.ItemDescriptor>> entry : changeSet.getData()) {
+    for (@SuppressWarnings("unused") Map.Entry<DataKind, KeyedItems<ItemDescriptor>> entry : changeSet.getData()) {
       count++;
     }
     return count;
   }
 
-  private List<Map.Entry<String, DataStoreTypes.ItemDescriptor>> toList(
-      Iterable<Map.Entry<String, DataStoreTypes.ItemDescriptor>> items) {
-    List<Map.Entry<String, DataStoreTypes.ItemDescriptor>> list = new ArrayList<>();
-    for (Map.Entry<String, DataStoreTypes.ItemDescriptor> item : items) {
+  private List<Map.Entry<String, ItemDescriptor>> toList(
+      Iterable<Map.Entry<String, ItemDescriptor>> items) {
+    List<Map.Entry<String, ItemDescriptor>> list = new ArrayList<>();
+    for (Map.Entry<String, ItemDescriptor> item : items) {
       list.add(item);
     }
     return list;
