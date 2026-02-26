@@ -1,5 +1,7 @@
 package com.launchdarkly.sdk.fdv2;
 
+import java.util.Objects;
+
 /**
  * Identifies a specific version of data in the LaunchDarkly backend, used to request incremental
  * updates from a known point.
@@ -75,4 +77,24 @@ public final class Selector {
    * value when constructing a {@link ChangeSet}.
    */
   public static final Selector EMPTY = empty();
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (!(o instanceof Selector)) return false;
+    Selector other = (Selector) o;
+    return isEmpty == other.isEmpty
+        && version == other.version
+        && Objects.equals(state, other.state);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(isEmpty, version, state);
+  }
+
+  @Override
+  public String toString() {
+    return isEmpty ? "Selector(empty)" : "Selector(" + version + "," + state + ")";
+  }
 }
