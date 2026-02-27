@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.13.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.12.0...launchdarkly-java-server-sdk-7.13.0) (2026-02-27)
+
+
+### Features
+
+* commonizes several FDv2 related types ([f1f42f8](https://github.com/launchdarkly/java-core/commit/f1f42f82227f4900fb691cb2b7e6f56e4931789d))
+
 ## [7.12.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.11.0...launchdarkly-java-server-sdk-7.12.0) (2026-02-12)
 
 
