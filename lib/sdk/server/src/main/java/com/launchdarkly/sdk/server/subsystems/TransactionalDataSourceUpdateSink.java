@@ -1,7 +1,11 @@
 package com.launchdarkly.sdk.server.subsystems;
 
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
+
+import java.util.Map;
 
 /**
  * Interface that an implementation of {@link DataSource} will use to push data into the SDK transactionally.
@@ -27,6 +31,5 @@ public interface TransactionalDataSourceUpdateSink {
    * @param changeSet the changeset to apply
    * @return true if the update succeeded, false if it failed
    */
-  boolean apply(ChangeSet<ItemDescriptor> changeSet);
+  boolean apply(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet);
 }
-

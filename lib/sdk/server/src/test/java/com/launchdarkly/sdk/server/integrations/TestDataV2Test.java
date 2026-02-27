@@ -6,6 +6,7 @@ import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.server.DataModel;
 import com.launchdarkly.sdk.server.LDConfig;
 import com.launchdarkly.sdk.server.ModelBuilders;
+import com.launchdarkly.sdk.fdv2.SourceResultType;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.SelectorSource;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
@@ -14,13 +15,13 @@ import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.State;
 import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.ClientContext;
 import com.launchdarkly.sdk.server.subsystems.DataSourceBuildInputs;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSetType;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
+import com.launchdarkly.sdk.fdv2.ChangeSetType;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.fdv2.Selector;
 import org.junit.Test;
 
 import java.util.Map;
@@ -109,8 +110,8 @@ public class TestDataV2Test {
 
     FDv2SourceResult result = consumer.next();
 
-    assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
-    ChangeSet<ItemDescriptor> changeSet = result.getChangeSet();
+    assertThat(result.getResultType(), equalTo(SourceResultType.CHANGE_SET));
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = result.getChangeSet();
     assertThat(changeSet, notNullValue());
     assertThat(changeSet.getType(), equalTo(ChangeSetType.Full));
     assertThat(changeSet.getData(), iterableWithSize(1));
@@ -131,8 +132,8 @@ public class TestDataV2Test {
 
     FDv2SourceResult result = consumer.next();
 
-    assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
-    ChangeSet<ItemDescriptor> changeSet = result.getChangeSet();
+    assertThat(result.getResultType(), equalTo(SourceResultType.CHANGE_SET));
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = result.getChangeSet();
     assertThat(changeSet.getType(), equalTo(ChangeSetType.Full));
     assertThat(changeSet.getData(), iterableWithSize(1));
     assertThat(get(changeSet.getData(), 0).getKey(), equalTo(DataModel.FEATURES));
@@ -164,14 +165,14 @@ public class TestDataV2Test {
     ResultConsumer consumer = new ResultConsumer(sync);
 
     FDv2SourceResult initResult = consumer.next();
-    assertThat(initResult.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+    assertThat(initResult.getResultType(), equalTo(SourceResultType.CHANGE_SET));
     assertThat(initResult.getChangeSet().getType(), equalTo(ChangeSetType.Full));
 
     td.update(td.flag("flag1").on(true));
 
     FDv2SourceResult updateResult = consumer.next();
-    assertThat(updateResult.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
-    ChangeSet<ItemDescriptor> changeSet = updateResult.getChangeSet();
+    assertThat(updateResult.getResultType(), equalTo(SourceResultType.CHANGE_SET));
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = updateResult.getChangeSet();
     assertThat(changeSet.getType(), equalTo(ChangeSetType.Partial));
     assertThat(changeSet.getData(), iterableWithSize(1));
     KeyedItems<ItemDescriptor> keyedItems = get(changeSet.getData(), 0).getValue();
@@ -200,12 +201,12 @@ public class TestDataV2Test {
     ResultConsumer consumer = new ResultConsumer(sync);
 
     FDv2SourceResult initResult = consumer.next();
-    assertThat(initResult.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+    assertThat(initResult.getResultType(), equalTo(SourceResultType.CHANGE_SET));
 
     td.update(td.flag("flag1").on(true));
 
     FDv2SourceResult updateResult = consumer.next();
-    ChangeSet<ItemDescriptor> changeSet = updateResult.getChangeSet();
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = updateResult.getChangeSet();
     Map<String, ItemDescriptor> items = ImmutableMap.copyOf(get(changeSet.getData(), 0).getValue().getItems());
     ItemDescriptor flag1 = items.get("flag1");
     assertThat(flag1.getVersion(), equalTo(2));
@@ -306,8 +307,8 @@ public class TestDataV2Test {
     td.update(configureFlag.apply(td.flag("flagkey")));
 
     FDv2SourceResult result = consumer.next();
-    assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
-    ChangeSet<ItemDescriptor> changeSet = result.getChangeSet();
+    assertThat(result.getResultType(), equalTo(SourceResultType.CHANGE_SET));
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = result.getChangeSet();
     Map<String, ItemDescriptor> items = ImmutableMap.copyOf(get(changeSet.getData(), 0).getValue().getItems());
     ItemDescriptor flag = items.get("flagkey");
     assertThat(flag.getVersion(), equalTo(1));
@@ -329,7 +330,7 @@ public class TestDataV2Test {
     BlockingQueue<com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet<ItemDescriptor>> inits =
         new LinkedBlockingQueue<>();
     BlockingQueue<UpsertParams> upserts = new LinkedBlockingQueue<>();
-    BlockingQueue<ChangeSet<ItemDescriptor>> applies = new LinkedBlockingQueue<>();
+    BlockingQueue<ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>>> applies = new LinkedBlockingQueue<>();
     boolean valid;
 
     @Override
@@ -355,7 +356,7 @@ public class TestDataV2Test {
     }
 
     @Override
-    public boolean apply(ChangeSet<ItemDescriptor> changeSet) {
+    public boolean apply(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet) {
       applies.add(changeSet);
       return true;
     }

@@ -8,13 +8,13 @@ import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.server.DataModel.FeatureFlag;
 import com.launchdarkly.sdk.server.DataModel.Operator;
 import com.launchdarkly.sdk.server.DataModel.Segment;
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.server.DataModelDependencies.DependencyTracker;
 import com.launchdarkly.sdk.server.DataModelDependencies.KindAndKey;
 import com.launchdarkly.sdk.server.DataStoreTestTypes.DataBuilder;
 import com.launchdarkly.sdk.server.DataStoreTestTypes.TestItem;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSetType;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
+import com.launchdarkly.sdk.fdv2.ChangeSetType;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
@@ -392,7 +392,7 @@ public class DataModelDependenciesTest {
   public void sortChangesetPreservesChangeSetMetadata() {
     Selector selector = Selector.make(42, "test-state");
     String environmentId = "test-env";
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         selector,
         ImmutableList.of(),
@@ -400,7 +400,7 @@ public class DataModelDependenciesTest {
         true
     );
     
-    ChangeSet<ItemDescriptor> result = DataModelDependencies.sortChangeset(changeSet);
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result = DataModelDependencies.sortChangeset(changeSet);
     
     assertEquals(ChangeSetType.Partial, result.getType());
     assertEquals(selector.getVersion(), result.getSelector().getVersion());
@@ -438,7 +438,7 @@ public class DataModelDependenciesTest {
             )
         );
     
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.make(1, "state1"),
         changeSetData,
@@ -446,7 +446,7 @@ public class DataModelDependenciesTest {
         true
     );
     
-    ChangeSet<ItemDescriptor> result = DataModelDependencies.sortChangeset(changeSet);
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result = DataModelDependencies.sortChangeset(changeSet);
     
     Map.Entry<DataKind, KeyedItems<ItemDescriptor>> flagsData = null;
     for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> entry: result.getData()) {
@@ -487,7 +487,7 @@ public class DataModelDependenciesTest {
             )
         );
     
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         changeSetData,
@@ -495,7 +495,7 @@ public class DataModelDependenciesTest {
         true
     );
     
-    ChangeSet<ItemDescriptor> result = DataModelDependencies.sortChangeset(changeSet);
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result = DataModelDependencies.sortChangeset(changeSet);
     
     List<DataKind> kinds = ImmutableList.copyOf(transform(result.getData(), Map.Entry::getKey));
     assertEquals(2, kinds.size());
@@ -505,7 +505,7 @@ public class DataModelDependenciesTest {
   
   @Test
   public void sortChangesetHandlesEmptyChangeset() {
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         ImmutableList.of(),
@@ -513,7 +513,7 @@ public class DataModelDependenciesTest {
         true
     );
     
-    ChangeSet<ItemDescriptor> result = DataModelDependencies.sortChangeset(changeSet);
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result = DataModelDependencies.sortChangeset(changeSet);
     
     assertTrue("Result data should be empty", Iterables.isEmpty(result.getData()));
     assertEquals(ChangeSetType.Full, result.getType());
@@ -542,7 +542,7 @@ public class DataModelDependenciesTest {
             )
         );
     
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.make(1, "state1"),
         changeSetData,
@@ -550,7 +550,7 @@ public class DataModelDependenciesTest {
         true
     );
     
-    ChangeSet<ItemDescriptor> result = DataModelDependencies.sortChangeset(changeSet);
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result = DataModelDependencies.sortChangeset(changeSet);
     
     assertEquals(2, Iterables.size(result.getData()));
     
@@ -583,7 +583,7 @@ public class DataModelDependenciesTest {
             )
         );
     
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.make(1, "state1"),
         changeSetData,
@@ -591,7 +591,7 @@ public class DataModelDependenciesTest {
         true
     );
     
-    ChangeSet<ItemDescriptor> result = DataModelDependencies.sortChangeset(changeSet);
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> result = DataModelDependencies.sortChangeset(changeSet);
     
     Map.Entry<DataKind, KeyedItems<ItemDescriptor>> flagsData = null;
     for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> entry: result.getData()) {

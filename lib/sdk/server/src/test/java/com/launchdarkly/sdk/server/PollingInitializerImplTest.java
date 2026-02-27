@@ -1,7 +1,9 @@
 package com.launchdarkly.sdk.server;
 
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.internal.http.HttpErrors;
+import com.launchdarkly.sdk.fdv2.SourceResultType;
+import com.launchdarkly.sdk.fdv2.SourceSignal;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.SelectorSource;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
@@ -92,7 +94,7 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
         assertNotNull(result);
-        assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+        assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
         assertNotNull(result.getChangeSet());
 
         verify(requestor, times(1)).Poll(any(Selector.class));
@@ -114,8 +116,8 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
         assertNotNull(result);
-        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-        assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result.getStatus().getState());
+        assertEquals(SourceResultType.STATUS, result.getResultType());
+        assertEquals(SourceSignal.TERMINAL_ERROR, result.getStatus().getState());
         assertNotNull(result.getStatus().getErrorInfo());
         assertEquals(DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE, result.getStatus().getErrorInfo().getKind());
 
@@ -138,8 +140,8 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
         assertNotNull(result);
-        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-        assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result.getStatus().getState());
+        assertEquals(SourceResultType.STATUS, result.getResultType());
+        assertEquals(SourceSignal.TERMINAL_ERROR, result.getStatus().getState());
         assertEquals(DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE, result.getStatus().getErrorInfo().getKind());
 
 
@@ -159,8 +161,8 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
         assertNotNull(result);
-        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-        assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result.getStatus().getState());
+        assertEquals(SourceResultType.STATUS, result.getResultType());
+        assertEquals(SourceSignal.TERMINAL_ERROR, result.getStatus().getState());
         assertEquals(DataSourceStatusProvider.ErrorKind.NETWORK_ERROR, result.getStatus().getErrorInfo().getKind());
 
         
@@ -180,8 +182,8 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
         assertNotNull(result);
-        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-        assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result.getStatus().getState());
+        assertEquals(SourceResultType.STATUS, result.getResultType());
+        assertEquals(SourceSignal.TERMINAL_ERROR, result.getStatus().getState());
         assertEquals(DataSourceStatusProvider.ErrorKind.INVALID_DATA, result.getStatus().getErrorInfo().getKind());
 
         
@@ -206,8 +208,8 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
         assertNotNull(result);
-        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-        assertEquals(FDv2SourceResult.State.SHUTDOWN, result.getStatus().getState());
+        assertEquals(SourceResultType.STATUS, result.getResultType());
+        assertEquals(SourceSignal.SHUTDOWN, result.getStatus().getState());
         assertNull(result.getStatus().getErrorInfo());
 
         
@@ -228,7 +230,7 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
         assertNotNull(result);
-        assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+        assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
 
         // Shutdown after completion should still work
         initializer.close();
@@ -268,8 +270,8 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
         assertNotNull(result);
-        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-        assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result.getStatus().getState());
+        assertEquals(SourceResultType.STATUS, result.getResultType());
+        assertEquals(SourceSignal.TERMINAL_ERROR, result.getStatus().getState());
 
         
     }
@@ -305,8 +307,8 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
         assertNotNull(result);
-        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-        assertEquals(FDv2SourceResult.State.GOODBYE, result.getStatus().getState());
+        assertEquals(SourceResultType.STATUS, result.getResultType());
+        assertEquals(SourceSignal.GOODBYE, result.getStatus().getState());
 
         
     }
@@ -334,8 +336,8 @@ public class PollingInitializerImplTest extends BaseTest {
 
         // Empty events array should result in terminal error
         assertNotNull(result);
-        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-        assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result.getStatus().getState());
+        assertEquals(SourceResultType.STATUS, result.getResultType());
+        assertEquals(SourceSignal.TERMINAL_ERROR, result.getStatus().getState());
 
 
     }
@@ -389,8 +391,8 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
         assertNotNull(result);
-        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-        assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result.getStatus().getState());
+        assertEquals(SourceResultType.STATUS, result.getResultType());
+        assertEquals(SourceSignal.TERMINAL_ERROR, result.getStatus().getState());
         assertEquals(DataSourceStatusProvider.ErrorKind.INVALID_DATA, result.getStatus().getErrorInfo().getKind());
 
 
@@ -427,8 +429,8 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
         assertNotNull(result);
-        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-        assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result.getStatus().getState());
+        assertEquals(SourceResultType.STATUS, result.getResultType());
+        assertEquals(SourceSignal.TERMINAL_ERROR, result.getStatus().getState());
         assertEquals(DataSourceStatusProvider.ErrorKind.UNKNOWN, result.getStatus().getErrorInfo().getKind());
 
 
@@ -460,7 +462,7 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
         assertNotNull(result);
-        assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+        assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
         assertEquals(true, result.isFdv1Fallback());
     }
 
@@ -479,7 +481,7 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
         assertNotNull(result);
-        assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+        assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
         assertEquals(false, result.isFdv1Fallback());
     }
 
@@ -503,8 +505,8 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
         assertNotNull(result);
-        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-        assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result.getStatus().getState());
+        assertEquals(SourceResultType.STATUS, result.getResultType());
+        assertEquals(SourceSignal.TERMINAL_ERROR, result.getStatus().getState());
         assertEquals(true, result.isFdv1Fallback());
     }
 
@@ -522,8 +524,8 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
         assertNotNull(result);
-        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-        assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result.getStatus().getState());
+        assertEquals(SourceResultType.STATUS, result.getResultType());
+        assertEquals(SourceSignal.TERMINAL_ERROR, result.getStatus().getState());
         // Network errors don't have headers, so fallback should be false
         assertEquals(false, result.isFdv1Fallback());
     }
@@ -554,7 +556,7 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
         assertNotNull(result);
-        assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+        assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
         assertNotNull(result.getChangeSet());
         assertEquals("test-env-123", result.getChangeSet().getEnvironmentId());
     }
@@ -574,7 +576,7 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
         assertNotNull(result);
-        assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+        assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
         assertNotNull(result.getChangeSet());
         assertNull(result.getChangeSet().getEnvironmentId());
     }
@@ -606,7 +608,7 @@ public class PollingInitializerImplTest extends BaseTest {
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
         assertNotNull(result);
-        assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+        assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
         assertEquals(true, result.isFdv1Fallback());
         assertNotNull(result.getChangeSet());
         assertEquals("test-env-456", result.getChangeSet().getEnvironmentId());

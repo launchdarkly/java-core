@@ -6,8 +6,8 @@ import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Iterables;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.server.DataModel.Operator;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSetType;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
+import com.launchdarkly.sdk.fdv2.ChangeSetType;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
@@ -141,7 +141,10 @@ abstract class DataModelDependencies {
    * @param inSet the changeset to sort
    * @return a sorted copy of the changeset
    */
-  public static ChangeSet<ItemDescriptor> sortChangeset(ChangeSet<ItemDescriptor> inSet) {
+  public static ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> sortChangeset(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> inSet) {
+    if (inSet.getData() == null) {
+      return inSet;
+    }
     ImmutableSortedMap.Builder<DataKind, KeyedItems<ItemDescriptor>> builder =
         ImmutableSortedMap.orderedBy(dataKindPriorityOrder);
     for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> entry: inSet.getData()) {

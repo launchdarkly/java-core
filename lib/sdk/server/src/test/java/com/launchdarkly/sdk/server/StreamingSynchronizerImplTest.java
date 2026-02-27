@@ -2,8 +2,10 @@ package com.launchdarkly.sdk.server;
 
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.internal.events.DiagnosticStore;
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.internal.http.HttpProperties;
+import com.launchdarkly.sdk.fdv2.SourceResultType;
+import com.launchdarkly.sdk.fdv2.SourceSignal;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.SelectorSource;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
@@ -84,7 +86,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result1 = result1Future.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result1);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result1.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result1.getResultType());
             assertNotNull(result1.getChangeSet());
 
             // Second changeset
@@ -92,7 +94,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result2 = result2Future.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result2);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result2.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result2.getResultType());
             assertNotNull(result2.getChangeSet());
 
             synchronizer.close();
@@ -121,8 +123,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-            assertEquals(FDv2SourceResult.State.TERMINAL_ERROR, result.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result.getResultType());
+            assertEquals(SourceSignal.TERMINAL_ERROR, result.getStatus().getState());
             assertEquals(DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE, result.getStatus().getErrorInfo().getKind());
 
             synchronizer.close();
@@ -151,8 +153,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-            assertEquals(FDv2SourceResult.State.INTERRUPTED, result.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result.getResultType());
+            assertEquals(SourceSignal.INTERRUPTED, result.getStatus().getState());
             assertEquals(DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE, result.getStatus().getErrorInfo().getKind());
             assertNull(result.getStatus().getReason());
 
@@ -182,8 +184,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
         FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
         assertNotNull(result);
-        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-        assertEquals(FDv2SourceResult.State.INTERRUPTED, result.getStatus().getState());
+        assertEquals(SourceResultType.STATUS, result.getResultType());
+        assertEquals(SourceSignal.INTERRUPTED, result.getStatus().getState());
         assertEquals(DataSourceStatusProvider.ErrorKind.NETWORK_ERROR, result.getStatus().getErrorInfo().getKind());
 
         synchronizer.close();
@@ -217,8 +219,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-            assertEquals(FDv2SourceResult.State.INTERRUPTED, result.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result.getResultType());
+            assertEquals(SourceSignal.INTERRUPTED, result.getStatus().getState());
             assertEquals(DataSourceStatusProvider.ErrorKind.INVALID_DATA, result.getStatus().getErrorInfo().getKind());
 
             synchronizer.close();
@@ -255,8 +257,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = nextFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-            assertEquals(FDv2SourceResult.State.SHUTDOWN, result.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result.getResultType());
+            assertEquals(SourceSignal.SHUTDOWN, result.getStatus().getState());
             assertNull(result.getStatus().getErrorInfo());
             assertNull(result.getStatus().getReason());
         }
@@ -292,7 +294,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
 
             // Shutdown after receiving event should still work
             synchronizer.close();
@@ -337,8 +339,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result1 = result1Future.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result1);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result1.getResultType());
-            assertEquals(FDv2SourceResult.State.GOODBYE, result1.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result1.getResultType());
+            assertEquals(SourceSignal.GOODBYE, result1.getStatus().getState());
             assertEquals("service-unavailable", result1.getStatus().getReason());
 
             // Second result should be a changeset from the restarted stream
@@ -346,7 +348,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result2 = result2Future.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result2);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result2.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result2.getResultType());
             assertNotNull(result2.getChangeSet());
 
             // Verify we made 2 requests (initial connection + reconnection after goodbye)
@@ -389,7 +391,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
 
             // Heartbeat should be ignored, and we should get the changeset
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
             assertNotNull(result.getChangeSet());
 
             synchronizer.close();
@@ -428,7 +430,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
 
             // Verify selector was fetched when connecting
             verify(selectorSource, atLeastOnce()).getSelector();
@@ -484,8 +486,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             CompletableFuture<FDv2SourceResult> result1Future = synchronizer.next();
             FDv2SourceResult result1 = result1Future.get(5, TimeUnit.SECONDS);
             assertNotNull(result1);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result1.getResultType());
-            assertEquals(FDv2SourceResult.State.INTERRUPTED, result1.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result1.getResultType());
+            assertEquals(SourceSignal.INTERRUPTED, result1.getStatus().getState());
 
             // Keep getting results until we get a CHANGE_SET (reconnection successful)
             // There may be multiple STATUS results if reconnection takes multiple attempts
@@ -494,12 +496,12 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                 CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
                 FDv2SourceResult result = resultFuture.get(15, TimeUnit.SECONDS);
                 assertNotNull(result);
-                if (result.getResultType() == FDv2SourceResult.ResultType.CHANGE_SET) {
+                if (result.getResultType() == SourceResultType.CHANGE_SET) {
                     changesetResult = result;
                     break;
                 }
                 // If it's another STATUS, that's fine, just keep waiting for the changeset
-                assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
+                assertEquals(SourceResultType.STATUS, result.getResultType());
             }
 
             assertNotNull("Should eventually get a CHANGE_SET after reconnection", changesetResult);
@@ -547,7 +549,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
             assertNotNull(result.getChangeSet());
 
             synchronizer.close();
@@ -586,7 +588,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
 
             assertEquals(1, server.getRecorder().count());
             RequestInfo request = server.getRecorder().requireRequest();
@@ -628,7 +630,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
 
             assertEquals(1, server.getRecorder().count());
             RequestInfo request = server.getRecorder().requireRequest();
@@ -667,8 +669,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             // next() should still return shutdown
             FDv2SourceResult result = synchronizer.next().get(1, TimeUnit.SECONDS);
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-            assertEquals(FDv2SourceResult.State.SHUTDOWN, result.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result.getResultType());
+            assertEquals(SourceSignal.SHUTDOWN, result.getStatus().getState());
         }
     }
 
@@ -701,8 +703,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-            assertEquals(FDv2SourceResult.State.INTERRUPTED, result.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result.getResultType());
+            assertEquals(SourceSignal.INTERRUPTED, result.getStatus().getState());
 
             synchronizer.close();
         }
@@ -738,7 +740,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
 
             // Verify the request had the filter parameter
             assertEquals(1, server.getRecorder().count());
@@ -781,7 +783,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
 
             assertEquals(1, server.getRecorder().count());
             RequestInfo request = server.getRecorder().requireRequest();
@@ -822,7 +824,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
 
             // Verify the request did not have the filter parameter
             assertEquals(1, server.getRecorder().count());
@@ -863,7 +865,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
 
             // Verify the request did not have the filter parameter
             assertEquals(1, server.getRecorder().count());
@@ -905,7 +907,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
             assertEquals(true, result.isFdv1Fallback());
 
             synchronizer.close();
@@ -942,7 +944,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
             assertEquals(false, result.isFdv1Fallback());
 
             synchronizer.close();
@@ -974,8 +976,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-            assertEquals(FDv2SourceResult.State.INTERRUPTED, result.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result.getResultType());
+            assertEquals(SourceSignal.INTERRUPTED, result.getStatus().getState());
             assertEquals(true, result.isFdv1Fallback());
 
             synchronizer.close();
@@ -1013,7 +1015,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
             assertNotNull(result.getChangeSet());
             assertEquals("test-env-streaming", result.getChangeSet().getEnvironmentId());
 
@@ -1053,7 +1055,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
             assertEquals(true, result.isFdv1Fallback());
             assertNotNull(result.getChangeSet());
             assertEquals("test-env-combined-streaming", result.getChangeSet().getEnvironmentId());
@@ -1092,8 +1094,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-            assertEquals(FDv2SourceResult.State.INTERRUPTED, result.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result.getResultType());
+            assertEquals(SourceSignal.INTERRUPTED, result.getStatus().getState());
             assertEquals(DataSourceStatusProvider.ErrorKind.INVALID_DATA, result.getStatus().getErrorInfo().getKind());
             assertEquals(false, result.isFdv1Fallback());
 
@@ -1132,8 +1134,8 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-            assertEquals(FDv2SourceResult.State.INTERRUPTED, result.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result.getResultType());
+            assertEquals(SourceSignal.INTERRUPTED, result.getStatus().getState());
             assertEquals(DataSourceStatusProvider.ErrorKind.INVALID_DATA, result.getStatus().getErrorInfo().getKind());
             assertEquals(true, result.isFdv1Fallback());
 
@@ -1174,7 +1176,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
 
             long timeAfterOpen = System.currentTimeMillis();
             LDValue event = diagnosticStore.createEventAndReset(0, 0).getJsonValue();
@@ -1225,12 +1227,12 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             // First result should be the error
             CompletableFuture<FDv2SourceResult> result1Future = synchronizer.next();
             FDv2SourceResult result1 = result1Future.get(5, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result1.getResultType());
+            assertEquals(SourceResultType.STATUS, result1.getResultType());
 
             // Second result should be the successful changeset
             CompletableFuture<FDv2SourceResult> result2Future = synchronizer.next();
             FDv2SourceResult result2 = result2Future.get(5, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result2.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result2.getResultType());
 
             long timeAfterOpen = System.currentTimeMillis();
             LDValue event = diagnosticStore.createEventAndReset(0, 0).getJsonValue();
@@ -1293,18 +1295,18 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             // First changeset
             CompletableFuture<FDv2SourceResult> result1Future = synchronizer.next();
             FDv2SourceResult result1 = result1Future.get(5, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result1.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result1.getResultType());
 
             // Goodbye
             CompletableFuture<FDv2SourceResult> result2Future = synchronizer.next();
             FDv2SourceResult result2 = result2Future.get(5, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result2.getResultType());
-            assertEquals(FDv2SourceResult.State.GOODBYE, result2.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result2.getResultType());
+            assertEquals(SourceSignal.GOODBYE, result2.getStatus().getState());
 
             // Second changeset after reconnect
             CompletableFuture<FDv2SourceResult> result3Future = synchronizer.next();
             FDv2SourceResult result3 = result3Future.get(5, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result3.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result3.getResultType());
 
             LDValue event = diagnosticStore.createEventAndReset(0, 0).getJsonValue();
             LDValue streamInits = event.get("streamInits");
@@ -1347,7 +1349,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             assertNotNull(result);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
             assertNotNull(result.getChangeSet());
 
             synchronizer.close();
@@ -1403,27 +1405,27 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             // First changeset
             CompletableFuture<FDv2SourceResult> result1Future = synchronizer.next();
             FDv2SourceResult result1 = result1Future.get(5, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result1.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result1.getResultType());
 
             // First goodbye
             CompletableFuture<FDv2SourceResult> result2Future = synchronizer.next();
             FDv2SourceResult result2 = result2Future.get(5, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result2.getResultType());
+            assertEquals(SourceResultType.STATUS, result2.getResultType());
 
             // Second changeset
             CompletableFuture<FDv2SourceResult> result3Future = synchronizer.next();
             FDv2SourceResult result3 = result3Future.get(5, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result3.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result3.getResultType());
 
             // Second goodbye
             CompletableFuture<FDv2SourceResult> result4Future = synchronizer.next();
             FDv2SourceResult result4 = result4Future.get(5, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result4.getResultType());
+            assertEquals(SourceResultType.STATUS, result4.getResultType());
 
             // Third changeset
             CompletableFuture<FDv2SourceResult> result5Future = synchronizer.next();
             FDv2SourceResult result5 = result5Future.get(5, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result5.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result5.getResultType());
 
             LDValue event = diagnosticStore.createEventAndReset(0, 0).getJsonValue();
             LDValue streamInits = event.get("streamInits");
@@ -1476,13 +1478,13 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             // First result should be interrupted due to invalid data
             CompletableFuture<FDv2SourceResult> result1Future = synchronizer.next();
             FDv2SourceResult result1 = result1Future.get(5, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result1.getResultType());
-            assertEquals(FDv2SourceResult.State.INTERRUPTED, result1.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result1.getResultType());
+            assertEquals(SourceSignal.INTERRUPTED, result1.getStatus().getState());
 
             // Second result should be the valid changeset
             CompletableFuture<FDv2SourceResult> result2Future = synchronizer.next();
             FDv2SourceResult result2 = result2Future.get(5, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result2.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result2.getResultType());
 
             LDValue event = diagnosticStore.createEventAndReset(0, 0).getJsonValue();
             LDValue streamInits = event.get("streamInits");
@@ -1531,17 +1533,17 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             // First error
             CompletableFuture<FDv2SourceResult> result1Future = synchronizer.next();
             FDv2SourceResult result1 = result1Future.get(5, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result1.getResultType());
+            assertEquals(SourceResultType.STATUS, result1.getResultType());
 
             // Second error
             CompletableFuture<FDv2SourceResult> result2Future = synchronizer.next();
             FDv2SourceResult result2 = result2Future.get(5, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result2.getResultType());
+            assertEquals(SourceResultType.STATUS, result2.getResultType());
 
             // Successful changeset
             CompletableFuture<FDv2SourceResult> result3Future = synchronizer.next();
             FDv2SourceResult result3 = result3Future.get(5, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result3.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result3.getResultType());
 
             long timeAfterOpen = System.currentTimeMillis();
             LDValue event = diagnosticStore.createEventAndReset(0, 0).getJsonValue();
@@ -1609,22 +1611,22 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             // First successful changeset
             CompletableFuture<FDv2SourceResult> result1Future = synchronizer.next();
             FDv2SourceResult result1 = result1Future.get(5, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result1.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result1.getResultType());
 
             // Goodbye
             CompletableFuture<FDv2SourceResult> result2Future = synchronizer.next();
             FDv2SourceResult result2 = result2Future.get(5, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result2.getResultType());
+            assertEquals(SourceResultType.STATUS, result2.getResultType());
 
             // Error
             CompletableFuture<FDv2SourceResult> result3Future = synchronizer.next();
             FDv2SourceResult result3 = result3Future.get(5, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result3.getResultType());
+            assertEquals(SourceResultType.STATUS, result3.getResultType());
 
             // Second successful changeset
             CompletableFuture<FDv2SourceResult> result4Future = synchronizer.next();
             FDv2SourceResult result4 = result4Future.get(5, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.CHANGE_SET, result4.getResultType());
+            assertEquals(SourceResultType.CHANGE_SET, result4.getResultType());
 
             LDValue event = diagnosticStore.createEventAndReset(0, 0).getJsonValue();
             LDValue streamInits = event.get("streamInits");

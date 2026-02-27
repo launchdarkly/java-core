@@ -3,13 +3,20 @@ package com.launchdarkly.sdk.server;
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event;
 import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ProtocolHandler;
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
+import com.launchdarkly.sdk.fdv2.ChangeSetType;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 import com.launchdarkly.sdk.json.SerializationException;
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.Map;
 import java.util.Date;
 import java.util.concurrent.CompletableFuture;
 
@@ -83,9 +90,9 @@ class PollingBase {
             // If we get a 304, then that means nothing has changed.
             if (pollingResponse.getStatusCode() == 304) {
                 return FDv2SourceResult.changeSet(
-                        new DataStoreTypes.ChangeSet<>(DataStoreTypes.ChangeSetType.None,
+                        new ChangeSet<>(ChangeSetType.None,
                                 Selector.EMPTY,
-                                null,
+                                Collections.emptyList(),
                                 null, // Header derived values will have been handled on initial response.
                                 true // Polling data from LaunchDarkly should be persisted
                         ),
@@ -111,7 +118,7 @@ class PollingBase {
                     case CHANGESET:
                         try {
 
-                            DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> converted = FDv2ChangeSetTranslator.toChangeSet(
+                            ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> converted = FDv2ChangeSetTranslator.toChangeSet(
                                     ((FDv2ProtocolHandler.FDv2ActionChangeset) res).getChangeset(),
                                     logger,
                                     environmentId,

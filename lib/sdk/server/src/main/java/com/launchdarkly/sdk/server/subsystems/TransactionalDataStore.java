@@ -1,8 +1,12 @@
 package com.launchdarkly.sdk.server.subsystems;
 
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
+import com.launchdarkly.sdk.fdv2.Selector;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
+
+import java.util.Map;
 
 /**
  * Interface for a data store that holds feature flags and related data received by the SDK.
@@ -26,7 +30,7 @@ public interface TransactionalDataStore {
    * 
    * @param changeSet the changeset to apply
    */
-  void apply(ChangeSet<ItemDescriptor> changeSet);
+  void apply(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet);
   
   /**
    * Returns the selector for the currently stored data. The selector will be non-null but may be empty.

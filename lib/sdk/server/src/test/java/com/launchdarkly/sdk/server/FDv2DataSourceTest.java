@@ -4,14 +4,21 @@ import com.google.common.collect.ImmutableList;
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.logging.Logs;
 import com.launchdarkly.sdk.internal.collections.IterableAsyncQueue;
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
+import com.launchdarkly.sdk.fdv2.ChangeSetType;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSinkV2;
+
+import java.util.Map;
 
 import org.junit.After;
 import org.junit.Test;
@@ -48,10 +55,10 @@ public class FDv2DataSourceTest extends BaseTest {
         resourcesToClose.clear();
     }
 
-    private DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> makeChangeSet(boolean withSelector) {
+    private ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> makeChangeSet(boolean withSelector) {
         Selector selector = withSelector ? Selector.make(1, "test-state") : Selector.EMPTY;
-        return new DataStoreTypes.ChangeSet<>(
-            DataStoreTypes.ChangeSetType.None,
+        return new ChangeSet<>(
+            ChangeSetType.None,
             selector,
             null,
             null,
@@ -2676,14 +2683,14 @@ public class FDv2DataSourceTest extends BaseTest {
 
     private static class MockDataSourceUpdateSink implements DataSourceUpdateSinkV2 {
         private final AtomicInteger applyCount = new AtomicInteger(0);
-        private final AtomicReference<DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor>> lastChangeSet = new AtomicReference<>();
+        private final AtomicReference<ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>>> lastChangeSet = new AtomicReference<>();
         private final BlockingQueue<Boolean> applySignals = new LinkedBlockingQueue<>();
         private final AtomicReference<DataSourceStatusProvider.State> lastState = new AtomicReference<>();
         private final AtomicReference<DataSourceStatusProvider.ErrorInfo> lastError = new AtomicReference<>();
         private final BlockingQueue<DataSourceStatusProvider.State> statusUpdates = new LinkedBlockingQueue<>();
 
         @Override
-        public boolean apply(DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> changeSet) {
+        public boolean apply(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet) {
             applyCount.incrementAndGet();
             lastChangeSet.set(changeSet);
             applySignals.offer(true);
@@ -2706,7 +2713,7 @@ public class FDv2DataSourceTest extends BaseTest {
             return applyCount.get();
         }
 
-        public DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> getLastChangeSet() {
+        public ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> getLastChangeSet() {
             return lastChangeSet.get();
         }
 

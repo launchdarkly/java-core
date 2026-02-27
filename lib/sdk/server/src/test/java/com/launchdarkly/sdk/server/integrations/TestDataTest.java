@@ -12,10 +12,11 @@ import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSinkV2;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 
 import org.junit.Test;
 
@@ -471,7 +472,7 @@ public class TestDataTest {
   private static class CapturingDataSourceUpdates implements DataSourceUpdateSink, DataSourceUpdateSinkV2 {
     BlockingQueue<FullDataSet<ItemDescriptor>> inits = new LinkedBlockingQueue<>();
     BlockingQueue<UpsertParams> upserts = new LinkedBlockingQueue<>();
-    BlockingQueue<ChangeSet<ItemDescriptor>> applies = new LinkedBlockingQueue<>();
+    BlockingQueue<ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>>> applies = new LinkedBlockingQueue<>();
     boolean valid;
     
     @Override
@@ -497,7 +498,7 @@ public class TestDataTest {
     }
     
     @Override
-    public boolean apply(ChangeSet<ItemDescriptor> changeSet) {
+    public boolean apply(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet) {
       applies.add(changeSet);
       return true;
     }

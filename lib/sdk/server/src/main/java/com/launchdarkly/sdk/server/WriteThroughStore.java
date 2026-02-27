@@ -1,10 +1,10 @@
 package com.launchdarkly.sdk.server;
 
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider.CacheStats;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSetType;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
+import com.launchdarkly.sdk.fdv2.ChangeSetType;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
@@ -13,6 +13,7 @@ import com.launchdarkly.sdk.server.subsystems.DataSystemConfiguration.DataStoreM
 import com.launchdarkly.sdk.server.subsystems.TransactionalDataStore;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -104,7 +105,7 @@ final class WriteThroughStore implements DataStore, TransactionalDataStore {
   }
 
   @Override
-  public void apply(ChangeSet<ItemDescriptor> changeSet) {
+  public void apply(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet) {
     txMemoryStore.apply(changeSet);
     maybeSwitchStore();
 
@@ -157,7 +158,7 @@ final class WriteThroughStore implements DataStore, TransactionalDataStore {
    * @param sortedChangeSet the change set to apply (data will have been sorted by data source updates)
    * @return true if the operation succeeded, false otherwise
    */
-  private boolean applyToLegacyPersistence(ChangeSet<ItemDescriptor> sortedChangeSet) {
+  private boolean applyToLegacyPersistence(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> sortedChangeSet) {
     // Data will have been sorted by data source updates.
     switch (sortedChangeSet.getType()) {
       case Full:
@@ -176,7 +177,7 @@ final class WriteThroughStore implements DataStore, TransactionalDataStore {
   /**
    * Applies a full change set to a legacy persistent store.
    */
-  private void applyFullChangeSetToLegacyStore(ChangeSet<ItemDescriptor> sortedChangeSet) {
+  private void applyFullChangeSetToLegacyStore(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> sortedChangeSet) {
     // Preserve shouldPersist flag when converting ChangeSet to FullDataSet
     persistentStore.init(new FullDataSet<>(sortedChangeSet.getData(), sortedChangeSet.shouldPersist()));
   }
@@ -187,7 +188,7 @@ final class WriteThroughStore implements DataStore, TransactionalDataStore {
    * @param sortedChangeSet the change set to apply
    * @return true if all operations succeeded, false otherwise
    */
-  private boolean applyPartialChangeSetToLegacyStore(ChangeSet<ItemDescriptor> sortedChangeSet) {
+  private boolean applyPartialChangeSetToLegacyStore(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> sortedChangeSet) {
     for (java.util.Map.Entry<DataKind, KeyedItems<ItemDescriptor>> kindItemsPair : sortedChangeSet.getData()) {
       for (java.util.Map.Entry<String, ItemDescriptor> item : kindItemsPair.getValue().getItems()) {
         boolean applySuccess = persistentStore.upsert(kindItemsPair.getKey(), item.getKey(), item.getValue());

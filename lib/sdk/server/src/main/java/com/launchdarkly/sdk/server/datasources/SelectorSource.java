@@ -1,6 +1,6 @@
 package com.launchdarkly.sdk.server.datasources;
 
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.fdv2.Selector;
 
 /**
  * This type is currently experimental and not subject to semantic versioning.

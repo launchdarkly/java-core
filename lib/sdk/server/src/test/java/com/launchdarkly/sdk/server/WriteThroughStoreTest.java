@@ -2,11 +2,11 @@ package com.launchdarkly.sdk.server;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider.CacheStats;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSetType;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
+import com.launchdarkly.sdk.fdv2.ChangeSetType;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
@@ -53,7 +53,7 @@ public class WriteThroughStoreTest {
         .build();
   }
 
-  private ChangeSet<ItemDescriptor> createFullChangeSet() {
+  private ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> createFullChangeSet() {
     Map<DataKind, KeyedItems<ItemDescriptor>> changeSetData = ImmutableMap.of(
         TEST_ITEMS,
         new KeyedItems<>(ImmutableList.of(
@@ -303,7 +303,7 @@ public class WriteThroughStoreTest {
 
     store = new WriteThroughStore(memoryStore, persistentStore, DataStoreMode.READ_WRITE);
     
-    ChangeSet<ItemDescriptor> changeSet = createFullChangeSet();
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = createFullChangeSet();
     store.apply(changeSet);
 
     assertTrue(memoryStore.isInitialized());
@@ -327,7 +327,7 @@ public class WriteThroughStoreTest {
         ))
     );
 
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData.entrySet(),
@@ -351,7 +351,7 @@ public class WriteThroughStoreTest {
 
     store = new WriteThroughStore(memoryStore, persistentStore, DataStoreMode.READ_WRITE);
     
-    ChangeSet<ItemDescriptor> changeSet = createFullChangeSet();
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = createFullChangeSet();
     store.apply(changeSet);
 
     assertTrue(persistentStore.wasInitCalled);
@@ -374,7 +374,7 @@ public class WriteThroughStoreTest {
         ))
     );
 
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData.entrySet(),
@@ -405,7 +405,7 @@ public class WriteThroughStoreTest {
         ))
     );
     // Create change set with shouldPersist=false (e.g., from file data source)
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData.entrySet(),
@@ -434,7 +434,7 @@ public class WriteThroughStoreTest {
     store = new WriteThroughStore(memoryStore, persistentStore, DataStoreMode.READ_WRITE);
     
     // Create full change set with shouldPersist=false
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         createFullChangeSet().getData(),
@@ -461,7 +461,7 @@ public class WriteThroughStoreTest {
     
     persistentStore.setData(TEST_ITEMS, "key1", new ItemDescriptor(5, new TestItem("key1", "old", 5)));
 
-    ChangeSet<ItemDescriptor> changeSet = createFullChangeSet();
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = createFullChangeSet();
     store.apply(changeSet);
 
     ItemDescriptor result = store.get(TEST_ITEMS, "key1");
@@ -542,7 +542,7 @@ public class WriteThroughStoreTest {
 
     store = new WriteThroughStore(memoryStore, persistentStore, DataStoreMode.READ_WRITE);
     
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Full,
         Selector.make(42, "test-state"),
         ImmutableList.<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>of(),
@@ -623,7 +623,7 @@ public class WriteThroughStoreTest {
         ))
     );
 
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData.entrySet(),
@@ -662,7 +662,7 @@ public class WriteThroughStoreTest {
         ))
     );
 
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData.entrySet(),
@@ -686,7 +686,7 @@ public class WriteThroughStoreTest {
 
     store = new WriteThroughStore(memoryStore, persistentStore, DataStoreMode.READ_WRITE);
     
-    ChangeSet<ItemDescriptor> changeSet = createFullChangeSet();
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = createFullChangeSet();
 
     try {
       store.apply(changeSet);
@@ -704,7 +704,7 @@ public class WriteThroughStoreTest {
 
     store = new WriteThroughStore(memoryStore, persistentStore, DataStoreMode.READ_WRITE);
     
-    ChangeSet<ItemDescriptor> changeSet = createFullChangeSet();
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = createFullChangeSet();
 
     try {
       store.apply(changeSet);
@@ -732,7 +732,7 @@ public class WriteThroughStoreTest {
         ))
     );
 
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData.entrySet(),
@@ -762,7 +762,7 @@ public class WriteThroughStoreTest {
     
     store.init(createTestDataSet());
 
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.None,
         Selector.make(2, "state2"),
         ImmutableList.<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>of(),
@@ -799,7 +799,7 @@ public class WriteThroughStoreTest {
         ))
     );
 
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData.entrySet(),
@@ -843,7 +843,7 @@ public class WriteThroughStoreTest {
     assertNotNull(resultBefore);
     assertEquals(5, resultBefore.getVersion());
 
-    ChangeSet<ItemDescriptor> changeSet = createFullChangeSet();
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = createFullChangeSet();
 
     // Apply should throw due to persistent store failure
     try {
@@ -993,7 +993,7 @@ public class WriteThroughStoreTest {
     }
 
     @Override
-    public void apply(ChangeSet<ItemDescriptor> changeSet) {
+    public void apply(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet) {
       wasApplyCalled = true;
       if (throwOnApply) {
         throw new RuntimeException("Apply failed");

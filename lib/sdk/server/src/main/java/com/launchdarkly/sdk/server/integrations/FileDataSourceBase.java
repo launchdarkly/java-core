@@ -3,7 +3,7 @@ package com.launchdarkly.sdk.server.integrations;
 import com.google.common.collect.ImmutableList;
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.sdk.LDValue;
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.integrations.FileDataSourceBuilder.SourceInfo;
 import com.launchdarkly.sdk.server.integrations.FileDataSourceParsing.FileDataException;
@@ -12,8 +12,8 @@ import com.launchdarkly.sdk.server.integrations.FileDataSourceParsing.FlagFilePa
 import com.launchdarkly.sdk.server.integrations.FileDataSourceParsing.FlagFileRep;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.ErrorInfo;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.ErrorKind;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSetType;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
+import com.launchdarkly.sdk.fdv2.ChangeSetType;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
@@ -78,14 +78,14 @@ class FileDataSourceBase {
         }
 
         Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data = builder.build();
-        ChangeSet<ItemDescriptor> changeSet = buildChangeSet(data);
+        ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = buildChangeSet(data);
         return FDv2SourceResult.changeSet(changeSet, false);
     }
 
     /**
      * Builds a ChangeSet from the data entries.
      */
-    private ChangeSet<ItemDescriptor> buildChangeSet(Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data) {
+    private ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> buildChangeSet(Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data) {
         return new ChangeSet<>(
             ChangeSetType.Full,
             // File data is currently selector-less.

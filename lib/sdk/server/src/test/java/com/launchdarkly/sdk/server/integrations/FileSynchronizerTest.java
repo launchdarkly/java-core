@@ -1,9 +1,11 @@
 package com.launchdarkly.sdk.server.integrations;
 
 import com.launchdarkly.logging.LDLogger;
+import com.launchdarkly.sdk.fdv2.SourceResultType;
+import com.launchdarkly.sdk.fdv2.SourceSignal;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSetType;
+import com.launchdarkly.sdk.fdv2.ChangeSetType;
 import com.launchdarkly.testhelpers.TempDir;
 import com.launchdarkly.testhelpers.TempFile;
 
@@ -33,7 +35,7 @@ public class FileSynchronizerTest {
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
-            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+            assertThat(result.getResultType(), equalTo(SourceResultType.CHANGE_SET));
             assertThat(result.getChangeSet(), notNullValue());
             assertThat(result.getChangeSet().getType(), equalTo(ChangeSetType.Full));
             assertNotNull(result.getChangeSet().getData());
@@ -50,8 +52,8 @@ public class FileSynchronizerTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             // Synchronizers return INTERRUPTED for recoverable errors, not TERMINAL_ERROR
-            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.STATUS));
-            assertThat(result.getStatus().getState(), equalTo(FDv2SourceResult.State.INTERRUPTED));
+            assertThat(result.getResultType(), equalTo(SourceResultType.STATUS));
+            assertThat(result.getStatus().getState(), equalTo(SourceSignal.INTERRUPTED));
             assertNotNull(result.getStatus().getErrorInfo());
         }
     }
@@ -65,7 +67,7 @@ public class FileSynchronizerTest {
         // Get initial result
         CompletableFuture<FDv2SourceResult> initialResult = synchronizer.next();
         FDv2SourceResult result = initialResult.get(5, TimeUnit.SECONDS);
-        assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+        assertThat(result.getResultType(), equalTo(SourceResultType.CHANGE_SET));
 
         // Start waiting for next result
         CompletableFuture<FDv2SourceResult> nextResult = synchronizer.next();
@@ -75,8 +77,8 @@ public class FileSynchronizerTest {
 
         // Should return shutdown
         result = nextResult.get(5, TimeUnit.SECONDS);
-        assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.STATUS));
-        assertThat(result.getStatus().getState(), equalTo(FDv2SourceResult.State.SHUTDOWN));
+        assertThat(result.getResultType(), equalTo(SourceResultType.STATUS));
+        assertThat(result.getStatus().getState(), equalTo(SourceSignal.SHUTDOWN));
     }
 
     @Test
@@ -88,7 +90,7 @@ public class FileSynchronizerTest {
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
-            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+            assertThat(result.getResultType(), equalTo(SourceResultType.CHANGE_SET));
             assertThat(result.getChangeSet(), notNullValue());
         }
     }
@@ -107,7 +109,7 @@ public class FileSynchronizerTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             // Should succeed when ignoring duplicates
-            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+            assertThat(result.getResultType(), equalTo(SourceResultType.CHANGE_SET));
         }
     }
 
@@ -124,8 +126,8 @@ public class FileSynchronizerTest {
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
             // Should fail with interrupted error when duplicate keys are not allowed
-            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.STATUS));
-            assertThat(result.getStatus().getState(), equalTo(FDv2SourceResult.State.INTERRUPTED));
+            assertThat(result.getResultType(), equalTo(SourceResultType.STATUS));
+            assertThat(result.getStatus().getState(), equalTo(SourceSignal.INTERRUPTED));
         }
     }
 
@@ -142,7 +144,7 @@ public class FileSynchronizerTest {
                     // Get initial result
                     CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
                     FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
-                    assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+                    assertThat(result.getResultType(), equalTo(SourceResultType.CHANGE_SET));
 
                     // Start waiting for next result
                     CompletableFuture<FDv2SourceResult> nextResultFuture = synchronizer.next();
@@ -154,7 +156,7 @@ public class FileSynchronizerTest {
                     // Should get a new result with the updated data
                     // Note: File watching on MacOS can take up to 10 seconds
                     result = nextResultFuture.get(15, TimeUnit.SECONDS);
-                    assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+                    assertThat(result.getResultType(), equalTo(SourceResultType.CHANGE_SET));
                 }
             }
         }
@@ -169,7 +171,7 @@ public class FileSynchronizerTest {
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
-            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+            assertThat(result.getResultType(), equalTo(SourceResultType.CHANGE_SET));
             assertThat(result.getChangeSet().shouldPersist(), equalTo(false));
         }
     }
@@ -184,7 +186,7 @@ public class FileSynchronizerTest {
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
-            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+            assertThat(result.getResultType(), equalTo(SourceResultType.CHANGE_SET));
             assertThat(result.getChangeSet().shouldPersist(), equalTo(true));
         }
     }
@@ -199,7 +201,7 @@ public class FileSynchronizerTest {
             CompletableFuture<FDv2SourceResult> resultFuture = synchronizer.next();
             FDv2SourceResult result = resultFuture.get(5, TimeUnit.SECONDS);
 
-            assertThat(result.getResultType(), equalTo(FDv2SourceResult.ResultType.CHANGE_SET));
+            assertThat(result.getResultType(), equalTo(SourceResultType.CHANGE_SET));
             assertThat(result.getChangeSet().shouldPersist(), equalTo(false));
         }
     }

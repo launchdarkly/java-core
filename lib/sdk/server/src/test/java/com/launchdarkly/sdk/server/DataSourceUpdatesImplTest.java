@@ -2,7 +2,7 @@ package com.launchdarkly.sdk.server;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.server.DataModel.FeatureFlag;
 import com.launchdarkly.sdk.server.DataModel.Segment;
 import com.launchdarkly.sdk.server.DataStoreTestTypes.DataBuilder;
@@ -13,8 +13,8 @@ import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.State;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.Status;
 import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSetType;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
+import com.launchdarkly.sdk.fdv2.ChangeSetType;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
@@ -119,7 +119,7 @@ public class DataSourceUpdatesImplTest {
     return segmentBuilder(segment.getKey()).version(segment.getVersion() + 1).build();
   }
   
-  private static ChangeSet<ItemDescriptor> makeFullChangeSet(FeatureFlag... flags) {
+  private static ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> makeFullChangeSet(FeatureFlag... flags) {
     List<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data = new ArrayList<>();
     if (flags.length > 0) {
       Map<String, ItemDescriptor> flagItems = new HashMap<>();
@@ -140,7 +140,7 @@ public class DataSourceUpdatesImplTest {
     );
   }
   
-  private static ChangeSet<ItemDescriptor> makePartialChangeSet(FeatureFlag... flags) {
+  private static ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> makePartialChangeSet(FeatureFlag... flags) {
     List<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data = new ArrayList<>();
     if (flags.length > 0) {
       Map<String, ItemDescriptor> flagItems = new HashMap<>();
@@ -705,7 +705,7 @@ public class DataSourceUpdatesImplTest {
             new KeyedItems<>(ImmutableList.copyOf(flagItems.entrySet()))
         )
     );
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.make(1, "state1"),
         data,
@@ -833,7 +833,7 @@ public class DataSourceUpdatesImplTest {
           kindEntry.getValue()
       ));
     }
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         changeSetData,
@@ -886,7 +886,7 @@ public class DataSourceUpdatesImplTest {
             new KeyedItems<>(ImmutableList.copyOf(segmentItems.entrySet()))
         )
     );
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.make(1, "state1"),
         segmentData,
@@ -1025,7 +1025,7 @@ public class DataSourceUpdatesImplTest {
             new KeyedItems<>(ImmutableList.copyOf(flagItems.entrySet()))
         )
     );
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         data,

@@ -2,10 +2,10 @@ package com.launchdarkly.sdk.server;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSet;
-import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ChangeSetType;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
+import com.launchdarkly.sdk.fdv2.ChangeSetType;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
@@ -83,7 +83,7 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
             )
         );
 
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         changeSetData,
@@ -107,7 +107,7 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
   @Test
   public void applyWithFullChangeSetSetsSelector() {
     Selector selector = Selector.make(42, "test-state");
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Full,
         selector,
         ImmutableList.of(),
@@ -125,7 +125,7 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
   public void applyWithFullChangeSetMarksStoreAsInitialized() {
     assertFalse(store.isInitialized());
 
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         ImmutableList.of(),
@@ -159,7 +159,7 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
             )
         );
 
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData,
@@ -202,7 +202,7 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
             )
         );
 
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData,
@@ -244,7 +244,7 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
             )
         );
 
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData,
@@ -273,7 +273,7 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
     Selector initialSelector = typedStore().getSelector();
 
     Selector newSelector = Selector.make(99, "new-state");
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         newSelector,
         ImmutableList.of(),
@@ -292,7 +292,7 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
   public void applyWithNoneChangeSetDoesNotModifyData() {
     initStore();
 
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.None,
         Selector.make(5, "state5"),
         ImmutableList.of(),
@@ -340,7 +340,7 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
             )
         );
 
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         changeSetData,
@@ -388,7 +388,7 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
             )
         );
 
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData,
@@ -437,7 +437,7 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
             )
         );
 
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData,
@@ -463,7 +463,7 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
   public void applyWithFullChangeSetEmptyDataClearsStore() {
     initStore();
 
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         ImmutableList.of(),
@@ -499,7 +499,7 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
             )
         );
 
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.make(1, "state1"),
         changeSetData,
@@ -539,7 +539,7 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
             )
         );
 
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         changeSetData,
@@ -827,7 +827,7 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
             new AbstractMap.SimpleEntry<>("key2", new ItemDescriptor(2, item2))
         ))
     );
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData.entrySet(),
@@ -876,7 +876,7 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
             new AbstractMap.SimpleEntry<>("key2", new ItemDescriptor(2, item2))
         ))
     );
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Partial,
         Selector.make(2, "state2"),
         changeSetData.entrySet(),
@@ -925,7 +925,7 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
             new AbstractMap.SimpleEntry<>("key2", new ItemDescriptor(2, item2))
         ))
     );
-    ChangeSet<ItemDescriptor> changeSet = new ChangeSet<>(
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
         ChangeSetType.Full,
         Selector.make(2, "state2"),
         changeSetData.entrySet(),

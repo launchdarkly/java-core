@@ -16,20 +16,25 @@ import com.launchdarkly.sdk.internal.collections.IterableAsyncQueue;
 import com.launchdarkly.sdk.internal.events.DiagnosticStore;
 import com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event;
 import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ProtocolHandler;
-import com.launchdarkly.sdk.internal.fdv2.sources.Selector;
+import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.internal.http.HttpHelpers;
 import com.launchdarkly.sdk.internal.http.HttpProperties;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.SelectorSource;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 import com.launchdarkly.sdk.server.subsystems.SerializationException;
 import com.google.gson.stream.JsonReader;
 import okhttp3.Headers;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.Reader;
+import java.util.Map;
 import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
@@ -268,7 +273,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
             case CHANGESET:
                 FDv2ProtocolHandler.FDv2ActionChangeset changeset = (FDv2ProtocolHandler.FDv2ActionChangeset) action;
                 try {
-                    DataStoreTypes.ChangeSet<DataStoreTypes.ItemDescriptor> converted =
+                    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> converted =
                             FDv2ChangeSetTranslator.toChangeSet(
                               changeset.getChangeset(),
                               logger,

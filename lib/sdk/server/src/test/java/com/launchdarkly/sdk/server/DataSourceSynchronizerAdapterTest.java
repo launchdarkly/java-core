@@ -1,5 +1,7 @@
 package com.launchdarkly.sdk.server;
 
+import com.launchdarkly.sdk.fdv2.SourceResultType;
+import com.launchdarkly.sdk.fdv2.SourceSignal;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
@@ -64,8 +66,8 @@ public class DataSourceSynchronizerAdapterTest extends BaseTest {
 
         // Verify next() completes with shutdown result (should be nearly immediate)
         FDv2SourceResult result = nextFuture.get(2, TimeUnit.SECONDS);
-        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-        assertEquals(FDv2SourceResult.State.SHUTDOWN, result.getStatus().getState());
+        assertEquals(SourceResultType.STATUS, result.getResultType());
+        assertEquals(SourceSignal.SHUTDOWN, result.getStatus().getState());
 
         // Signal the blocked initialization (should already be cancelled/irrelevant)
         blockInitLatch.countDown();
@@ -99,8 +101,8 @@ public class DataSourceSynchronizerAdapterTest extends BaseTest {
 
         // Verify shutdown result is received
         FDv2SourceResult result = nextFuture.get(1, TimeUnit.SECONDS);
-        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-        assertEquals(FDv2SourceResult.State.SHUTDOWN, result.getStatus().getState());
+        assertEquals(SourceResultType.STATUS, result.getResultType());
+        assertEquals(SourceSignal.SHUTDOWN, result.getStatus().getState());
     }
 
     /**
@@ -121,8 +123,8 @@ public class DataSourceSynchronizerAdapterTest extends BaseTest {
         FDv2SourceResult result = nextFuture.get(2, TimeUnit.SECONDS);
 
         // Should receive an interrupted status with error info
-        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-        assertEquals(FDv2SourceResult.State.INTERRUPTED, result.getStatus().getState());
+        assertEquals(SourceResultType.STATUS, result.getResultType());
+        assertEquals(SourceSignal.INTERRUPTED, result.getStatus().getState());
         assertNotNull(result.getStatus().getErrorInfo());
         assertTrue(result.getStatus().getErrorInfo().getMessage().contains("Init failed"));
 
@@ -144,8 +146,8 @@ public class DataSourceSynchronizerAdapterTest extends BaseTest {
         // next() should still work and return shutdown immediately
         CompletableFuture<FDv2SourceResult> nextFuture = adapter.next();
         FDv2SourceResult result = nextFuture.get(1, TimeUnit.SECONDS);
-        assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-        assertEquals(FDv2SourceResult.State.SHUTDOWN, result.getStatus().getState());
+        assertEquals(SourceResultType.STATUS, result.getResultType());
+        assertEquals(SourceSignal.SHUTDOWN, result.getStatus().getState());
     }
 
     /**
@@ -164,8 +166,8 @@ public class DataSourceSynchronizerAdapterTest extends BaseTest {
             adapter.close();
 
             FDv2SourceResult result = nextFuture.get(1, TimeUnit.SECONDS);
-            assertEquals(FDv2SourceResult.ResultType.STATUS, result.getResultType());
-            assertEquals(FDv2SourceResult.State.SHUTDOWN, result.getStatus().getState());
+            assertEquals(SourceResultType.STATUS, result.getResultType());
+            assertEquals(SourceSignal.SHUTDOWN, result.getStatus().getState());
 
             blockLatch.countDown();
         }
