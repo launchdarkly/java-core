@@ -2,6 +2,13 @@
 
 All notable changes to the project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [2.4.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-common-2.3.0...launchdarkly-java-sdk-common-2.4.0) (2026-02-26)
+
+
+### Features
+
+* commonizes several FDv2 related types ([ef1e204](https://github.com/launchdarkly/java-core/commit/ef1e204b056ee6ad2a7c12e850dbb04a769a6104))
+
 ## [2.3.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-common-2.2.1...launchdarkly-java-sdk-common-2.3.0) (2026-02-03)
 
 
