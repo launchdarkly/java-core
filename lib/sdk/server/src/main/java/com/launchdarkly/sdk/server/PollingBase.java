@@ -15,6 +15,7 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 import com.launchdarkly.sdk.json.SerializationException;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Date;
 import java.util.concurrent.CompletableFuture;
@@ -91,7 +92,7 @@ class PollingBase {
                 return FDv2SourceResult.changeSet(
                         new ChangeSet<>(ChangeSetType.None,
                                 Selector.EMPTY,
-                                null,
+                                Collections.emptyList(),
                                 null, // Header derived values will have been handled on initial response.
                                 true // Polling data from LaunchDarkly should be persisted
                         ),

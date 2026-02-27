@@ -142,6 +142,9 @@ abstract class DataModelDependencies {
    * @return a sorted copy of the changeset
    */
   public static ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> sortChangeset(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> inSet) {
+    if (inSet.getData() == null) {
+      return inSet;
+    }
     ImmutableSortedMap.Builder<DataKind, KeyedItems<ItemDescriptor>> builder =
         ImmutableSortedMap.orderedBy(dataKindPriorityOrder);
     for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> entry: inSet.getData()) {

@@ -291,7 +291,7 @@ javadoc {
 // enclosing packages like "com" that don't have any classes in them.
 def getAllSdkPackages() {
     // base package classes come from launchdarkly-java-sdk-common
-    def names = [ "com.launchdarkly.sdk", "com.launchdarkly.sdk.json", "com.launchdarkly.logging" ]
+    def names = [ "com.launchdarkly.sdk", "com.launchdarkly.sdk.json", "com.launchdarkly.sdk.fdv2", "com.launchdarkly.logging" ]
     project.convention.getPlugin(JavaPluginConvention).sourceSets.main.output.each { baseDir ->
         if (baseDir.getPath().contains("classes" + File.separator + "java" + File.separator + "main")) {
             baseDir.eachFileRecurse { f ->
