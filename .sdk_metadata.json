@@ -9,6 +9,9 @@
         "Java"
       ],
       "userAgents": ["JavaClient"],
+      "releases": {
+        "tag-prefix": "launchdarkly-java-server-sdk-"
+      },
       "features": {
         "allFlags": { "introduced": "1.0" },
         "appMetadata": { "introduced": "5.8" },
