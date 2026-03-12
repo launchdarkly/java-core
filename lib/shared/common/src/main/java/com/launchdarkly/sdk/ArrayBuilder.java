@@ -1,5 +1,6 @@
 package com.launchdarkly.sdk;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -8,7 +9,7 @@ import java.util.List;
  * <p>
  * Builder methods are not thread-safe.
  */
-public final class ArrayBuilder {
+public final class ArrayBuilder implements Serializable {
   private List<LDValue> builder = new ArrayList<>();
   private volatile boolean copyOnWrite = false;
   
