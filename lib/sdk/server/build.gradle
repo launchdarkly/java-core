@@ -70,11 +70,11 @@ ext.versions = [
     "gson": "2.13.1",
     "guava": "32.0.1-jre",
     "jackson": "2.11.2",
-    "launchdarklyJavaSdkCommon": "2.1.2",
-    "launchdarklyJavaSdkInternal": "1.5.1",
+    "launchdarklyJavaSdkCommon": "2.3.0",
+    "launchdarklyJavaSdkInternal": "1.9.0",
     "launchdarklyLogging": "1.1.0",
     "okhttp": "4.12.0", // specify this for the SDK build instead of relying on the transitive dependency from okhttp-eventsource
-    "okhttpEventsource": "4.1.0",
+    "okhttpEventsource": "4.2.0",
     "reactorCore":"3.3.22.RELEASE",
     "slf4j": "1.7.36",
     "snakeyaml": "2.4",
@@ -152,7 +152,7 @@ libraries.test = [
     "junit:junit:4.12",
     "com.fasterxml.jackson.core:jackson-core:${versions.jackson}",
     "com.fasterxml.jackson.core:jackson-databind:${versions.jackson}",
-    "com.launchdarkly:test-helpers:2.0.1",
+    "com.launchdarkly:test-helpers:2.1.0",
     "io.projectreactor:reactor-core:${versions.reactorCore}", // this is to make javadoc happy when using the test classpath
 ]
 
@@ -291,7 +291,7 @@ javadoc {
 // enclosing packages like "com" that don't have any classes in them.
 def getAllSdkPackages() {
     // base package classes come from launchdarkly-java-sdk-common
-    def names = [ "com.launchdarkly.sdk", "com.launchdarkly.sdk.json", "com.launchdarkly.logging" ]
+    def names = [ "com.launchdarkly.sdk", "com.launchdarkly.sdk.json", "com.launchdarkly.sdk.fdv2", "com.launchdarkly.logging" ]
     project.convention.getPlugin(JavaPluginConvention).sourceSets.main.output.each { baseDir ->
         if (baseDir.getPath().contains("classes" + File.separator + "java" + File.separator + "main")) {
             baseDir.eachFileRecurse { f ->

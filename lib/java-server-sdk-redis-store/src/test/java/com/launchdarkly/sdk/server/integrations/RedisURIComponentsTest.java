@@ -9,6 +9,26 @@ import static org.junit.Assert.assertNull;
 
 public class RedisURIComponentsTest {
   @Test
+  public void getUsernameForURIWithoutUserInfo() {
+    assertNull(RedisURIComponents.getUsername(URI.create("redis://hostname:6379")));
+  }
+
+  @Test
+  public void getUsernameForURIWithUsernameAndNoPassword() {
+    assertEquals("username", RedisURIComponents.getUsername(URI.create("redis://username@hostname:6379")));
+  }
+
+  @Test
+  public void getUsernameForURIWithUsernameAndPassword() {
+    assertEquals("username", RedisURIComponents.getUsername(URI.create("redis://username:secret@hostname:6379")));
+  }
+
+  @Test
+  public void getUsernameForURIWithPasswordAndNoUsername() {
+    assertNull(RedisURIComponents.getUsername(URI.create("redis://:secret@hostname:6379")));
+  }
+
+  @Test
   public void getPasswordForURIWithoutUserInfo() {
     assertNull(RedisURIComponents.getPassword(URI.create("redis://hostname:6379")));
   }

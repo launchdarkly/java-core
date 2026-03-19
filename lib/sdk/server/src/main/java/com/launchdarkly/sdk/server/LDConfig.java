@@ -3,6 +3,7 @@ package com.launchdarkly.sdk.server;
 import com.launchdarkly.sdk.EvaluationReason;
 import com.launchdarkly.sdk.EvaluationReason.BigSegmentsStatus;
 import com.launchdarkly.sdk.server.integrations.ApplicationInfoBuilder;
+import com.launchdarkly.sdk.server.integrations.DataSystemBuilder;
 import com.launchdarkly.sdk.server.integrations.HooksConfigurationBuilder;
 import com.launchdarkly.sdk.server.integrations.PluginsConfigurationBuilder;
 import com.launchdarkly.sdk.server.integrations.ServiceEndpointsBuilder;
@@ -48,6 +49,7 @@ public final class LDConfig {
   final Duration startWait;
   final int threadPriority;
   final WrapperInfo wrapperInfo;
+  final DataSystemBuilder dataSystem;
 
   protected LDConfig(Builder builder) {
     if (builder.offline) {
@@ -74,6 +76,7 @@ public final class LDConfig {
     this.startWait = builder.startWait;
     this.threadPriority = builder.threadPriority;
     this.wrapperInfo = builder.wrapperBuilder != null ? builder.wrapperBuilder.build() : null;
+    this.dataSystem = builder.dataSystem;
   }
 
   /**
@@ -103,6 +106,7 @@ public final class LDConfig {
     private Duration startWait = DEFAULT_START_WAIT;
     private int threadPriority = Thread.MIN_PRIORITY;
     private WrapperInfoBuilder wrapperBuilder = null;
+    private DataSystemBuilder dataSystem = null;
 
     /**
      * Creates a builder with all configuration parameters set to the default
@@ -136,6 +140,7 @@ public final class LDConfig {
       newBuilder.threadPriority = config.threadPriority;
       newBuilder.wrapperBuilder = config.wrapperInfo != null ?
         ComponentsImpl.WrapperInfoBuilderImpl.fromInfo(config.wrapperInfo) : null;
+      newBuilder.dataSystem = config.dataSystem;
       return newBuilder;
     }
 
@@ -198,6 +203,8 @@ public final class LDConfig {
      * {@link Components#pollingDataSource()}, or a test fixture such as
      * {@link com.launchdarkly.sdk.server.integrations.FileData#dataSource()}. See those methods
      * for details on how to configure them.
+     * <p>
+     * <b>Note:</b> If {@link #dataSystem(DataSystemBuilder)} is used, it will override this setting.
      *
      * @param dataSourceConfigurer the data source configuration builder
      * @return the main configuration builder
@@ -213,6 +220,8 @@ public final class LDConfig {
      * related data received from LaunchDarkly, using a factory object. The default is
      * {@link Components#inMemoryDataStore()}; for database integrations, use
      * {@link Components#persistentDataStore(ComponentConfigurer)}.
+     * <p>
+     * <b>Note:</b> If {@link #dataSystem(DataSystemBuilder)} is used, it will override this setting.
      *
      * @param dataStoreConfigurer the data store configuration builder
      * @return the main configuration builder
@@ -403,6 +412,32 @@ public final class LDConfig {
      */
     public Builder wrapper(WrapperInfoBuilder wrapperBuilder) {
       this.wrapperBuilder = wrapperBuilder;
+      return this;
+    }
+
+    /**
+     * Sets the data system configuration.
+     * <p>
+     * When the data system configuration is used it overrides {@link #dataSource(ComponentConfigurer)} and
+     * {@link #dataStore(ComponentConfigurer)} in the configuration.
+     * <p>
+     * This class is not stable, and not subject to any backwards compatibility guarantees or semantic versioning.
+     * It is in early access. If you want access to this feature please join the EAP. https://launchdarkly.com/docs/sdk/features/data-saving-mode
+     * </p>
+     * <p>
+     * <b>Example:</b>
+     * </p>
+     * <pre><code>
+     *     LDConfig config = new LDConfig.Builder("my-sdk-key")
+     *       .dataSystem(Components.dataSystem().defaultMode())
+     *       .build();
+     * </code></pre>
+     *
+     * @param dataSystemBuilder the data system builder
+     * @return the builder
+     */
+    public Builder dataSystem(DataSystemBuilder dataSystemBuilder) {
+      this.dataSystem = dataSystemBuilder;
       return this;
     }
 

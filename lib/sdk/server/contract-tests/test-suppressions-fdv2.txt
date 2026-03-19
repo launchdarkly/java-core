@@ -1,0 +1,3 @@
+streaming/fdv2/recoverable fallback to secondary synchronizer
+streaming/fdv2/recoverable fallback with recovery
+streaming/fdv2/permanent fallback with recovery

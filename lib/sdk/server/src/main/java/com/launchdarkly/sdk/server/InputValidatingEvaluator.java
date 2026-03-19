@@ -8,7 +8,6 @@ import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.LDValueType;
 import com.launchdarkly.sdk.server.DataModel.FeatureFlag;
-import com.launchdarkly.sdk.server.subsystems.DataStore;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes;
 import com.launchdarkly.sdk.server.subsystems.EventProcessor;
 
@@ -28,7 +27,7 @@ import static com.launchdarkly.sdk.server.subsystems.EventProcessor.NO_VERSION;
 class InputValidatingEvaluator implements EvaluatorInterface {
 
   private final Evaluator evaluator;
-  private final DataStore store;
+  private final ReadOnlyStore store;
   private final LDLogger logger;
 
   // these are created at construction to avoid recreation during each evaluation
@@ -45,7 +44,7 @@ class InputValidatingEvaluator implements EvaluatorInterface {
    * @param eventProcessor will be used to record events during evaluations as necessary
    * @param logger         for logging messages and errors during evaluations
    */
-  InputValidatingEvaluator(DataStore store, BigSegmentStoreWrapper segmentStore, @Nonnull EventProcessor eventProcessor, LDLogger logger) {
+  InputValidatingEvaluator(ReadOnlyStore store, BigSegmentStoreWrapper segmentStore, @Nonnull EventProcessor eventProcessor, LDLogger logger) {
     this.evaluator = new Evaluator(new Evaluator.Getters() {
       public DataModel.FeatureFlag getFlag(String key) {
         return InputValidatingEvaluator.getFlag(store, key);
@@ -206,12 +205,12 @@ class InputValidatingEvaluator implements EvaluatorInterface {
     return builder.build();
   }
 
-  private static DataModel.FeatureFlag getFlag(DataStore store, String key) {
+  private static DataModel.FeatureFlag getFlag(ReadOnlyStore store, String key) {
     DataStoreTypes.ItemDescriptor item = store.get(FEATURES, key);
     return item == null ? null : (DataModel.FeatureFlag) item.getItem();
   }
 
-  private static DataModel.Segment getSegment(DataStore store, String key) {
+  private static DataModel.Segment getSegment(ReadOnlyStore store, String key) {
     DataStoreTypes.ItemDescriptor item = store.get(SEGMENTS, key);
     return item == null ? null : (DataModel.Segment) item.getItem();
   }

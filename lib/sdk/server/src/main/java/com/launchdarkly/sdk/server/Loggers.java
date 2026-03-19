@@ -24,4 +24,7 @@ abstract class Loggers {
   static final String EVALUATION_LOGGER_NAME = "Evaluation";
   static final String EVENTS_LOGGER_NAME = "Events";
   static final String HOOKS_LOGGER_NAME = "Hooks";
+  static final String STREAMING_SYNCHRONIZER = "StreamingSynchronizer";
+  static final String POLLING_SYNCHRONIZER = "PollingSynchronizer";
+  static final String POLLING_INITIALIZER = "PollingInitializer";
 }

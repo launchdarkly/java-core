@@ -31,6 +31,7 @@ import static com.launchdarkly.sdk.server.integrations.FileDataSourceTestData.re
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.Assert.assertEquals;
 
 @SuppressWarnings("javadoc")
@@ -160,10 +161,60 @@ public class FileDataSourceTest extends BaseTest {
       }
     }
   }
-  
+
+  @Test
+  public void dataSourceDefaultsToPersisting() throws Exception {
+    FileDataSourceBuilder factory = makeFactoryWithFile(resourceFilePath("all-properties.json"));
+    try (DataSource fp = makeDataSource(factory)) {
+      fp.start();
+
+      // Wait for and get the init data
+      com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet<com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor> initData =
+          dataSourceUpdates.receivedInits.poll(5, java.util.concurrent.TimeUnit.SECONDS);
+
+      assertThat(initData, notNullValue());
+      // The FullDataSet should have shouldPersist=true by default for legacy compatibility
+      assertThat(initData.shouldPersist(), equalTo(true));
+    }
+  }
+
+  @Test
+  public void dataSourceCanBeConfiguredToPersist() throws Exception {
+    FileDataSourceBuilder factory = FileData.dataSource()
+      .filePaths(resourceFilePath("all-properties.json"))
+      .shouldPersist(true);
+    try (DataSource fp = makeDataSource(factory)) {
+      fp.start();
+
+      // Wait for and get the init data
+      com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet<com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor> initData =
+          dataSourceUpdates.receivedInits.poll(5, java.util.concurrent.TimeUnit.SECONDS);
+
+      assertThat(initData, notNullValue());
+      assertThat(initData.shouldPersist(), equalTo(true));
+    }
+  }
+
+  @Test
+  public void dataSourceCanBeConfiguredToNotPersist() throws Exception {
+    FileDataSourceBuilder factory = FileData.dataSource()
+      .filePaths(resourceFilePath("all-properties.json"))
+      .shouldPersist(false);
+    try (DataSource fp = makeDataSource(factory)) {
+      fp.start();
+
+      // Wait for and get the init data
+      com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet<com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor> initData =
+          dataSourceUpdates.receivedInits.poll(5, java.util.concurrent.TimeUnit.SECONDS);
+
+      assertThat(initData, notNullValue());
+      assertThat(initData.shouldPersist(), equalTo(false));
+    }
+  }
+
   public static class SimulatedMaliciousType {
     static volatile boolean wasInstantiated = false;
-    
+
     public SimulatedMaliciousType(String value) {
       wasInstantiated = true;
     }

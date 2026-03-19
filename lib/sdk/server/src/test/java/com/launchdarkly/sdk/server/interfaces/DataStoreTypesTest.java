@@ -137,13 +137,13 @@ public class DataStoreTypesTest {
   public void fullDataSetProperties() {
     ItemDescriptor item1 = new ItemDescriptor(1, "a");
     KeyedItems<ItemDescriptor> items = new KeyedItems<>(ImmutableMap.of("key1", item1).entrySet());
-    FullDataSet<ItemDescriptor> data = new FullDataSet<>(ImmutableMap.of(DataModel.FEATURES, items).entrySet());
+    FullDataSet<ItemDescriptor> data = new FullDataSet<>(ImmutableMap.of(DataModel.FEATURES, items).entrySet(), true);
     
     assertThat(data.getData(), contains(
         new AbstractMap.SimpleEntry<>(DataModel.FEATURES, items)
         ));
     
-    FullDataSet<ItemDescriptor> emptyData = new FullDataSet<>(null);
+    FullDataSet<ItemDescriptor> emptyData = new FullDataSet<>(null, true);
     
     assertThat(emptyData.getData(), emptyIterable());
   }
@@ -156,7 +156,7 @@ public class DataStoreTypesTest {
         allPermutations.add(() -> new FullDataSet<>(
             ImmutableMap.of(kind,
                 new KeyedItems<>(ImmutableMap.of("key", new ItemDescriptor(version, "a")).entrySet())
-            ).entrySet()));
+            ).entrySet(), true));
       }
     }
     TypeBehavior.checkEqualsAndHashCode(allPermutations);

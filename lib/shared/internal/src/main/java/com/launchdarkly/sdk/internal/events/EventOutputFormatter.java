@@ -11,6 +11,7 @@ import com.launchdarkly.sdk.internal.events.EventSummarizer.SimpleIntKeyedMap;
 
 import java.io.IOException;
 import java.io.Writer;
+import java.util.List;
 import java.util.Map;
 
 import static com.launchdarkly.sdk.internal.GsonHelpers.gsonInstance;
@@ -33,7 +34,7 @@ final class EventOutputFormatter {
         config.privateAttributes.toArray(new AttributeRef[config.privateAttributes.size()]));
   }
 
-  int writeOutputEvents(Event[] events, EventSummarizer.EventSummary summary, Writer writer) throws IOException {
+  int writeOutputEvents(Event[] events, List<EventSummarizer.EventSummary> summaries, Writer writer) throws IOException {
     int count = 0;
     JsonWriter jsonWriter = new JsonWriter(writer);
     jsonWriter.beginArray();
@@ -42,9 +43,11 @@ final class EventOutputFormatter {
         count++;
       }
     }
-    if (!summary.isEmpty()) {
-      writeSummaryEvent(summary, jsonWriter);
-      count++;
+    for (EventSummarizer.EventSummary summary : summaries) {
+      if (!summary.isEmpty()) {
+        writeSummaryEvent(summary, jsonWriter);
+        count++;
+      }
     }
     jsonWriter.endArray();
     jsonWriter.flush();
@@ -233,6 +236,11 @@ final class EventOutputFormatter {
     jw.value(summary.startDate);
     jw.name("endDate");
     jw.value(summary.endDate);
+
+    // Include context if present (per-context summarization)
+    if (summary.context != null) {
+      writeContext(summary.context, jw, true); // redact anonymous attributes
+    }
 
     jw.name("features");
     jw.beginObject();

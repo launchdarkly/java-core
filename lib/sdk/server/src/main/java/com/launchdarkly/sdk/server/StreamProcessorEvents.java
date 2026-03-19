@@ -130,7 +130,8 @@ abstract class StreamProcessorEvents {
           path = jr.nextString();
           break;
         case "data":
-          data = parseFullDataSet(jr);
+          // Streaming data from LaunchDarkly should be persisted
+          data = new FullDataSet<>(parseFullDataSet(jr), true);
           break;
         default:
           jr.skipValue(); 

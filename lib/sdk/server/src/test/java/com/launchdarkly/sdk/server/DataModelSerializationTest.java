@@ -578,7 +578,7 @@ public class DataModelSerializationTest {
   @Test
   public void parsingFullDataSetEmptyObject() throws Exception {
     String json = "{}";
-    FullDataSet<ItemDescriptor> allData = parseFullDataSet(jsonReaderFrom(json));
+    FullDataSet<ItemDescriptor> allData = new FullDataSet<>(parseFullDataSet(jsonReaderFrom(json)), true);
     assertDataSetEquals(DataBuilder.forStandardTypes().build(), allData);
   }
   
@@ -586,7 +586,7 @@ public class DataModelSerializationTest {
   public void parsingFullDataSetFlagsOnly() throws Exception {
     FeatureFlag flag = flagBuilder("flag1").version(1000).build();
     String json = "{\"flags\":{\"flag1\":" + serialize(flag) + "}}";
-    FullDataSet<ItemDescriptor> allData = parseFullDataSet(jsonReaderFrom(json));
+    FullDataSet<ItemDescriptor> allData = new FullDataSet<>(parseFullDataSet(jsonReaderFrom(json)), true);
     assertDataSetEquals(DataBuilder.forStandardTypes().addAny(FEATURES, flag).build(), allData);
   }
   
@@ -594,7 +594,7 @@ public class DataModelSerializationTest {
   public void parsingFullDataSetSegmentsOnly() throws Exception {
     Segment segment = segmentBuilder("segment1").version(1000).build();
     String json = "{\"segments\":{\"segment1\":" + serialize(segment) + "}}";
-    FullDataSet<ItemDescriptor> allData = parseFullDataSet(jsonReaderFrom(json));
+    FullDataSet<ItemDescriptor> allData = new FullDataSet<>(parseFullDataSet(jsonReaderFrom(json)), true);
     assertDataSetEquals(DataBuilder.forStandardTypes().addAny(SEGMENTS, segment).build(), allData);
   }
   
@@ -606,7 +606,7 @@ public class DataModelSerializationTest {
     Segment segment2 = segmentBuilder("segment2").version(1001).build();
     String json = "{\"flags\":{\"flag1\":" + serialize(flag1) + ",\"flag2\":" + serialize(flag2) + "}" +
         ",\"segments\":{\"segment1\":" + serialize(segment1) + ",\"segment2\":" + serialize(segment2) + "}}";
-    FullDataSet<ItemDescriptor> allData = parseFullDataSet(jsonReaderFrom(json));
+    FullDataSet<ItemDescriptor> allData = new FullDataSet<>(parseFullDataSet(jsonReaderFrom(json)), true);
     assertDataSetEquals(DataBuilder.forStandardTypes()
         .addAny(FEATURES, flag1, flag2).addAny(SEGMENTS, segment1, segment2).build(), allData);
   }

@@ -17,7 +17,7 @@ public class RedisBigSegmentStoreImplTest extends BigSegmentStoreTestBase {
   @Override
   protected void clearData(String prefix) {
     prefix = prefix == null || prefix.isEmpty() ? RedisStoreBuilder.DEFAULT_PREFIX : prefix;
-    try (Jedis client = new Jedis("localhost")) {
+    try (Jedis client = new Jedis("localhost", 6379)) {
       for (String key : client.keys(prefix + ":*")) {
         client.del(key);
       }
@@ -26,7 +26,7 @@ public class RedisBigSegmentStoreImplTest extends BigSegmentStoreTestBase {
 
   @Override
   protected void setMetadata(String prefix, BigSegmentStoreTypes.StoreMetadata storeMetadata) {
-    try (Jedis client = new Jedis("localhost")) {
+    try (Jedis client = new Jedis("localhost", 6379)) {
       client.set(prefix + ":big_segments_synchronized_on",
           storeMetadata != null ? Long.toString(storeMetadata.getLastUpToDate()) : "");
     }
@@ -37,7 +37,7 @@ public class RedisBigSegmentStoreImplTest extends BigSegmentStoreTestBase {
                              String userHashKey,
                              Iterable<String> includedSegmentRefs,
                              Iterable<String> excludedSegmentRefs) {
-    try (Jedis client = new Jedis("localhost")) {
+    try (Jedis client = new Jedis("localhost", 6379)) {
       String includeKey = prefix + ":big_segment_include:" + userHashKey;
       String excludeKey = prefix + ":big_segment_exclude:" + userHashKey;
       for (String includedSegmentRef : includedSegmentRefs) {

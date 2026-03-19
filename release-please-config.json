@@ -35,6 +35,14 @@
         "gradle.properties"
       ]
     },
+    "lib/shared/test-helpers": {
+      "package-name": "test-helpers",
+      "bump-minor-pre-major": true,
+      "include-v-in-tag": false,
+      "extra-files": [
+        "gradle.properties"
+      ]
+    },
     "lib/sdk/server": {
       "package-name": "launchdarkly-java-server-sdk",
       "bump-minor-pre-major": true,

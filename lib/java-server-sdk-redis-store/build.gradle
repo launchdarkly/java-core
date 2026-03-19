@@ -42,7 +42,7 @@ ext {
 
 ext.versions = [
     "sdk": "6.3.0", // the *lowest* version we're compatible with
-    "jedis": "2.9.0"
+    "jedis": "7.1.0" // 3.6.0+ required for username/password (ACL) authentication
 ]
 
 ext.libraries = [:]

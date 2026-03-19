@@ -1,0 +1,31 @@
+name: test-helpers
+
+on:
+  push:
+    branches: [main, 'feat/**']
+    paths-ignore:
+      - '**.md' #Do not need to run CI for markdown changes.
+  pull_request:
+    branches: [main, 'feat/**']
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  build-test-helpers:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        java-version: [8, 19]
+        os: [ubuntu-latest]
+        include:
+          - java-version: 19
+            os: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Shared CI Steps
+        uses: ./.github/actions/ci
+        with:
+          workspace_path: 'lib/shared/test-helpers'
+          java_version: ${{ matrix.java-version }}

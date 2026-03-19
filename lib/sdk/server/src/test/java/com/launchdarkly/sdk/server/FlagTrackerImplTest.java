@@ -29,7 +29,20 @@ public class FlagTrackerImplTest extends BaseTest {
     EventBroadcasterImpl<FlagChangeListener, FlagChangeEvent> broadcaster =
         EventBroadcasterImpl.forFlagChangeEvents(TestComponents.sharedExecutor, testLogger);
     
-    FlagTrackerImpl tracker = new FlagTrackerImpl(broadcaster, null);
+    // Create a test FlagChangeNotifier that wraps the broadcaster
+    FlagChangeNotifier notifier = new FlagChangeNotifier() {
+      @Override
+      public void addFlagChangeListener(FlagChangeListener listener) {
+        broadcaster.register(listener);
+      }
+      
+      @Override
+      public void removeFlagChangeListener(FlagChangeListener listener) {
+        broadcaster.unregister(listener);
+      }
+    };
+    
+    FlagTrackerImpl tracker = new FlagTrackerImpl(notifier, null);
     
     BlockingQueue<FlagChangeEvent> eventSink1 = new LinkedBlockingQueue<>();
     BlockingQueue<FlagChangeEvent> eventSink2 = new LinkedBlockingQueue<>();
@@ -69,7 +82,20 @@ public class FlagTrackerImplTest extends BaseTest {
         EventBroadcasterImpl.forFlagChangeEvents(TestComponents.sharedExecutor, testLogger);
     Map<Map.Entry<String, LDContext>, LDValue> resultMap = new HashMap<>();
     
-    FlagTrackerImpl tracker = new FlagTrackerImpl(broadcaster,
+    // Create a test FlagChangeNotifier that wraps the broadcaster
+    FlagChangeNotifier notifier = new FlagChangeNotifier() {
+      @Override
+      public void addFlagChangeListener(FlagChangeListener listener) {
+        broadcaster.register(listener);
+      }
+      
+      @Override
+      public void removeFlagChangeListener(FlagChangeListener listener) {
+        broadcaster.unregister(listener);
+      }
+    };
+    
+    FlagTrackerImpl tracker = new FlagTrackerImpl(notifier,
         (k, u) -> LDValue.normalize(resultMap.get(new AbstractMap.SimpleEntry<>(k, u))));
 
     resultMap.put(new AbstractMap.SimpleEntry<>(flagKey, user), LDValue.of(false));

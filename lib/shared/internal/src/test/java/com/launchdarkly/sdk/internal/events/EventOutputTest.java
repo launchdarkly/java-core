@@ -16,6 +16,7 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.io.StringWriter;
+import java.util.Collections;
 
 import static com.launchdarkly.sdk.EvaluationDetail.NO_VARIATION;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -315,7 +316,7 @@ public class EventOutputTest extends BaseEventTest {
 
     EventOutputFormatter f = new EventOutputFormatter(defaultEventsConfig());
     StringWriter w = new StringWriter();
-    int count = f.writeOutputEvents(new Event[0], summary, w);
+    int count = f.writeOutputEvents(new Event[0], Collections.singletonList(summary), w);
     assertEquals(1, count);
     LDValue outputEvent = parseValue(w.toString()).get(0);
 
@@ -667,7 +668,7 @@ public class EventOutputTest extends BaseEventTest {
 
     EventOutputFormatter f = new EventOutputFormatter(defaultEventsConfig());
     StringWriter w = new StringWriter();
-    f.writeOutputEvents(new Event[] { event }, new EventSummary(), w);
+    f.writeOutputEvents(new Event[] { event }, Collections.singletonList(new EventSummary()), w);
 
     assertEquals("[]", w.toString());
   }
@@ -684,7 +685,7 @@ public class EventOutputTest extends BaseEventTest {
 
   private LDValue getSingleOutputEvent(EventOutputFormatter f, Event event) throws IOException {
     StringWriter w = new StringWriter();
-    int count = f.writeOutputEvents(new Event[] { event }, new EventSummary(), w);
+    int count = f.writeOutputEvents(new Event[] { event }, Collections.singletonList(new EventSummary()), w);
     assertEquals(1, count);
     return parseValue(w.toString()).get(0);
   }

@@ -16,9 +16,15 @@ import java.util.Set;
  */
 final class EventSummarizer {
   private EventSummary eventsState;
-  
+  private final LDContext context; // nullable - only set for per-context summarization
+
   EventSummarizer() {
-    this.eventsState = new EventSummary();
+    this(null);
+  }
+
+  EventSummarizer(LDContext context) {
+    this.context = context;
+    this.eventsState = new EventSummary(context);
   }
   
   /**
@@ -76,22 +82,29 @@ final class EventSummarizer {
   }
   
   void clear() {
-    eventsState = new EventSummary();
+    eventsState = new EventSummary(context);
   }
   
   static final class EventSummary {
     final Map<String, FlagInfo> counters;
     long startDate;
     long endDate;
-    
+    final LDContext context; // nullable for backward compatibility
+
     EventSummary() {
-      counters = new HashMap<>();
+      this((LDContext) null);
+    }
+
+    EventSummary(LDContext context) {
+      this.counters = new HashMap<>();
+      this.context = context;
     }
 
     EventSummary(EventSummary from) {
       counters = new HashMap<>(from.counters);
       startDate = from.startDate;
       endDate = from.endDate;
+      context = from.context;
     }
     
     boolean isEmpty() {
@@ -142,7 +155,8 @@ final class EventSummarizer {
     public boolean equals(Object other) {
       if (other instanceof EventSummary) {
         EventSummary o = (EventSummary)other;
-        return o.counters.equals(counters) && startDate == o.startDate && endDate == o.endDate;
+        return o.counters.equals(counters) && startDate == o.startDate && endDate == o.endDate &&
+            Objects.equals(context, o.context);
       }
       return false;
     }

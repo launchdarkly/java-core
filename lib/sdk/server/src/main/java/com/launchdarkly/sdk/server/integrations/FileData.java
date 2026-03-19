@@ -1,6 +1,13 @@
 package com.launchdarkly.sdk.server.integrations;
 
 import com.launchdarkly.sdk.server.LDConfig.Builder;
+import com.launchdarkly.sdk.server.datasources.Initializer;
+import com.launchdarkly.sdk.server.datasources.Synchronizer;
+import com.launchdarkly.sdk.server.subsystems.DataSourceBuildInputs;
+import com.launchdarkly.sdk.server.subsystems.DataSourceBuilder;
+
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 
 /**
  * Integration between the LaunchDarkly SDK and file data.
@@ -27,13 +34,13 @@ public abstract class FileData {
      * Data loading will fail if keys are duplicated across files.
      */
     FAIL,
-    
+
     /**
      * Keys that are duplicated across files will be ignored, and the first occurrence will be used.
      */
     IGNORE
   }
-  
+
   /**
    * Creates a {@link FileDataSourceBuilder} which you can use to configure the file data source.
    * This allows you to use local files (or classpath resources containing file data) as a source of
@@ -130,13 +137,243 @@ public abstract class FileData {
    * <p>
    * If the data source encounters any error in any file-- malformed content, a missing file, or a
    * duplicate key-- it will not load flags from any of the files.
-   * 
+   *
    * @return a data source configuration object
    * @since 4.12.0
    */
   public static FileDataSourceBuilder dataSource() {
     return new FileDataSourceBuilder();
   }
-  
+
+  /**
+   * Creates a builder for an FDv2 Initializer that loads file data.
+   * <p>
+   * An initializer performs a one-shot load of the file data. This is used with the FDv2 data system
+   * for initial data loading.
+   * <p>
+   * This class is not stable, and not subject to any backwards compatibility guarantees or semantic versioning.
+   * It is in early access. If you want access to this feature please join the EAP.
+   * <a href="https://launchdarkly.com/docs/sdk/features/data-saving-mode">https://launchdarkly.com/docs/sdk/features/data-saving-mode</a>
+   *
+   * @return a builder for configuring the file data initializer
+   */
+  public static FileInitializerBuilder initializer() {
+    return new FileInitializerBuilder();
+  }
+
+  /**
+   * Creates a builder for an FDv2 Synchronizer that loads and watches file data.
+   * <p>
+   * A synchronizer loads file data and can watch for changes (if autoUpdate is enabled).
+   * This is used with the FDv2 data system for ongoing data synchronization.
+   * <p>
+   * This class is not stable, and not subject to any backwards compatibility guarantees or semantic versioning.
+   * It is in early access. If you want access to this feature please join the EAP.
+   * <a href="https://launchdarkly.com/docs/sdk/features/data-saving-mode">https://launchdarkly.com/docs/sdk/features/data-saving-mode</a>
+   *
+   * @return a builder for configuring the file data synchronizer
+   */
+  public static FileSynchronizerBuilder synchronizer() {
+    return new FileSynchronizerBuilder();
+  }
+
   private FileData() {}
+
+  /**
+   * Builder for creating an FDv2 {@link Initializer} that loads file data.
+   * <p>
+   * This class is not stable, and not subject to any backwards compatibility guarantees or semantic versioning.
+   * It is in early access. If you want access to this feature please join the EAP.
+   * <a href="https://launchdarkly.com/docs/sdk/features/data-saving-mode">https://launchdarkly.com/docs/sdk/features/data-saving-mode</a>
+   */
+  public static final class FileInitializerBuilder implements DataSourceBuilder<Initializer> {
+    private final FileDataSourceBuilder delegate = new FileDataSourceBuilder();
+
+    FileInitializerBuilder() {
+      delegate.shouldPersist(false);
+    }
+
+    /**
+     * Adds any number of source files for loading flag data, specifying each file path as a string.
+     *
+     * @param filePaths path(s) to the source file(s); may be absolute or relative to the current working directory
+     * @return the same builder
+     * @throws InvalidPathException if one of the parameters is not a valid file path
+     * @see FileDataSourceBuilder#filePaths(String...)
+     */
+    public FileInitializerBuilder filePaths(String... filePaths) throws InvalidPathException {
+      delegate.filePaths(filePaths);
+      return this;
+    }
+
+    /**
+     * Adds any number of source files for loading flag data, specifying each file path as a Path.
+     *
+     * @param filePaths path(s) to the source file(s); may be absolute or relative to the current working directory
+     * @return the same builder
+     * @see FileDataSourceBuilder#filePaths(Path...)
+     */
+    public FileInitializerBuilder filePaths(Path... filePaths) {
+      delegate.filePaths(filePaths);
+      return this;
+    }
+
+    /**
+     * Adds any number of classpath resources for loading flag data.
+     *
+     * @param resourceLocations resource location(s) in the format used by {@code ClassLoader.getResource()}
+     * @return the same builder
+     * @see FileDataSourceBuilder#classpathResources(String...)
+     */
+    public FileInitializerBuilder classpathResources(String... resourceLocations) {
+      delegate.classpathResources(resourceLocations);
+      return this;
+    }
+
+    /**
+     * Specifies how to handle keys that are duplicated across files.
+     *
+     * @param duplicateKeysHandling specifies how to handle duplicate keys
+     * @return the same builder
+     * @see FileDataSourceBuilder#duplicateKeysHandling(DuplicateKeysHandling)
+     */
+    public FileInitializerBuilder duplicateKeysHandling(DuplicateKeysHandling duplicateKeysHandling) {
+      delegate.duplicateKeysHandling(duplicateKeysHandling);
+      return this;
+    }
+
+    /**
+     * Configures whether file data should be persisted to persistent stores.
+     * <p>
+     * By default, file data is not persisted ({@code shouldPersist = false}).
+     * <p>
+     * Set this to {@code true} if you want the SDK to persist flag data to persistent stores.
+     * This isn't the recommended configuration but may be useful for testing scenarios.
+     * <p>
+     * Example:
+     * <pre><code>
+     *     FileData fd = FileData.initializer()
+     *         .filePaths("./testData/flags.json")
+     *         .shouldPersist(true);
+     * </code></pre>
+     *
+     * @param shouldPersist {@code true} if file data should be persisted to persistent stores, false otherwise
+     * @return the same {@code FileInitializerBuilder} instance
+     */
+    public FileInitializerBuilder shouldPersist(boolean shouldPersist) {
+      delegate.shouldPersist(shouldPersist);
+      return this;
+    }
+
+
+    @Override
+    public Initializer build(DataSourceBuildInputs context) {
+      return delegate.buildInitializer(context);
+    }
+  }
+
+  /**
+   * Builder for creating an FDv2 {@link Synchronizer} that loads and watches file data.
+   * <p>
+   * This class is not stable, and not subject to any backwards compatibility guarantees or semantic versioning.
+   * It is in early access. If you want access to this feature please join the EAP.
+   * <a href="https://launchdarkly.com/docs/sdk/features/data-saving-mode">https://launchdarkly.com/docs/sdk/features/data-saving-mode</a>
+   */
+  public static final class FileSynchronizerBuilder implements DataSourceBuilder<Synchronizer> {
+    private final FileDataSourceBuilder delegate = new FileDataSourceBuilder();
+
+    FileSynchronizerBuilder() {
+      delegate.shouldPersist(false);
+    }
+
+    /**
+     * Configures whether file data should be persisted to persistent stores.
+     * <p>
+     * By default, file data is not persisted ({@code shouldPersist = false}).
+     * <p>
+     * Set this to {@code true} if you want the SDK to persist flag data to persistent stores.
+     * This isn't the recommended configuration but may be useful for testing scenarios.
+     * <p>
+     * Example:
+     * <pre><code>
+     *     FileData fd = FileData.synchronizer()
+     *         .filePaths("./testData/flags.json")
+     *         .shouldPersist(true);
+     * </code></pre>
+     *
+     * @param shouldPersist {@code true} if file data should be persisted to persistent stores, false otherwise
+     * @return the same {@code FileSynchronizerBuilder} instance
+     */
+    public FileSynchronizerBuilder shouldPersist(boolean shouldPersist) {
+      delegate.shouldPersist(shouldPersist);
+      return this;
+    }
+
+    /**
+     * Adds any number of source files for loading flag data, specifying each file path as a string.
+     *
+     * @param filePaths path(s) to the source file(s); may be absolute or relative to the current working directory
+     * @return the same builder
+     * @throws InvalidPathException if one of the parameters is not a valid file path
+     * @see FileDataSourceBuilder#filePaths(String...)
+     */
+    public FileSynchronizerBuilder filePaths(String... filePaths) throws InvalidPathException {
+      delegate.filePaths(filePaths);
+      return this;
+    }
+
+    /**
+     * Adds any number of source files for loading flag data, specifying each file path as a Path.
+     *
+     * @param filePaths path(s) to the source file(s); may be absolute or relative to the current working directory
+     * @return the same builder
+     * @see FileDataSourceBuilder#filePaths(Path...)
+     */
+    public FileSynchronizerBuilder filePaths(Path... filePaths) {
+      delegate.filePaths(filePaths);
+      return this;
+    }
+
+    /**
+     * Adds any number of classpath resources for loading flag data.
+     *
+     * @param resourceLocations resource location(s) in the format used by {@code ClassLoader.getResource()}
+     * @return the same builder
+     * @see FileDataSourceBuilder#classpathResources(String...)
+     */
+    public FileSynchronizerBuilder classpathResources(String... resourceLocations) {
+      delegate.classpathResources(resourceLocations);
+      return this;
+    }
+
+    /**
+     * Specifies whether the data source should watch for changes to the source file(s) and reload flags
+     * whenever there is a change.
+     *
+     * @param autoUpdate true if flags should be reloaded whenever a source file changes
+     * @return the same builder
+     * @see FileDataSourceBuilder#autoUpdate(boolean)
+     */
+    public FileSynchronizerBuilder autoUpdate(boolean autoUpdate) {
+      delegate.autoUpdate(autoUpdate);
+      return this;
+    }
+
+    /**
+     * Specifies how to handle keys that are duplicated across files.
+     *
+     * @param duplicateKeysHandling specifies how to handle duplicate keys
+     * @return the same builder
+     * @see FileDataSourceBuilder#duplicateKeysHandling(DuplicateKeysHandling)
+     */
+    public FileSynchronizerBuilder duplicateKeysHandling(DuplicateKeysHandling duplicateKeysHandling) {
+      delegate.duplicateKeysHandling(duplicateKeysHandling);
+      return this;
+    }
+
+    @Override
+    public Synchronizer build(DataSourceBuildInputs context) {
+      return delegate.buildSynchronizer(context);
+    }
+  }
 }

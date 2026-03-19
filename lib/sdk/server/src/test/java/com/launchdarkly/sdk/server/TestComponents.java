@@ -24,6 +24,8 @@ import com.launchdarkly.sdk.server.subsystems.ClientContext;
 import com.launchdarkly.sdk.server.subsystems.ComponentConfigurer;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
+import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSinkV2;
+import com.launchdarkly.sdk.fdv2.ChangeSet;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
@@ -33,6 +35,7 @@ import com.launchdarkly.sdk.server.subsystems.EventProcessor;
 import com.launchdarkly.sdk.server.subsystems.HttpConfiguration;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -102,7 +105,7 @@ public class TestComponents {
 
   public static DataStore initedDataStore() {
     DataStore store = new InMemoryDataStore();
-    store.init(new FullDataSet<ItemDescriptor>(null));
+    store.init(new FullDataSet<ItemDescriptor>(null, true));
     return store;
   }
 
@@ -183,7 +186,7 @@ public class TestComponents {
     }          
   };
   
-  public static class MockDataSourceUpdates implements DataSourceUpdateSink {
+  public static class MockDataSourceUpdates implements DataSourceUpdateSink, DataSourceUpdateSinkV2 {
     public static class UpsertParams {
       public final DataKind kind;
       public final String key;
@@ -204,6 +207,7 @@ public class TestComponents {
       statusBroadcaster;
     public final BlockingQueue<FullDataSet<ItemDescriptor>> receivedInits = new LinkedBlockingQueue<>();
     public final BlockingQueue<UpsertParams> receivedUpserts = new LinkedBlockingQueue<>();
+    public final BlockingQueue<ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>>> receivedApplies = new LinkedBlockingQueue<>();
     
     public MockDataSourceUpdates(DataStore store, DataStoreStatusProvider dataStoreStatusProvider) {
       this.dataStoreStatusProvider = dataStoreStatusProvider;
@@ -242,6 +246,13 @@ public class TestComponents {
     @Override
     public void updateStatus(State newState, ErrorInfo newError) {
       wrappedInstance.updateStatus(newState, newError);
+    }
+    
+    @Override
+    public boolean apply(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet) {
+      boolean result = wrappedInstance.apply(changeSet);
+      receivedApplies.add(changeSet);
+      return result;
     }
     
     public DataSourceStatusProvider.Status getLastStatus() {

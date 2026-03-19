@@ -23,10 +23,10 @@ This assumes that you have already installed the LaunchDarkly Java SDK.
         <dependency>
           <groupId>redis.clients</groupId>
           <artifactId>jedis</artifactId>
-          <version>2.9.0</version>
+          <version>7.1.0</version>
         </dependency>
 
-    This library is compatible with Jedis 2.x versions greater than or equal to 2.9.0, and also with Jedis 3.x.
+    This library uses Jedis 7.1.0 by default and requires Jedis 3.6.0 or later for username/password (ACL) authentication support.
 
 3. Import the LaunchDarkly package and the package for this library:
 
@@ -44,6 +44,44 @@ This assumes that you have already installed the LaunchDarkly Java SDK.
             .build();
 
 By default, the store will try to connect to a local Redis instance on port 6379.
+
+## Authentication
+
+### Password-only authentication (legacy)
+
+For Redis servers using simple password authentication:
+
+        LDConfig config = new LDConfig.Builder()
+            .dataStore(
+                Components.persistentDataStore(
+                    Redis.dataStore().password("my-redis-password")
+                )
+            )
+            .build();
+
+Or include it in the URI:
+
+        Redis.dataStore().url("redis://:my-redis-password@my-redis-host:6379")
+
+### Username/password authentication (Redis 6.0+ ACL)
+
+For Redis 6.0+ servers using ACL with username and password:
+
+        LDConfig config = new LDConfig.Builder()
+            .dataStore(
+                Components.persistentDataStore(
+                    Redis.dataStore()
+                        .username("my-username")
+                        .password("my-password")
+                )
+            )
+            .build();
+
+Or include both in the URI:
+
+        Redis.dataStore().url("redis://my-username:my-password@my-redis-host:6379")
+
+**Note:** Username/password authentication requires Jedis 3.6.0 or later.
 
 ## Caching behavior
 

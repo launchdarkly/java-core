@@ -1,6 +1,7 @@
 package com.launchdarkly.sdk.server.subsystems;
 
 import com.google.common.collect.ImmutableList;
+import com.launchdarkly.sdk.fdv2.Selector;
 
 import java.util.Map;
 import java.util.Objects;
@@ -261,6 +262,7 @@ public abstract class DataStoreTypes {
    */
   public static final class FullDataSet<TDescriptor> {
     private final Iterable<Map.Entry<DataKind, KeyedItems<TDescriptor>>> data;
+    private final boolean shouldPersist;
     
     /**
      * Returns the wrapped data set.
@@ -272,22 +274,51 @@ public abstract class DataStoreTypes {
     }
     
     /**
-     * Constructs a new instance.
+     * Returns whether this data should be persisted to persistent stores.
+     * <p>
+     * If true, indicates that the data should be propagated to any connected
+     * persistent stores. If false, indicates that the data should not be persisted (e.g., data from
+     * an untrusted source like a file cache).
+     * 
+     * @return true if the data should be persisted, false otherwise
+     */
+    public boolean shouldPersist() {
+      return shouldPersist;
+    }
+
+    /**
+     * Constructs a new instance.  Will default to shouldPersist = true and can be stored in a persistent store.
      * 
      * @param data the data set
      */
     public FullDataSet(Iterable<Map.Entry<DataKind, KeyedItems<TDescriptor>>> data) {
       this.data = data == null ? ImmutableList.of(): data;
+      this.shouldPersist = true; // default to true if not specified for backwards compatibility
+    }
+    
+    /**
+     * Constructs a new instance.
+     * 
+     * @param data the data set
+     * @param shouldPersist true if the data should be persisted to persistent stores, false otherwise
+     */
+    public FullDataSet(Iterable<Map.Entry<DataKind, KeyedItems<TDescriptor>>> data, boolean shouldPersist) {
+      this.data = data == null ? ImmutableList.of(): data;
+      this.shouldPersist = shouldPersist;
     }
     
     @Override
     public boolean equals(Object o) {
-      return o instanceof FullDataSet<?> && data.equals(((FullDataSet<?>)o).data);
+      if (o instanceof FullDataSet<?>) {
+        FullDataSet<?> other = (FullDataSet<?>)o;
+        return data.equals(other.data) && shouldPersist == other.shouldPersist;
+      }
+      return false;
     }
     
     @Override
     public int hashCode() {
-      return data.hashCode();
+      return Objects.hash(data, shouldPersist);
     }
   }
   
@@ -328,4 +359,5 @@ public abstract class DataStoreTypes {
       return items.hashCode();
     }
   }
+
 }

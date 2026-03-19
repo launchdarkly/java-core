@@ -27,6 +27,7 @@ import static com.launchdarkly.sdk.server.TestUtil.jsonReaderFrom;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.nullValue;
+import static org.junit.Assert.assertTrue;
 
 public class StreamProcessorEventsTest {
   
@@ -44,11 +45,13 @@ public class StreamProcessorEventsTest {
     PutData validResult = parsePutData(jsonReaderFrom(validInput));
     assertThat(validResult.path, equalTo("/"));
     assertDataSetEquals(expectedAllData, validResult.data);
-    
+    assertTrue("Streaming put data should have shouldPersist=true", validResult.data.shouldPersist());
+
     String inputWithoutPath = "{\"data\":" + allDataJson + "}";
     PutData resultWithoutPath = parsePutData(jsonReaderFrom(inputWithoutPath));
     assertThat(resultWithoutPath.path, nullValue());
-    assertDataSetEquals(expectedAllData, validResult.data);
+    assertDataSetEquals(expectedAllData, resultWithoutPath.data);
+    assertTrue("Streaming put data should have shouldPersist=true", resultWithoutPath.data.shouldPersist());
     
     String inputWithoutData = "{\"path\":\"/\"}";
     assertThrows(SerializationException.class,
