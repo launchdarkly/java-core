@@ -12,6 +12,7 @@ import javax.annotation.Nullable;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.gson.stream.JsonReader;
 import com.launchdarkly.logging.LDLogger;
+import com.launchdarkly.logging.LogValues;
 import com.launchdarkly.sdk.internal.http.HttpConsts;
 import com.launchdarkly.sdk.internal.http.HttpErrors.HttpErrorException;
 import com.launchdarkly.sdk.internal.http.HttpHelpers;
@@ -31,6 +32,22 @@ import okhttp3.Response;
  */
 final class DefaultFeatureRequestor implements FeatureRequestor {
   private static final long MAX_HTTP_CACHE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+
+  private static final String REDACTED = "REDACTED";
+
+  private static String sanitizedRequestStringForLogging(Request request) {
+    Request.Builder builder = request.newBuilder();
+    redactHeaderValueForLog(builder, request, "Authorization");
+    return builder.build().toString();
+  }
+
+  private static void redactHeaderValueForLog(Request.Builder builder, Request request, String name) {
+    if (request.headers(name).isEmpty()) {
+      return;
+    }
+    builder.removeHeader(name);
+    builder.addHeader(name, REDACTED);
+  }
 
   private final OkHttpClient httpClient;
   @VisibleForTesting
@@ -88,7 +105,7 @@ final class DefaultFeatureRequestor implements FeatureRequestor {
         .get()
         .build();
 
-    logger.debug("Making request: " + request);
+    logger.debug("Making request: {}", LogValues.defer(() -> sanitizedRequestStringForLogging(request)));
 
     try (Response response = httpClient.newCall(request).execute()) {
       boolean wasCached = response.networkResponse() == null || response.networkResponse().code() == 304;
