@@ -8,6 +8,9 @@ on:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
 
     outputs:
       package-sdk-common-released: ${{ steps.release.outputs['lib/shared/common--release_created'] }}
