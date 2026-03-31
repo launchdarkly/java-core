@@ -1,5 +1,7 @@
 package com.launchdarkly.sdk.server;
 
+import com.launchdarkly.logging.LDLogLevel;
+import com.launchdarkly.logging.LogCapture;
 import com.launchdarkly.sdk.internal.http.HttpErrors.HttpErrorException;
 import com.launchdarkly.sdk.internal.http.HttpProperties;
 import com.launchdarkly.sdk.server.DataModel.FeatureFlag;
@@ -27,7 +29,9 @@ import static com.launchdarkly.sdk.server.ModelBuilders.segmentBuilder;
 import static com.launchdarkly.sdk.server.TestComponents.clientContext;
 import static com.launchdarkly.sdk.server.TestUtil.assertDataSetEquals;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -242,6 +246,30 @@ public class DefaultFeatureRequestorTest extends BaseTest {
     HttpConfiguration httpConfig = clientContext(sdkKey, LDConfig.DEFAULT).getHttp();
     for (Map.Entry<String, String> kv: httpConfig.getDefaultHeaders()) {
       assertThat(req.getHeader(kv.getKey()), equalTo(kv.getValue()));
+    }
+  }
+
+  @Test
+  public void makingRequestDebugLogRedactsAuthorizationValue() throws Exception {
+    Handler resp = Handlers.bodyJson(allDataJson);
+    try (HttpServer server = HttpServer.start(resp)) {
+      try (DefaultFeatureRequestor r = makeRequestor(server)) {
+        r.getAllData(true);
+
+        String makingRequestLog = null;
+        for (LogCapture.Message m : logCapture.getMessages()) {
+          if (m.getLevel() == LDLogLevel.DEBUG && m.getText().contains("Making request:")) {
+            makingRequestLog = m.getText();
+            break;
+          }
+        }
+        assertNotNull("expected Making request debug log", makingRequestLog);
+        assertThat(makingRequestLog, containsString("REDACTED"));
+        assertThat(makingRequestLog, not(containsString(sdkKey)));
+
+        RequestInfo req = server.getRecorder().requireRequest();
+        assertEquals(sdkKey, req.getHeader("Authorization"));
+      }
     }
   }
 }
