@@ -17,6 +17,11 @@ class PollingInitializerImpl extends PollingBase implements Initializer {
     }
 
     @Override
+    public String name() {
+        return "PollingInitializer(FDv2)";
+    }
+
+    @Override
     public CompletableFuture<FDv2SourceResult> run() {
         CompletableFuture<FDv2SourceResult> pollResult = poll(selectorSource.getSelector(), true);
         return CompletableFuture.anyOf(shutdownFuture, pollResult)

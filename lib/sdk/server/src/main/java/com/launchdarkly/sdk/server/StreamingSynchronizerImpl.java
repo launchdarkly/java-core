@@ -94,6 +94,11 @@ class StreamingSynchronizerImpl implements Synchronizer {
         // The stream will lazily start when `next` is called.
     }
 
+    @Override
+    public String name() {
+        return "StreamingSynchronizer(FDv2)";
+    }
+
     private void startStream() {
         Headers headers = httpProperties.toHeadersBuilder()
                 .add("Accept", "text/event-stream")

@@ -62,6 +62,11 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
     }
 
     @Override
+    public String name() {
+        return "AdaptedSynchronizer(FDv1)";
+    }
+
+    @Override
     public CompletableFuture<FDv2SourceResult> next() {
         synchronized (startLock) {
             if (!started && !closed) {

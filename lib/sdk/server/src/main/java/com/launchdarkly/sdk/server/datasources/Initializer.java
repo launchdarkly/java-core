@@ -51,4 +51,16 @@ public interface Initializer extends Closeable {
      * @return The result of the initializer.
      */
     CompletableFuture<FDv2SourceResult> run();
+
+    /**
+     * Human-readable name for logging and diagnostics. Do not use this for influencing code behavior.
+     * <p>
+     * Implementations may override; the default uses the runtime class simple name.
+     *
+     * @return the name
+     */
+    default String name() {
+        String simple = getClass().getSimpleName();
+        return simple.isEmpty() ? getClass().getName() : simple;
+    }
 }

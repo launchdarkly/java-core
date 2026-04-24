@@ -34,6 +34,11 @@ final class FileInitializer implements Initializer {
     }
 
     @Override
+    public String name() {
+        return "FileInitializer(V2)";
+    }
+
+    @Override
     public CompletableFuture<FDv2SourceResult> run() {
         return synchronizer.next().thenApply(result -> {
             // Convert INTERRUPTED to TERMINAL_ERROR for initializer semantics

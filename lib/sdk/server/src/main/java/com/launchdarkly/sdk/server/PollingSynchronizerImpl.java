@@ -36,6 +36,11 @@ class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
         }
     }
 
+    @Override
+    public String name() {
+        return "PollingSynchronizer(FDv2)";
+    }
+
     private void doPoll() {
         try {
             FDv2SourceResult res = poll(selectorSource.getSelector(), false).get();

@@ -295,6 +295,11 @@ public final class TestDataV2 implements DataSourceBuilder<Synchronizer> {
 
     private final AtomicBoolean initialSent = new AtomicBoolean(false);
 
+    @Override
+    public String name() {
+      return "TestDataV2";
+    }
+
     void put(FDv2SourceResult result, CompletableFuture<Void> completion) {
       resultQueue.put(result);
       try {
