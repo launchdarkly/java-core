@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.13.4](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.13.3...launchdarkly-java-server-sdk-7.13.4) (2026-04-24)
+
+
+### Bug Fixes
+
+* improves FDv2 DataSource logging ([da378c3](https://github.com/launchdarkly/java-core/commit/da378c3b488b6ea3ed76ebe3c447934427158bc2))
+
 ## [7.13.3](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.13.2...launchdarkly-java-server-sdk-7.13.3) (2026-04-24)
 
 
