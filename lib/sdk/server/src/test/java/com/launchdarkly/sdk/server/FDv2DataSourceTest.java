@@ -2783,7 +2783,6 @@ public class FDv2DataSourceTest extends BaseTest {
             ),
             false
         ));
-        q.put(FDv2SourceResult.changeSet(makeChangeSet(true), false));
         q.put(FDv2SourceResult.shutdown());
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             () -> new MockQueuedSynchronizer(q, "primary-sync")

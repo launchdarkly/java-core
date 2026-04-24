@@ -63,7 +63,7 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
 
     @Override
     public String name() {
-        return "AdaptedSynchronizer(FDv1)";
+        return "AdaptedSynchronizer(V1->V2)";
     }
 
     @Override

@@ -38,7 +38,7 @@ class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
 
     @Override
     public String name() {
-        return "PollingSynchronizer(FDv2)";
+        return "PollingSynchronizer(V2)";
     }
 
     private void doPoll() {

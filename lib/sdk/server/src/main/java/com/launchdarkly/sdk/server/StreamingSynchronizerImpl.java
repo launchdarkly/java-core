@@ -96,7 +96,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
 
     @Override
     public String name() {
-        return "StreamingSynchronizer(FDv2)";
+        return "StreamingSynchronizer(V2)";
     }
 
     private void startStream() {

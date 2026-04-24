@@ -18,7 +18,7 @@ class PollingInitializerImpl extends PollingBase implements Initializer {
 
     @Override
     public String name() {
-        return "PollingInitializer(FDv2)";
+        return "PollingInitializer(V2)";
     }
 
     @Override

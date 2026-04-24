@@ -297,7 +297,7 @@ public final class TestDataV2 implements DataSourceBuilder<Synchronizer> {
 
     @Override
     public String name() {
-      return "TestDataV2";
+      return "TestData(V2)";
     }
 
     void put(FDv2SourceResult result, CompletableFuture<Void> completion) {
