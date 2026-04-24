@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.13.3](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.13.2...launchdarkly-java-server-sdk-7.13.3) (2026-04-24)
+
+
+### Bug Fixes
+
+* update Maven POM URLs from archived repos to java-core ([ccb03da](https://github.com/launchdarkly/java-core/commit/ccb03da30694ef0558a07bd06e873c6ee5806455))
+
 ## [7.13.2](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.13.1...launchdarkly-java-server-sdk-7.13.2) (2026-03-31)
 
 
