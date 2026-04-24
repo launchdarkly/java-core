@@ -51,7 +51,7 @@ class FDv2DataSource implements DataSource {
     private volatile boolean closed = false;
 
     /**
-     * Avoid duplicate orchestration logs for the same synchronizer and {@link SourceSignal} (DATASYSTEM 1.6.6).
+     * Avoid duplicate orchestration logs for the same synchronizer and {@link SourceSignal}.
      */
     private String lastLoggedSynchronizerDedupeName;
 
@@ -315,7 +315,7 @@ class FDv2DataSource implements DataSource {
 
                                 switch (result.getResultType()) {
                                     case CHANGE_SET:
-                                        // A data update breaks the "in a row" streak for status deduplication (DATASYSTEM 1.6.6).
+                                        // A data update breaks the "in a row" streak for status deduplication.
                                         resetSynchronizerStatusDedupe();
                                         dataSourceUpdates.apply(result.getChangeSet());
                                         dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
