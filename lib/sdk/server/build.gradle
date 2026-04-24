@@ -546,7 +546,7 @@ idea {
 def pomConfig = {
     name 'LaunchDarkly SDK for Java'
     packaging 'jar'
-    url 'https://github.com/launchdarkly/java-server-sdk'
+    url 'https://github.com/launchdarkly/java-core'
 
     licenses {
         license {
@@ -563,9 +563,9 @@ def pomConfig = {
     }
 
     scm {
-        connection 'scm:git:git://github.com/launchdarkly/java-server-sdk.git'
-        developerConnection 'scm:git:ssh:git@github.com:launchdarkly/java-server-sdk.git'
-        url 'https://github.com/launchdarkly/java-server-sdk'
+        connection 'scm:git:git://github.com/launchdarkly/java-core.git'
+        developerConnection 'scm:git:ssh:git@github.com:launchdarkly/java-core.git'
+        url 'https://github.com/launchdarkly/java-core'
     }
 }
 
