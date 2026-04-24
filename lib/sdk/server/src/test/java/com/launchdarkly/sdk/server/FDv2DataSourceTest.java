@@ -1,7 +1,9 @@
 package com.launchdarkly.sdk.server;
 
 import com.google.common.collect.ImmutableList;
+import com.launchdarkly.logging.LDLogLevel;
 import com.launchdarkly.logging.LDLogger;
+import com.launchdarkly.logging.LogCapture;
 import com.launchdarkly.logging.Logs;
 import com.launchdarkly.sdk.internal.collections.IterableAsyncQueue;
 import com.launchdarkly.sdk.fdv2.Selector;
@@ -2677,6 +2679,198 @@ public class FDv2DataSourceTest extends BaseTest {
         assertNull("FDv1 fallback should only be called once", secondCall);
     }
 
+    @Test
+    public void orchestrationLogging_warnsWhenNoInitializersOrSynchronizersConfigured() throws Exception {
+        executor = Executors.newScheduledThreadPool(1);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        FDv2DataSource dataSource = new FDv2DataSource(
+            ImmutableList.of(),
+            ImmutableList.of(),
+            null,
+            sink,
+            Thread.NORM_PRIORITY,
+            testLogger,
+            executor,
+            120,
+            300
+        );
+        resourcesToClose.add(dataSource);
+        dataSource.start().get(2, TimeUnit.SECONDS);
+        assertTrue(
+            logTextContains(logCapture, LDLogLevel.WARN, "no initializers or synchronizers configured")
+        );
+    }
+
+    @Test
+    public void orchestrationLogging_logsInitializerStartSuccessAndErrorOnException() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        CompletableFuture<FDv2SourceResult> first = new CompletableFuture<>();
+        first.completeExceptionally(new RuntimeException("first-init-failure"));
+        CompletableFuture<FDv2SourceResult> second = CompletableFuture.completedFuture(
+            FDv2SourceResult.changeSet(makeChangeSet(true), false)
+        );
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
+            () -> new MockInitializer(first, "first-init"),
+            () -> new MockInitializer(second, "second-init")
+        );
+        FDv2DataSource dataSource = new FDv2DataSource(
+            initializers,
+            ImmutableList.of(),
+            null,
+            sink,
+            Thread.NORM_PRIORITY,
+            testLogger,
+            executor,
+            120,
+            300
+        );
+        resourcesToClose.add(dataSource);
+        dataSource.start().get(2, TimeUnit.SECONDS);
+        assertTrue(logTextContains(logCapture, LDLogLevel.INFO, "Initializer 'first-init' is starting."));
+        assertTrue(logTextContains(logCapture, LDLogLevel.ERROR, "Error running initializer 'first-init':"));
+        assertTrue(logTextContains(logCapture, LDLogLevel.INFO, "Initializer 'second-init' is starting."));
+        assertTrue(logTextContains(logCapture, LDLogLevel.INFO, "Initialized via 'second-init'."));
+    }
+
+    @Test
+    public void orchestrationLogging_logsInitializerFailedOnStatusResult() throws Exception {
+        executor = Executors.newScheduledThreadPool(1);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        CompletableFuture<FDv2SourceResult> initFuture = CompletableFuture.completedFuture(
+            FDv2SourceResult.interrupted(
+                new DataSourceStatusProvider.ErrorInfo(
+                    DataSourceStatusProvider.ErrorKind.NETWORK_ERROR,
+                    0,
+                    "bootstrap read failed",
+                    Instant.now()
+                ),
+                false
+            )
+        );
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
+            () -> new MockInitializer(initFuture, "file-like-init")
+        );
+        FDv2DataSource dataSource = new FDv2DataSource(
+            initializers,
+            ImmutableList.of(),
+            null,
+            sink,
+            Thread.NORM_PRIORITY,
+            testLogger,
+            executor,
+            120,
+            300
+        );
+        resourcesToClose.add(dataSource);
+        dataSource.start().get(2, TimeUnit.SECONDS);
+        assertTrue(logTextContains(logCapture, LDLogLevel.INFO, "Initializer 'file-like-init' is starting."));
+        assertTrue(logTextContains(logCapture, LDLogLevel.WARN, "Initializer 'file-like-init' failed:"));
+        assertTrue(logTextContains(logCapture, LDLogLevel.WARN, "bootstrap read failed"));
+    }
+
+    @Test
+    public void orchestrationLogging_logsSynchronizerStartingStatusInterruptedAndShutdown() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        IterableAsyncQueue<FDv2SourceResult> q = new IterableAsyncQueue<>();
+        q.put(FDv2SourceResult.interrupted(
+            new DataSourceStatusProvider.ErrorInfo(
+                DataSourceStatusProvider.ErrorKind.NETWORK_ERROR,
+                0,
+                "temp outage",
+                Instant.now()
+            ),
+            false
+        ));
+        q.put(FDv2SourceResult.shutdown());
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> new MockQueuedSynchronizer(q, "primary-sync")
+        );
+        FDv2DataSource dataSource = new FDv2DataSource(
+            ImmutableList.of(),
+            synchronizers,
+            null,
+            sink,
+            Thread.NORM_PRIORITY,
+            testLogger,
+            executor,
+            120,
+            300
+        );
+        resourcesToClose.add(dataSource);
+        dataSource.start().get(2, TimeUnit.SECONDS);
+        assertTrue(logTextContains(logCapture, LDLogLevel.INFO, "Synchronizer 'primary-sync' is starting."));
+        assertTrue(logTextContains(logCapture, LDLogLevel.INFO, "Synchronizer 'primary-sync' reported status: INTERRUPTED."));
+        assertTrue(logTextContains(logCapture, LDLogLevel.INFO, "Synchronizer 'primary-sync' reported status: SHUTDOWN."));
+    }
+
+    @Test
+    public void orchestrationLogging_logsSynchronizerPermanentFailureAndNoMoreSynchronizers() throws Exception {
+        executor = Executors.newScheduledThreadPool(1);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        IterableAsyncQueue<FDv2SourceResult> q = new IterableAsyncQueue<>();
+        q.put(makeTerminalErrorResult());
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> new MockQueuedSynchronizer(q, "failing-sync")
+        );
+        FDv2DataSource dataSource = new FDv2DataSource(
+            ImmutableList.of(),
+            synchronizers,
+            null,
+            sink,
+            Thread.NORM_PRIORITY,
+            testLogger,
+            executor,
+            120,
+            300
+        );
+        resourcesToClose.add(dataSource);
+        dataSource.start().get(2, TimeUnit.SECONDS);
+        assertTrue(logTextContains(logCapture, LDLogLevel.INFO, "Synchronizer 'failing-sync' is starting."));
+        assertTrue(logTextContains(logCapture, LDLogLevel.INFO, "Synchronizer 'failing-sync' reported status: TERMINAL_ERROR."));
+        assertTrue(
+            logTextContains(
+                logCapture,
+                LDLogLevel.WARN,
+                "Synchronizer 'failing-sync' permanently failed and will not be used again until application restart."
+            )
+        );
+        assertTrue(logTextContains(logCapture, LDLogLevel.WARN, "No more synchronizers available."));
+    }
+
+    @Test
+    public void orchestrationLogging_logsErrorWhenSynchronizerNextThrows() throws Exception {
+        executor = Executors.newScheduledThreadPool(1);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        // Two tiers: the first throws on next() once; the second shuts down immediately so the outer loop
+        // does not spin forever re-building the same throwing factory (single-tier would never block).
+        IterableAsyncQueue<FDv2SourceResult> followUpQueue = new IterableAsyncQueue<>();
+        followUpQueue.put(FDv2SourceResult.shutdown());
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> new MockSynchronizer(() -> {
+                throw new RuntimeException("next-boom");
+            }, "throwing-sync"),
+            () -> new MockQueuedSynchronizer(followUpQueue, "followup-sync")
+        );
+        FDv2DataSource dataSource = new FDv2DataSource(
+            ImmutableList.of(),
+            synchronizers,
+            null,
+            sink,
+            Thread.NORM_PRIORITY,
+            testLogger,
+            executor,
+            120,
+            300
+        );
+        resourcesToClose.add(dataSource);
+        dataSource.start().get(2, TimeUnit.SECONDS);
+        assertTrue(logTextContains(logCapture, LDLogLevel.INFO, "Synchronizer 'throwing-sync' is starting."));
+        assertTrue(logTextContains(logCapture, LDLogLevel.ERROR, "Error running synchronizer 'throwing-sync':"));
+        assertTrue(logTextContains(logCapture, LDLogLevel.ERROR, "next-boom"));
+    }
+
     // ============================================================================
     // Mock Implementations
     // ============================================================================
@@ -2760,15 +2954,27 @@ public class FDv2DataSourceTest extends BaseTest {
     private static class MockInitializer implements Initializer {
         private final CompletableFuture<FDv2SourceResult> result;
         private final ThrowingSupplier<FDv2SourceResult> supplier;
+        private final String displayName;
 
         public MockInitializer(CompletableFuture<FDv2SourceResult> result) {
+            this(result, null);
+        }
+
+        public MockInitializer(CompletableFuture<FDv2SourceResult> result, String displayName) {
             this.result = result;
             this.supplier = null;
+            this.displayName = displayName;
         }
 
         public MockInitializer(ThrowingSupplier<FDv2SourceResult> supplier) {
             this.result = null;
             this.supplier = supplier;
+            this.displayName = null;
+        }
+
+        @Override
+        public String name() {
+            return displayName != null ? displayName : "MockInitializer";
         }
 
         @Override
@@ -2794,17 +3000,33 @@ public class FDv2DataSourceTest extends BaseTest {
     private static class MockSynchronizer implements Synchronizer {
         private final CompletableFuture<FDv2SourceResult> result;
         private final ThrowingSupplier<FDv2SourceResult> supplier;
+        private final String displayName;
         private volatile boolean closed = false;
         private volatile boolean resultReturned = false;
 
         public MockSynchronizer(CompletableFuture<FDv2SourceResult> result) {
+            this(result, null);
+        }
+
+        public MockSynchronizer(CompletableFuture<FDv2SourceResult> result, String displayName) {
             this.result = result;
             this.supplier = null;
+            this.displayName = displayName;
         }
 
         public MockSynchronizer(ThrowingSupplier<FDv2SourceResult> supplier) {
+            this(supplier, null);
+        }
+
+        public MockSynchronizer(ThrowingSupplier<FDv2SourceResult> supplier, String displayName) {
             this.result = null;
             this.supplier = supplier;
+            this.displayName = displayName;
+        }
+
+        @Override
+        public String name() {
+            return displayName != null ? displayName : "MockSynchronizer";
         }
 
         @Override
@@ -2838,18 +3060,34 @@ public class FDv2DataSourceTest extends BaseTest {
 
     private static class MockQueuedSynchronizer implements Synchronizer {
         private final IterableAsyncQueue<FDv2SourceResult> results;
+        private final String displayName;
         private volatile boolean closed = false;
 
         public MockQueuedSynchronizer(BlockingQueue<FDv2SourceResult> results) {
+            this(results, null);
+        }
+
+        public MockQueuedSynchronizer(BlockingQueue<FDv2SourceResult> results, String displayName) {
             // Convert BlockingQueue to IterableAsyncQueue by draining it
             this.results = new IterableAsyncQueue<>();
+            this.displayName = displayName;
             java.util.ArrayList<FDv2SourceResult> temp = new java.util.ArrayList<>();
             results.drainTo(temp);
             temp.forEach(this.results::put);
         }
 
         public MockQueuedSynchronizer(IterableAsyncQueue<FDv2SourceResult> results) {
+            this(results, null);
+        }
+
+        public MockQueuedSynchronizer(IterableAsyncQueue<FDv2SourceResult> results, String displayName) {
             this.results = results;
+            this.displayName = displayName;
+        }
+
+        @Override
+        public String name() {
+            return displayName != null ? displayName : "MockQueuedSynchronizer";
         }
 
         public void addResult(FDv2SourceResult result) {
@@ -2871,6 +3109,15 @@ public class FDv2DataSourceTest extends BaseTest {
                 results.put(FDv2SourceResult.shutdown());
             }
         }
+    }
+
+    private static boolean logTextContains(LogCapture capture, LDLogLevel level, String substring) {
+        for (LogCapture.Message m : capture.getMessages()) {
+            if (m.getLevel() == level && m.getText() != null && m.getText().contains(substring)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @FunctionalInterface

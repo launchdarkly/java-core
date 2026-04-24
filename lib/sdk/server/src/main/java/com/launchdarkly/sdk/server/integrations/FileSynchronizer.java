@@ -62,6 +62,11 @@ final class FileSynchronizer extends FileDataSourceBase implements Synchronizer 
     }
 
     @Override
+    public String name() {
+        return "FileSynchronizer(V2)";
+    }
+
+    @Override
     public CompletableFuture<FDv2SourceResult> next() {
         if (!started.getAndSet(true)) {
             // Perform initial load
