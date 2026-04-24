@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK Redis integration will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [3.1.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-redis-store-3.1.0...launchdarkly-java-server-sdk-redis-store-3.1.1) (2026-04-24)
+
+
+### Bug Fixes
+
+* update Maven POM URLs from archived repos to java-core ([ccb03da](https://github.com/launchdarkly/java-core/commit/ccb03da30694ef0558a07bd06e873c6ee5806455))
+
 ## [3.1.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-redis-store-v3.0.1...launchdarkly-java-server-sdk-redis-store-3.1.0) (2026-01-27)
 
 
