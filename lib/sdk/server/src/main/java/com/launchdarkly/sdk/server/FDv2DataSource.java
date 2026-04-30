@@ -457,11 +457,11 @@ class FDv2DataSource implements DataSource {
                                         logger.info("Falling back to an FDv1 fallback synchronizer.");
                                         running = false;
                                     } else {
-                                        // Spec 1.6.3(4): when the directive is signalled but no FDv1
-                                        // fallback synchronizer is configured, halt the data system
-                                        // entirely. Block the current synchronizer so it cannot be
-                                        // selected again, surface OFF with the most recent error info
-                                        // (if any), and exit the synchronizer loop terminally.
+                                        // When the directive is signalled but no FDv1 fallback synchronizer
+                                        // is configured, halt the data system entirely. Block the current
+                                        // synchronizer so it cannot be selected again, surface OFF with the
+                                        // most recent error info (if any), and exit the synchronizer loop
+                                        // terminally.
                                         logger.warn(
                                             "Synchronizer '{}' requested FDv1 fallback, but no FDv1 fallback synchronizer is configured; halting the data system.",
                                             synchronizer.name()

@@ -2533,7 +2533,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
     // Synchronizer-phase analogue of the initializer halt path: when a synchronizer signals
     // FDv1 fallback but no FDv1 fallback synchronizer is configured, the data system must halt
-    // (transition to OFF, stop building further synchronizers) per Data System spec 1.6.3(4).
+    // (transition to OFF, stop building further synchronizers).
     @Test
     public void fdv1FallbackOnSynchronizerWithoutFDv1ConfiguredHaltsDataSystem() throws Exception {
         executor = Executors.newScheduledThreadPool(2);
