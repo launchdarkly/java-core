@@ -41,7 +41,8 @@ public class TestService {
     "service-endpoints",
     "strongly-typed",
     "tags",
-    "server-side-polling"
+    "server-side-polling",
+    "fdv1-fallback"
   };
 
   static final Gson gson = new GsonBuilder().serializeNulls().create();
