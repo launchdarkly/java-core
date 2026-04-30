@@ -167,11 +167,13 @@ class FDv2DataSource implements DataSource {
                 return;
             }
 
-            runSynchronizers();
+            boolean haltedByDirective = runSynchronizers();
 
-            // If we had synchronizers, and we ran out of them, and we aren't shutting down, then that was unexpected,
-            // and we will report it.
-            maybeReportUnexpectedExhaustion("All data source acquisition methods have been exhausted.");
+            if (!haltedByDirective) {
+                // If we had synchronizers, and we ran out of them, and we aren't shutting down, then that was unexpected,
+                // and we will report it.
+                maybeReportUnexpectedExhaustion("All data source acquisition methods have been exhausted.");
+            }
 
             // If we had initialized at some point, then the future will already be complete and this will be ignored.
             startFuture.complete(false);
@@ -329,7 +331,17 @@ class FDv2DataSource implements DataSource {
         return conditionFactories.stream().map(ConditionFactory::build).collect(Collectors.toList());
     }
 
-    private void runSynchronizers() {
+    /**
+     * Runs the configured synchronizers, falling back / recovering as conditions allow,
+     * until the list is exhausted, the data source is closed, or a server-directed FDv1
+     * fallback halts the data system.
+     *
+     * @return true when {@code runSynchronizers} halted in response to a server-directed
+     *         FDv1 fallback directive that could not be satisfied (no FDv1 fallback
+     *         synchronizer configured) -- the caller should NOT report exhaustion in
+     *         that case because OFF has already been published with a specific error.
+     */
+    private boolean runSynchronizers() {
         // When runSynchronizers exists, no matter how it exits, the synchronizerStateManager will be closed.
         try {
             Synchronizer synchronizer = sourceManager.getNextAvailableSynchronizerAndSetActive();
@@ -413,7 +425,7 @@ class FDv2DataSource implements DataSource {
                                                 );
                                                 // We should be overall shutting down.
                                                 logger.debug("Synchronizer shutdown.");
-                                                return;
+                                                return false;
                                             case TERMINAL_ERROR:
                                                 maybeLogSynchronizerStatusChange(
                                                     synchronizer.name(),
@@ -436,18 +448,33 @@ class FDv2DataSource implements DataSource {
                                         break;
                                 }
                                 // We have been requested to fall back to FDv1. We handle whatever message was associated,
-                                // close the synchronizer, and then fallback.
-                                // Only trigger fallback if we're not already running the FDv1 fallback synchronizer.
-                                if (
-                                    result.isFdv1Fallback() &&
-                                        sourceManager.hasFDv1Fallback() &&
-                                        // This shouldn't happen in practice, an FDv1 source shouldn't request fallback
-                                        // to FDv1. But if it does, then we will discard its request.
-                                        !sourceManager.isCurrentSynchronizerFDv1Fallback()
-                                ) {
-                                    sourceManager.fdv1Fallback();
-                                    logger.info("Falling back to an FDv1 fallback synchronizer.");
-                                    running = false;
+                                // close the synchronizer, and then fallback. An FDv1 fallback synchronizer
+                                // requesting another fallback is ignored (shouldn't happen in practice).
+                                if (result.isFdv1Fallback()
+                                    && !sourceManager.isCurrentSynchronizerFDv1Fallback()) {
+                                    if (sourceManager.hasFDv1Fallback()) {
+                                        sourceManager.fdv1Fallback();
+                                        logger.info("Falling back to an FDv1 fallback synchronizer.");
+                                        running = false;
+                                    } else {
+                                        // Spec 1.6.3(4): when the directive is signalled but no FDv1
+                                        // fallback synchronizer is configured, halt the data system
+                                        // entirely. Block the current synchronizer so it cannot be
+                                        // selected again, surface OFF with the most recent error info
+                                        // (if any), and exit the synchronizer loop terminally.
+                                        logger.warn(
+                                            "Synchronizer '{}' requested FDv1 fallback, but no FDv1 fallback synchronizer is configured; halting the data system.",
+                                            synchronizer.name()
+                                        );
+                                        sourceManager.blockCurrentSynchronizer();
+                                        DataSourceStatusProvider.ErrorInfo offError =
+                                            result.getStatus() != null ? result.getStatus().getErrorInfo() : null;
+                                        dataSourceUpdates.updateStatus(
+                                            DataSourceStatusProvider.State.OFF,
+                                            offError);
+                                        startFuture.complete(false);
+                                        return true;
+                                    }
                                 }
                             }
                         }
@@ -478,6 +505,7 @@ class FDv2DataSource implements DataSource {
         } finally {
             sourceManager.close();
         }
+        return false;
     }
 
     private static String detailForError(DataSourceStatusProvider.ErrorInfo errorInfo) {

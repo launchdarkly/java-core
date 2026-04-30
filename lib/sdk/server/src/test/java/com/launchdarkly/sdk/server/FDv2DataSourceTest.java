@@ -2531,27 +2531,42 @@ public class FDv2DataSourceTest extends BaseTest {
         assertTrue("Should have at least 2 changesets", sink.getApplyCount() >= 2);
     }
 
+    // Synchronizer-phase analogue of the initializer halt path: when a synchronizer signals
+    // FDv1 fallback but no FDv1 fallback synchronizer is configured, the data system must halt
+    // (transition to OFF, stop building further synchronizers) per Data System spec 1.6.3(4).
     @Test
-    public void fdv1FallbackWithoutConfiguredFallbackIgnoresFlag() throws Exception {
+    public void fdv1FallbackOnSynchronizerWithoutFDv1ConfiguredHaltsDataSystem() throws Exception {
         executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
-        // Synchronizer sends result with FDv1 fallback flag
-        BlockingQueue<FDv2SourceResult> fdv2SyncResults = new LinkedBlockingQueue<>();
-        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), true)); // FDv1 fallback flag
+        // First synchronizer sends a normal payload, then a payload with the directive.
+        BlockingQueue<FDv2SourceResult> firstSyncResults = new LinkedBlockingQueue<>();
+        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), true));
 
+        AtomicInteger firstSyncBuildCount = new AtomicInteger(0);
+        AtomicBoolean secondSyncCalled = new AtomicBoolean(false);
+
+        // Two synchronizers configured; once the directive halts the data system, neither
+        // should be re-built. The second synchronizer in particular must never run.
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
-            () -> new MockQueuedSynchronizer(fdv2SyncResults)
+            () -> {
+                firstSyncBuildCount.incrementAndGet();
+                return new MockQueuedSynchronizer(firstSyncResults);
+            },
+            () -> {
+                secondSyncCalled.set(true);
+                return new MockQueuedSynchronizer(new LinkedBlockingQueue<>());
+            }
         );
 
-        // No FDv1 fallback configured (null)
+        // No FDv1 fallback configured.
         FDv2DataSource dataSource = new FDv2DataSource(
             initializers,
             synchronizers,
-            null, // No FDv1 fallback
+            null,
             sink,
             Thread.NORM_PRIORITY,
             logger,
@@ -2561,12 +2576,34 @@ public class FDv2DataSourceTest extends BaseTest {
         );
         resourcesToClose.add(dataSource);
 
-        Future<Void> startFuture = dataSource.start();
-        startFuture.get(2, TimeUnit.SECONDS);
+        dataSource.start().get(2, TimeUnit.SECONDS);
 
-        // Should receive both changesets even though fallback flag was set
+        // First payload is applied; the directive-bearing payload is also applied (the SDK
+        // surfaces the data) but no further synchronizers are dialled.
         sink.awaitApplyCount(2, 2, TimeUnit.SECONDS);
-        assertEquals(2, sink.getApplyCount());
+
+        // Status must end up OFF because the directive could not be satisfied.
+        // Poll briefly for the OFF state in case the final transition is observed slightly
+        // after the apply count reaches 2; this keeps the assertion deterministic without
+        // relying on real-time delays.
+        DataSourceStatusProvider.State finalState = null;
+        for (int i = 0; i < 20 && finalState != DataSourceStatusProvider.State.OFF; i++) {
+            DataSourceStatusProvider.State next = sink.awaitStatus(100, TimeUnit.MILLISECONDS);
+            if (next != null) {
+                finalState = next;
+            } else if (sink.getLastState() == DataSourceStatusProvider.State.OFF) {
+                finalState = DataSourceStatusProvider.State.OFF;
+            }
+        }
+        assertEquals("Status should be OFF after directive halts the data system",
+            DataSourceStatusProvider.State.OFF, sink.getLastState());
+
+        // The second synchronizer must never be built.
+        assertFalse("Subsequent synchronizers must not run after directive-induced halt",
+            secondSyncCalled.get());
+        // The first synchronizer should also not be re-built (we should stay halted).
+        assertEquals("First synchronizer should be built exactly once",
+            1, firstSyncBuildCount.get());
     }
 
     @Test
