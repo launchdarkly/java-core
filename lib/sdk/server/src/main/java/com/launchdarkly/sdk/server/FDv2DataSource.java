@@ -133,8 +133,26 @@ class FDv2DataSource implements DataSource {
                 return;
             }
 
+            InitializerOutcome initializerOutcome = InitializerOutcome.completed();
             if (sourceManager.hasInitializers()) {
-                runInitializers();
+                initializerOutcome = runInitializers();
+            }
+
+            // If an initializer signalled FDv1 fallback, switch to the FDv1 synchronizer
+            // (if configured) or transition to OFF. This takes precedence over the standard
+            // synchronizer chain -- the FDv2 synchronizers are not given a chance to run.
+            if (initializerOutcome.fallbackToFDv1) {
+                if (sourceManager.hasFDv1Fallback()) {
+                    logger.warn("Initializer requested fallback to FDv1; switching to FDv1 fallback synchronizer.");
+                    sourceManager.fdv1Fallback();
+                } else {
+                    logger.warn("Initializer requested fallback to FDv1, but no FDv1 fallback synchronizer is configured.");
+                    dataSourceUpdates.updateStatus(
+                        DataSourceStatusProvider.State.OFF,
+                        initializerOutcome.errorInfo);
+                    startFuture.complete(false);
+                    return;
+                }
             }
 
             if(!sourceManager.hasAvailableSynchronizers()) {
@@ -164,7 +182,18 @@ class FDv2DataSource implements DataSource {
         runThread.start();
     }
 
-    private void runInitializers() {
+    /**
+     * Runs the configured initializers in order until one succeeds, the list is exhausted,
+     * or one signals an FDv1 fallback directive. Returns an {@link InitializerOutcome}
+     * describing whether the caller should switch to the FDv1 fallback synchronizer.
+     * <p>
+     * If an initializer's result carries {@link FDv2SourceResult#isFdv1Fallback()}, any
+     * accompanying payload is applied first so evaluations can serve the server-provided
+     * data while the FDv1 synchronizer is brought up. When the directive accompanies an
+     * error result the underlying error is preserved on the returned outcome so the
+     * caller can surface it on a subsequent OFF status (when no fallback is configured).
+     */
+    private InitializerOutcome runInitializers() {
         boolean anyDataReceived = false;
         Initializer initializer = sourceManager.getNextInitializerAndSetActive();
         while (initializer != null) {
@@ -172,16 +201,20 @@ class FDv2DataSource implements DataSource {
             logger.info("Initializer '{}' is starting.", initializerName);
             try {
                 try (FDv2SourceResult result = initializer.run().get()) {
+                    DataSourceStatusProvider.ErrorInfo fallbackErrorInfo = null;
                     switch (result.getResultType()) {
                         case CHANGE_SET:
                             dataSourceUpdates.apply(result.getChangeSet());
                             anyDataReceived = true;
                             logger.info("Initialized via '{}'.", initializerName);
                             if (!result.getChangeSet().getSelector().isEmpty()) {
-                                // We received data with a selector, so we end the initialization process.
+                                // We received data with a selector, so initialization is complete.
                                 dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
                                 startFuture.complete(true);
-                                return;
+                                if (result.isFdv1Fallback()) {
+                                    return InitializerOutcome.fallbackToFDv1(null);
+                                }
+                                return InitializerOutcome.completed();
                             }
                             break;
                         case STATUS:
@@ -192,6 +225,7 @@ class FDv2DataSource implements DataSource {
                                     logger.warn("Initializer '{}' failed: {}",
                                         initializerName,
                                         detailForError(status.getErrorInfo()));
+                                    fallbackErrorInfo = status.getErrorInfo();
                                     // The data source updates handler will filter the state during initializing, but this
                                     // will make the error information available.
                                     dataSourceUpdates.updateStatus(
@@ -207,6 +241,19 @@ class FDv2DataSource implements DataSource {
                                     break;
                             }
                             break;
+                    }
+                    // FDv1 fallback may ride along on either a successful CHANGE_SET (with no
+                    // selector, so initialization is incomplete) or on a STATUS error result.
+                    // In either case, the SDK must halt the FDv2 chain immediately and switch
+                    // to the FDv1 fallback synchronizer.
+                    if (result.isFdv1Fallback()) {
+                        if (anyDataReceived) {
+                            // Treat data without a selector as enough to consider ourselves initialized
+                            // before handing off to the FDv1 synchronizer.
+                            dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
+                            startFuture.complete(true);
+                        }
+                        return InitializerOutcome.fallbackToFDv1(fallbackErrorInfo);
                     }
                 }
             } catch (ExecutionException | InterruptedException | CancellationException e) {
@@ -233,6 +280,29 @@ class FDv2DataSource implements DataSource {
         }
         // If no data was received, then it is possible initialization will complete from synchronizers, so we give
         // them an opportunity to run before reporting any issues.
+        return InitializerOutcome.completed();
+    }
+
+    /**
+     * Outcome of {@link #runInitializers()} relaying whether the SDK should perform a
+     * server-directed FDv1 fallback before the synchronizer phase begins.
+     */
+    private static final class InitializerOutcome {
+        final boolean fallbackToFDv1;
+        final DataSourceStatusProvider.ErrorInfo errorInfo;
+
+        private InitializerOutcome(boolean fallbackToFDv1, DataSourceStatusProvider.ErrorInfo errorInfo) {
+            this.fallbackToFDv1 = fallbackToFDv1;
+            this.errorInfo = errorInfo;
+        }
+
+        static InitializerOutcome completed() {
+            return new InitializerOutcome(false, null);
+        }
+
+        static InitializerOutcome fallbackToFDv1(DataSourceStatusProvider.ErrorInfo errorInfo) {
+            return new InitializerOutcome(true, errorInfo);
+        }
     }
 
     /**

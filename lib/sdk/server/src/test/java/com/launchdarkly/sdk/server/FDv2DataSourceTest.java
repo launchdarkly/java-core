@@ -2679,6 +2679,235 @@ public class FDv2DataSourceTest extends BaseTest {
         assertNull("FDv1 fallback should only be called once", secondCall);
     }
 
+    // ============================================================================
+    // FDv1 Fallback (Initializer Phase) Tests
+    // ============================================================================
+
+    // An initializer that returns a successful payload with the FDv1 fallback flag must
+    // (1) apply the payload, then (2) hand off directly to the FDv1 fallback synchronizer
+    // without giving any of the configured FDv2 synchronizers a chance to run.
+    @Test
+    public void fdv1FallbackOnInitializerSuccessAppliesPayloadAndSwitches() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+
+        // Initializer returns a payload with a selector AND the FDv1 fallback signal.
+        CompletableFuture<FDv2SourceResult> initFuture = CompletableFuture.completedFuture(
+            FDv2SourceResult.changeSet(makeChangeSet(true), true)
+        );
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
+            () -> new MockInitializer(initFuture)
+        );
+
+        AtomicBoolean fdv2SyncCalled = new AtomicBoolean(false);
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                fdv2SyncCalled.set(true);
+                return new MockQueuedSynchronizer(new LinkedBlockingQueue<>());
+            }
+        );
+
+        BlockingQueue<FDv2SourceResult> fdv1SyncResults = new LinkedBlockingQueue<>();
+        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+
+        BlockingQueue<Boolean> fdv1CalledQueue = new LinkedBlockingQueue<>();
+        FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
+            fdv1CalledQueue.offer(true);
+            return new MockQueuedSynchronizer(fdv1SyncResults);
+        };
+
+        FDv2DataSource dataSource = new FDv2DataSource(
+            initializers,
+            synchronizers,
+            fdv1Fallback,
+            sink,
+            Thread.NORM_PRIORITY,
+            logger,
+            executor,
+            120,
+            300
+        );
+        resourcesToClose.add(dataSource);
+
+        dataSource.start().get(2, TimeUnit.SECONDS);
+
+        // Initializer payload was applied.
+        sink.awaitApplyCount(1, 2, TimeUnit.SECONDS);
+        assertTrue("Initializer payload should be applied before fallback", sink.getApplyCount() >= 1);
+
+        // FDv1 fallback was activated.
+        Boolean fdv1Called = fdv1CalledQueue.poll(2, TimeUnit.SECONDS);
+        assertNotNull("FDv1 fallback should be activated by initializer-phase directive", fdv1Called);
+
+        // FDv2 synchronizer was never asked to run.
+        assertFalse("FDv2 synchronizers must be skipped after initializer-phase fallback",
+            fdv2SyncCalled.get());
+    }
+
+    // An initializer that fails with the FDv1 fallback flag (e.g. 500 + header) must hand off
+    // to the FDv1 fallback synchronizer without trying FDv2 synchronizers.
+    @Test
+    public void fdv1FallbackOnInitializerErrorSwitchesToFDv1() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+
+        CompletableFuture<FDv2SourceResult> initFuture = CompletableFuture.completedFuture(
+            FDv2SourceResult.terminalError(
+                new DataSourceStatusProvider.ErrorInfo(
+                    DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE,
+                    500,
+                    "fallback requested",
+                    Instant.now()
+                ),
+                true
+            )
+        );
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
+            () -> new MockInitializer(initFuture)
+        );
+
+        AtomicBoolean fdv2SyncCalled = new AtomicBoolean(false);
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                fdv2SyncCalled.set(true);
+                return new MockQueuedSynchronizer(new LinkedBlockingQueue<>());
+            }
+        );
+
+        BlockingQueue<FDv2SourceResult> fdv1SyncResults = new LinkedBlockingQueue<>();
+        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+
+        BlockingQueue<Boolean> fdv1CalledQueue = new LinkedBlockingQueue<>();
+        FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
+            fdv1CalledQueue.offer(true);
+            return new MockQueuedSynchronizer(fdv1SyncResults);
+        };
+
+        FDv2DataSource dataSource = new FDv2DataSource(
+            initializers,
+            synchronizers,
+            fdv1Fallback,
+            sink,
+            Thread.NORM_PRIORITY,
+            logger,
+            executor,
+            120,
+            300
+        );
+        resourcesToClose.add(dataSource);
+
+        dataSource.start().get(2, TimeUnit.SECONDS);
+
+        Boolean fdv1Called = fdv1CalledQueue.poll(2, TimeUnit.SECONDS);
+        assertNotNull("FDv1 fallback should be activated even when initializer signals error",
+            fdv1Called);
+        assertFalse("FDv2 synchronizers must be skipped after initializer-phase fallback",
+            fdv2SyncCalled.get());
+    }
+
+    // When an initializer signals FDv1 fallback but no FDv1 synchronizer is configured, the
+    // SDK must transition the data source status to OFF -- not stay stuck at INITIALIZING --
+    // and surface the underlying initializer error so monitors can see why.
+    @Test
+    public void fdv1FallbackOnInitializerWithoutFDv1ConfiguredTransitionsToOff() throws Exception {
+        executor = Executors.newScheduledThreadPool(1);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+
+        DataSourceStatusProvider.ErrorInfo initError = new DataSourceStatusProvider.ErrorInfo(
+            DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE,
+            500,
+            "fallback requested without fallback configured",
+            Instant.now()
+        );
+        CompletableFuture<FDv2SourceResult> initFuture = CompletableFuture.completedFuture(
+            FDv2SourceResult.terminalError(initError, true)
+        );
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
+            () -> new MockInitializer(initFuture)
+        );
+
+        AtomicBoolean fdv2SyncCalled = new AtomicBoolean(false);
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                fdv2SyncCalled.set(true);
+                return new MockQueuedSynchronizer(new LinkedBlockingQueue<>());
+            }
+        );
+
+        // No FDv1 fallback configured.
+        FDv2DataSource dataSource = new FDv2DataSource(
+            initializers,
+            synchronizers,
+            null,
+            sink,
+            Thread.NORM_PRIORITY,
+            logger,
+            executor,
+            120,
+            300
+        );
+        resourcesToClose.add(dataSource);
+
+        dataSource.start().get(2, TimeUnit.SECONDS);
+
+        // Status must end up OFF (not INITIALIZING) so callers can observe the terminal state.
+        assertEquals(DataSourceStatusProvider.State.OFF, sink.getLastState());
+        assertNotNull("Initializer error should be preserved on the OFF status", sink.getLastError());
+        assertEquals(initError.getKind(), sink.getLastError().getKind());
+        assertEquals(initError.getStatusCode(), sink.getLastError().getStatusCode());
+
+        // FDv2 synchronizers should not run.
+        assertFalse(fdv2SyncCalled.get());
+    }
+
+    // When an initializer returns a successful payload-without-selector AND the FDv1 fallback
+    // flag, the partial payload should still be applied (so evaluations can serve it) and the
+    // SDK should move on to the FDv1 synchronizer rather than scanning further FDv2 sources.
+    @Test
+    public void fdv1FallbackOnInitializerSuccessNoSelectorAppliesPayloadAndSwitches() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+
+        CompletableFuture<FDv2SourceResult> initFuture = CompletableFuture.completedFuture(
+            FDv2SourceResult.changeSet(makeChangeSet(false), true)
+        );
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
+            () -> new MockInitializer(initFuture)
+        );
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
+
+        BlockingQueue<FDv2SourceResult> fdv1SyncResults = new LinkedBlockingQueue<>();
+        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+
+        BlockingQueue<Boolean> fdv1CalledQueue = new LinkedBlockingQueue<>();
+        FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
+            fdv1CalledQueue.offer(true);
+            return new MockQueuedSynchronizer(fdv1SyncResults);
+        };
+
+        FDv2DataSource dataSource = new FDv2DataSource(
+            initializers,
+            synchronizers,
+            fdv1Fallback,
+            sink,
+            Thread.NORM_PRIORITY,
+            logger,
+            executor,
+            120,
+            300
+        );
+        resourcesToClose.add(dataSource);
+
+        dataSource.start().get(2, TimeUnit.SECONDS);
+
+        // Initializer payload applied (1) + FDv1 follow-up payload applied (2).
+        sink.awaitApplyCount(2, 2, TimeUnit.SECONDS);
+        assertTrue("Both initializer and FDv1 payloads should have been applied",
+            sink.getApplyCount() >= 2);
+        assertNotNull(fdv1CalledQueue.poll(2, TimeUnit.SECONDS));
+    }
+
     @Test
     public void orchestrationLogging_warnsWhenNoInitializersOrSynchronizersConfigured() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
