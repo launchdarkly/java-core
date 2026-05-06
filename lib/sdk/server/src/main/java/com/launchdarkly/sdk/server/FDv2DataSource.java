@@ -196,6 +196,7 @@ class FDv2DataSource implements DataSource {
      * caller can surface it on a subsequent OFF status (when no fallback is configured).
      */
     private InitializerOutcome runInitializers() {
+        boolean anyDataReceived = false;
         Initializer initializer = sourceManager.getNextInitializerAndSetActive();
         while (initializer != null) {
             String initializerName = initializer.name();
@@ -206,12 +207,15 @@ class FDv2DataSource implements DataSource {
                     switch (result.getResultType()) {
                         case CHANGE_SET:
                             dataSourceUpdates.apply(result.getChangeSet());
+                            anyDataReceived = true;
                             logger.info("Initialized via '{}'.", initializerName);
                             if (!result.getChangeSet().getSelector().isEmpty()) {
                                 // A defined selector marks initialization complete -- match Go/Python/Ruby
                                 // behavior. A selectorless basis is applied so evaluations can serve it,
-                                // but does not yet mark the data source VALID; the synchronizer phase
-                                // (or FDv1 fallback) is responsible for the eventual VALID transition.
+                                // and once the initializer chain is fully exhausted that applied data is
+                                // also enough to consider initialization complete (see the post-loop
+                                // block below); but mid-chain we don't yet flip to VALID, so a later
+                                // initializer can still produce a selectorful basis if one is available.
                                 dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
                                 startFuture.complete(true);
                                 if (result.isFdv1Fallback()) {
@@ -270,10 +274,16 @@ class FDv2DataSource implements DataSource {
             }
             initializer = sourceManager.getNextInitializerAndSetActive();
         }
-        // No initializer produced a selectorful basis. Initialization is not yet complete --
-        // leave it to the synchronizer phase (or FDv1 fallback) to drive the eventual VALID
-        // transition. Any selectorless basis has already been applied to the store above so
-        // evaluations can serve it during the gap.
+        // No initializer produced a selectorful basis, but at least one initializer applied
+        // a selectorless basis. Treat that as enough to consider the data system initialized
+        // now that the entire initializer chain is exhausted -- evaluations can serve the
+        // applied data, and the synchronizer phase (when configured) will continue from
+        // there. Without this, an SDK configured with only selectorless initializers and no
+        // synchronizer would never transition out of INITIALIZING.
+        if (anyDataReceived) {
+            dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
+            startFuture.complete(true);
+        }
         return InitializerOutcome.completed();
     }
 

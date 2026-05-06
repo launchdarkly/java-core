@@ -1939,7 +1939,7 @@ public class FDv2DataSourceTest extends BaseTest {
     }
 
     @Test
-    public void initializerChangeSetWithoutSelectorDoesNotCompleteWithoutSynchronizer() throws Exception {
+    public void initializerChangeSetWithoutSelectorCompletesIfLastInitializer() throws Exception {
         executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
@@ -1956,17 +1956,19 @@ public class FDv2DataSourceTest extends BaseTest {
         FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
         resourcesToClose.add(dataSource);
 
-        dataSource.start();
+        Future<Void> startFuture = dataSource.start();
+        startFuture.get(2, TimeUnit.SECONDS);
 
-        // A selectorless basis was applied to the store (so evaluations can serve it),
-        // but the data source must NOT mark itself initialized -- only a basis with a
-        // defined selector can drive the VALID transition. This matches the cross-SDK
-        // contract (Go/Python/Ruby). With no synchronizers configured the source
-        // exhausts and transitions to OFF.
-        DataSourceStatusProvider.State status = sink.awaitStatus(2, TimeUnit.SECONDS);
-        assertEquals(DataSourceStatusProvider.State.OFF, status);
-        assertFalse(dataSource.isInitialized());
+        // A single initializer applied a selectorless basis and there are no synchronizers,
+        // so once the initializer chain exhausts the applied data is enough to mark the
+        // data source VALID and complete startFuture.
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(1, 2, TimeUnit.SECONDS);
+        assertEquals("Should receive 1 status update", 1, statuses.size());
+        assertEquals(DataSourceStatusProvider.State.VALID, statuses.get(0));
+
+        assertTrue(dataSource.isInitialized());
         assertEquals(1, sink.getApplyCount());
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
     }
 
     @Test
@@ -2188,10 +2190,8 @@ public class FDv2DataSourceTest extends BaseTest {
         executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
-        // Initializer returns a basis WITH a defined selector -- this is what the
-        // cross-SDK contract requires for the VALID transition.
         CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(true), false)
+            FDv2SourceResult.changeSet(makeChangeSet(false), false)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
@@ -2952,55 +2952,6 @@ public class FDv2DataSourceTest extends BaseTest {
         // is initialized iff that transition has been observed.
         assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
         assertTrue("isInitialized() must be true after FDv1 served selectorful basis",
-            dataSource.isInitialized());
-    }
-
-    // Tighter spec-alignment check: an initializer returning a selectorless basis (without the
-    // FDv1 directive) must NOT mark the data source VALID on its own. The synchronizer phase
-    // is responsible for the eventual VALID transition once a selectorful basis arrives. This
-    // matches Go/Python/Ruby; Java previously marked VALID prematurely on `anyDataReceived`.
-    @Test
-    public void initializerSelectorlessBasisDoesNotMarkValid() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
-        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
-
-        CompletableFuture<FDv2SourceResult> initFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(false), false)
-        );
-        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
-            () -> new MockInitializer(initFuture)
-        );
-
-        // Synchronizer that never publishes a result -- so VALID would only come from the
-        // initializer if Java were (incorrectly) marking VALID on selectorless data.
-        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
-            () -> new MockQueuedSynchronizer(new LinkedBlockingQueue<>())
-        );
-
-        FDv2DataSource dataSource = new FDv2DataSource(
-            initializers,
-            synchronizers,
-            null,
-            sink,
-            Thread.NORM_PRIORITY,
-            logger,
-            executor,
-            120,
-            300
-        );
-        resourcesToClose.add(dataSource);
-
-        // Wait for the initializer's apply to happen so we know the run loop reached the
-        // post-initializer phase.
-        dataSource.start();
-        sink.awaitApplyCount(1, 2, TimeUnit.SECONDS);
-        assertEquals("Initializer's selectorless basis must still be applied to the store",
-            1, sink.getApplyCount());
-
-        // The data source must not be VALID, and isInitialized() must be false.
-        assertNotEquals("Selectorless initializer basis must not transition the data source to VALID",
-            DataSourceStatusProvider.State.VALID, sink.getLastState());
-        assertFalse("isInitialized() must be false until a selectorful basis is applied",
             dataSource.isInitialized());
     }
 
