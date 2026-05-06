@@ -449,26 +449,27 @@ class FDv2DataSource implements DataSource {
                                         }
                                         break;
                                 }
-                                // We have been requested to fall back to FDv1. We handle whatever message was associated,
-                                // close the synchronizer, and then fallback. An FDv1 fallback synchronizer
-                                // requesting another fallback is ignored (shouldn't happen in practice).
+                                // We have been requested to fall back to FDv1. Block every FDv2
+                                // synchronizer in one shot via fdv1Fallback() (which also unblocks the
+                                // FDv1 fallback synchronizer, if one is configured). If FDv1 is
+                                // configured we hand off to it; otherwise we halt the data system.
+                                // An FDv1 fallback synchronizer asking to fall back again is ignored
+                                // -- shouldn't happen in practice.
                                 if (result.isFdv1Fallback()
                                     && !sourceManager.isCurrentSynchronizerFDv1Fallback()) {
+                                    sourceManager.fdv1Fallback();
                                     if (sourceManager.hasFDv1Fallback()) {
-                                        sourceManager.fdv1Fallback();
                                         logger.info("Falling back to an FDv1 fallback synchronizer.");
                                         running = false;
                                     } else {
                                         // When the directive is signalled but no FDv1 fallback synchronizer
-                                        // is configured, halt the data system entirely. Block the current
-                                        // synchronizer so it cannot be selected again, surface OFF with the
-                                        // most recent error info (if any), and exit the synchronizer loop
-                                        // terminally.
+                                        // is configured, halt the data system entirely. Surface OFF with
+                                        // the most recent error info (if any) and exit the synchronizer
+                                        // loop terminally.
                                         logger.warn(
                                             "Synchronizer '{}' requested FDv1 fallback, but no FDv1 fallback synchronizer is configured; halting the data system.",
                                             synchronizer.name()
                                         );
-                                        sourceManager.blockCurrentSynchronizer();
                                         DataSourceStatusProvider.ErrorInfo offError =
                                             result.getStatus() != null ? result.getStatus().getErrorInfo() : null;
                                         dataSourceUpdates.updateStatus(
