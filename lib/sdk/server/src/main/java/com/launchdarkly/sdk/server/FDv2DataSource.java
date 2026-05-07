@@ -138,13 +138,15 @@ class FDv2DataSource implements DataSource {
                 initializerOutcome = runInitializers();
             }
 
-            // If an initializer signalled FDv1 fallback, switch to the FDv1 synchronizer
-            // (if configured) or transition to OFF. This takes precedence over the standard
+            // If an initializer signalled FDv1 fallback, block every FDv2 synchronizer in
+            // one shot via fdv1Fallback() (which also unblocks the FDv1 fallback
+            // synchronizer, if one is configured). If FDv1 is configured we hand off to it;
+            // otherwise we halt the data system. This takes precedence over the standard
             // synchronizer chain -- the FDv2 synchronizers are not given a chance to run.
             if (initializerOutcome.fallbackToFDv1) {
+                sourceManager.fdv1Fallback();
                 if (sourceManager.hasFDv1Fallback()) {
                     logger.warn("Initializer requested fallback to FDv1; switching to FDv1 fallback synchronizer.");
-                    sourceManager.fdv1Fallback();
                 } else {
                     logger.warn("Initializer requested fallback to FDv1, but no FDv1 fallback synchronizer is configured.");
                     dataSourceUpdates.updateStatus(
