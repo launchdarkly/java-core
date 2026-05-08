@@ -136,6 +136,12 @@ public abstract class Representations {
     SdkConfigDataInitializerParams[] initializers;
     /** List of synchronizers (matches servicedef DataSystem.Synchronizers). */
     SdkConfigSynchronizerParams[] synchronizers;
+    /**
+     * Configuration for the FDv1 fallback synchronizer engaged in response to a
+     * server-directed FDv1 Fallback Directive. Distinct from the FDv2 synchronizer chain
+     * above; matches servicedef DataSystem.FDv1Fallback.
+     */
+    SdkConfigPollingParams fdv1Fallback;
     String payloadFilter;
   }
 

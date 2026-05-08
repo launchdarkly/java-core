@@ -1959,7 +1959,9 @@ public class FDv2DataSourceTest extends BaseTest {
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
 
-        // Expected status: VALID (single initializer without selector completes when it's the last initializer)
+        // A single initializer applied a selectorless basis and there are no synchronizers,
+        // so once the initializer chain exhausts the applied data is enough to mark the
+        // data source VALID and complete startFuture.
         List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(1, 2, TimeUnit.SECONDS);
         assertEquals("Should receive 1 status update", 1, statuses.size());
         assertEquals(DataSourceStatusProvider.State.VALID, statuses.get(0));
@@ -2212,8 +2214,6 @@ public class FDv2DataSourceTest extends BaseTest {
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
 
-        // After initializers complete with data (no selector), VALID status is emitted
-        // Since we initialized successfully and there are no synchronizers, we stay VALID
         DataSourceStatusProvider.State status = sink.awaitStatus(2, TimeUnit.SECONDS);
         assertNotNull("Should receive status update", status);
         assertEquals(DataSourceStatusProvider.State.VALID, status);
@@ -2531,27 +2531,42 @@ public class FDv2DataSourceTest extends BaseTest {
         assertTrue("Should have at least 2 changesets", sink.getApplyCount() >= 2);
     }
 
+    // Synchronizer-phase analogue of the initializer halt path: when a synchronizer signals
+    // FDv1 fallback but no FDv1 fallback synchronizer is configured, the data system must halt
+    // (transition to OFF, stop building further synchronizers).
     @Test
-    public void fdv1FallbackWithoutConfiguredFallbackIgnoresFlag() throws Exception {
+    public void fdv1FallbackOnSynchronizerWithoutFDv1ConfiguredHaltsDataSystem() throws Exception {
         executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
-        // Synchronizer sends result with FDv1 fallback flag
-        BlockingQueue<FDv2SourceResult> fdv2SyncResults = new LinkedBlockingQueue<>();
-        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), true)); // FDv1 fallback flag
+        // First synchronizer sends a normal payload, then a payload with the directive.
+        BlockingQueue<FDv2SourceResult> firstSyncResults = new LinkedBlockingQueue<>();
+        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), true));
 
+        AtomicInteger firstSyncBuildCount = new AtomicInteger(0);
+        AtomicBoolean secondSyncCalled = new AtomicBoolean(false);
+
+        // Two synchronizers configured; once the directive halts the data system, neither
+        // should be re-built. The second synchronizer in particular must never run.
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
-            () -> new MockQueuedSynchronizer(fdv2SyncResults)
+            () -> {
+                firstSyncBuildCount.incrementAndGet();
+                return new MockQueuedSynchronizer(firstSyncResults);
+            },
+            () -> {
+                secondSyncCalled.set(true);
+                return new MockQueuedSynchronizer(new LinkedBlockingQueue<>());
+            }
         );
 
-        // No FDv1 fallback configured (null)
+        // No FDv1 fallback configured.
         FDv2DataSource dataSource = new FDv2DataSource(
             initializers,
             synchronizers,
-            null, // No FDv1 fallback
+            null,
             sink,
             Thread.NORM_PRIORITY,
             logger,
@@ -2561,12 +2576,34 @@ public class FDv2DataSourceTest extends BaseTest {
         );
         resourcesToClose.add(dataSource);
 
-        Future<Void> startFuture = dataSource.start();
-        startFuture.get(2, TimeUnit.SECONDS);
+        dataSource.start().get(2, TimeUnit.SECONDS);
 
-        // Should receive both changesets even though fallback flag was set
+        // First payload is applied; the directive-bearing payload is also applied (the SDK
+        // surfaces the data) but no further synchronizers are dialled.
         sink.awaitApplyCount(2, 2, TimeUnit.SECONDS);
-        assertEquals(2, sink.getApplyCount());
+
+        // Status must end up OFF because the directive could not be satisfied.
+        // Poll briefly for the OFF state in case the final transition is observed slightly
+        // after the apply count reaches 2; this keeps the assertion deterministic without
+        // relying on real-time delays.
+        DataSourceStatusProvider.State finalState = null;
+        for (int i = 0; i < 20 && finalState != DataSourceStatusProvider.State.OFF; i++) {
+            DataSourceStatusProvider.State next = sink.awaitStatus(100, TimeUnit.MILLISECONDS);
+            if (next != null) {
+                finalState = next;
+            } else if (sink.getLastState() == DataSourceStatusProvider.State.OFF) {
+                finalState = DataSourceStatusProvider.State.OFF;
+            }
+        }
+        assertEquals("Status should be OFF after directive halts the data system",
+            DataSourceStatusProvider.State.OFF, sink.getLastState());
+
+        // The second synchronizer must never be built.
+        assertFalse("Subsequent synchronizers must not run after directive-induced halt",
+            secondSyncCalled.get());
+        // The first synchronizer should also not be re-built (we should stay halted).
+        assertEquals("First synchronizer should be built exactly once",
+            1, firstSyncBuildCount.get());
     }
 
     @Test
@@ -2677,6 +2714,245 @@ public class FDv2DataSourceTest extends BaseTest {
         // Should not be called again even if FDv1 sends fallback flag
         Boolean secondCall = fdv1CalledQueue.poll(500, TimeUnit.MILLISECONDS);
         assertNull("FDv1 fallback should only be called once", secondCall);
+    }
+
+    // ============================================================================
+    // FDv1 Fallback (Initializer Phase) Tests
+    // ============================================================================
+
+    // An initializer that returns a successful payload with the FDv1 fallback flag must
+    // (1) apply the payload, then (2) hand off directly to the FDv1 fallback synchronizer
+    // without giving any of the configured FDv2 synchronizers a chance to run.
+    @Test
+    public void fdv1FallbackOnInitializerSuccessAppliesPayloadAndSwitches() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+
+        // Initializer returns a payload with a selector AND the FDv1 fallback signal.
+        CompletableFuture<FDv2SourceResult> initFuture = CompletableFuture.completedFuture(
+            FDv2SourceResult.changeSet(makeChangeSet(true), true)
+        );
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
+            () -> new MockInitializer(initFuture)
+        );
+
+        AtomicBoolean fdv2SyncCalled = new AtomicBoolean(false);
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                fdv2SyncCalled.set(true);
+                return new MockQueuedSynchronizer(new LinkedBlockingQueue<>());
+            }
+        );
+
+        BlockingQueue<FDv2SourceResult> fdv1SyncResults = new LinkedBlockingQueue<>();
+        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+
+        BlockingQueue<Boolean> fdv1CalledQueue = new LinkedBlockingQueue<>();
+        FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
+            fdv1CalledQueue.offer(true);
+            return new MockQueuedSynchronizer(fdv1SyncResults);
+        };
+
+        FDv2DataSource dataSource = new FDv2DataSource(
+            initializers,
+            synchronizers,
+            fdv1Fallback,
+            sink,
+            Thread.NORM_PRIORITY,
+            logger,
+            executor,
+            120,
+            300
+        );
+        resourcesToClose.add(dataSource);
+
+        dataSource.start().get(2, TimeUnit.SECONDS);
+
+        // Initializer payload was applied.
+        sink.awaitApplyCount(1, 2, TimeUnit.SECONDS);
+        assertTrue("Initializer payload should be applied before fallback", sink.getApplyCount() >= 1);
+
+        // FDv1 fallback was activated.
+        Boolean fdv1Called = fdv1CalledQueue.poll(2, TimeUnit.SECONDS);
+        assertNotNull("FDv1 fallback should be activated by initializer-phase directive", fdv1Called);
+
+        // FDv2 synchronizer was never asked to run.
+        assertFalse("FDv2 synchronizers must be skipped after initializer-phase fallback",
+            fdv2SyncCalled.get());
+    }
+
+    // An initializer that fails with the FDv1 fallback flag (e.g. 500 + header) must hand off
+    // to the FDv1 fallback synchronizer without trying FDv2 synchronizers.
+    @Test
+    public void fdv1FallbackOnInitializerErrorSwitchesToFDv1() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+
+        CompletableFuture<FDv2SourceResult> initFuture = CompletableFuture.completedFuture(
+            FDv2SourceResult.terminalError(
+                new DataSourceStatusProvider.ErrorInfo(
+                    DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE,
+                    500,
+                    "fallback requested",
+                    Instant.now()
+                ),
+                true
+            )
+        );
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
+            () -> new MockInitializer(initFuture)
+        );
+
+        AtomicBoolean fdv2SyncCalled = new AtomicBoolean(false);
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                fdv2SyncCalled.set(true);
+                return new MockQueuedSynchronizer(new LinkedBlockingQueue<>());
+            }
+        );
+
+        BlockingQueue<FDv2SourceResult> fdv1SyncResults = new LinkedBlockingQueue<>();
+        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+
+        BlockingQueue<Boolean> fdv1CalledQueue = new LinkedBlockingQueue<>();
+        FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
+            fdv1CalledQueue.offer(true);
+            return new MockQueuedSynchronizer(fdv1SyncResults);
+        };
+
+        FDv2DataSource dataSource = new FDv2DataSource(
+            initializers,
+            synchronizers,
+            fdv1Fallback,
+            sink,
+            Thread.NORM_PRIORITY,
+            logger,
+            executor,
+            120,
+            300
+        );
+        resourcesToClose.add(dataSource);
+
+        dataSource.start().get(2, TimeUnit.SECONDS);
+
+        Boolean fdv1Called = fdv1CalledQueue.poll(2, TimeUnit.SECONDS);
+        assertNotNull("FDv1 fallback should be activated even when initializer signals error",
+            fdv1Called);
+        assertFalse("FDv2 synchronizers must be skipped after initializer-phase fallback",
+            fdv2SyncCalled.get());
+    }
+
+    // When an initializer signals FDv1 fallback but no FDv1 synchronizer is configured, the
+    // SDK must transition the data source status to OFF -- not stay stuck at INITIALIZING --
+    // and surface the underlying initializer error so monitors can see why.
+    @Test
+    public void fdv1FallbackOnInitializerWithoutFDv1ConfiguredTransitionsToOff() throws Exception {
+        executor = Executors.newScheduledThreadPool(1);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+
+        DataSourceStatusProvider.ErrorInfo initError = new DataSourceStatusProvider.ErrorInfo(
+            DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE,
+            500,
+            "fallback requested without fallback configured",
+            Instant.now()
+        );
+        CompletableFuture<FDv2SourceResult> initFuture = CompletableFuture.completedFuture(
+            FDv2SourceResult.terminalError(initError, true)
+        );
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
+            () -> new MockInitializer(initFuture)
+        );
+
+        AtomicBoolean fdv2SyncCalled = new AtomicBoolean(false);
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                fdv2SyncCalled.set(true);
+                return new MockQueuedSynchronizer(new LinkedBlockingQueue<>());
+            }
+        );
+
+        // No FDv1 fallback configured.
+        FDv2DataSource dataSource = new FDv2DataSource(
+            initializers,
+            synchronizers,
+            null,
+            sink,
+            Thread.NORM_PRIORITY,
+            logger,
+            executor,
+            120,
+            300
+        );
+        resourcesToClose.add(dataSource);
+
+        dataSource.start().get(2, TimeUnit.SECONDS);
+
+        // Status must end up OFF (not INITIALIZING) so callers can observe the terminal state.
+        assertEquals(DataSourceStatusProvider.State.OFF, sink.getLastState());
+        assertNotNull("Initializer error should be preserved on the OFF status", sink.getLastError());
+        assertEquals(initError.getKind(), sink.getLastError().getKind());
+        assertEquals(initError.getStatusCode(), sink.getLastError().getStatusCode());
+
+        // FDv2 synchronizers should not run.
+        assertFalse(fdv2SyncCalled.get());
+    }
+
+    // When an initializer returns a successful payload-without-selector AND the FDv1 fallback
+    // flag, the partial payload should still be applied (so evaluations can serve it) and the
+    // SDK should move on to the FDv1 synchronizer rather than scanning further FDv2 sources.
+    // Crucially, a selectorless basis must NOT mark the data source VALID -- that transition
+    // belongs to the FDv1 synchronizer once it serves a selectorful payload. Match Go/Python/
+    // Ruby behavior on initialization gating.
+    @Test
+    public void fdv1FallbackOnInitializerSuccessNoSelectorAppliesPayloadAndSwitches() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+
+        CompletableFuture<FDv2SourceResult> initFuture = CompletableFuture.completedFuture(
+            FDv2SourceResult.changeSet(makeChangeSet(false), true)
+        );
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
+            () -> new MockInitializer(initFuture)
+        );
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
+
+        // FDv1 sync must serve a selectorful basis to move the data source to VALID.
+        BlockingQueue<FDv2SourceResult> fdv1SyncResults = new LinkedBlockingQueue<>();
+        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+
+        BlockingQueue<Boolean> fdv1CalledQueue = new LinkedBlockingQueue<>();
+        FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
+            fdv1CalledQueue.offer(true);
+            return new MockQueuedSynchronizer(fdv1SyncResults);
+        };
+
+        FDv2DataSource dataSource = new FDv2DataSource(
+            initializers,
+            synchronizers,
+            fdv1Fallback,
+            sink,
+            Thread.NORM_PRIORITY,
+            logger,
+            executor,
+            120,
+            300
+        );
+        resourcesToClose.add(dataSource);
+
+        dataSource.start().get(2, TimeUnit.SECONDS);
+
+        // Both payloads applied: the selectorless initializer basis and the selectorful FDv1 basis.
+        sink.awaitApplyCount(2, 2, TimeUnit.SECONDS);
+        assertTrue("Both initializer and FDv1 payloads should have been applied",
+            sink.getApplyCount() >= 2);
+        assertNotNull(fdv1CalledQueue.poll(2, TimeUnit.SECONDS));
+
+        // VALID may only come from the FDv1 synchronizer's selectorful basis. The data source
+        // is initialized iff that transition has been observed.
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
+        assertTrue("isInitialized() must be true after FDv1 served selectorful basis",
+            dataSource.isInitialized());
     }
 
     @Test
