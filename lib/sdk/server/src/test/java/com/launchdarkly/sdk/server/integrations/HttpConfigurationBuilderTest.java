@@ -17,6 +17,9 @@ import java.net.UnknownHostException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
@@ -26,19 +29,46 @@ import static com.launchdarkly.sdk.server.TestUtil.getSdkVersion;
 import static com.launchdarkly.sdk.server.integrations.HttpConfigurationBuilder.DEFAULT_CONNECT_TIMEOUT;
 import static com.launchdarkly.sdk.server.integrations.HttpConfigurationBuilder.DEFAULT_SOCKET_TIMEOUT;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 @SuppressWarnings("javadoc")
 public class HttpConfigurationBuilderTest {
   private static final String SDK_KEY = "sdk-key";
+  private static final String INSTANCE_ID_HEADER = "X-LaunchDarkly-Instance-Id";
   private static final ClientContext BASIC_CONTEXT = new ClientContext(SDK_KEY);
 
   private static ImmutableMap.Builder<String, String> buildBasicHeaders() {
     return ImmutableMap.<String, String>builder()
         .put("Authorization", SDK_KEY)
         .put("User-Agent", "JavaClient/" + getSdkVersion());
+  }
+
+  /**
+   * Returns a copy of the default headers from {@code hc} with the per-instance
+   * {@code X-LaunchDarkly-Instance-Id} header removed, so the remainder can be compared against a
+   * fixed expected map. The instance ID header is verified separately because its value is a
+   * randomly generated UUID.
+   */
+  private static Map<String, String> headersExcludingInstanceId(HttpConfiguration hc) {
+    Map<String, String> copy = new HashMap<>(ImmutableMap.copyOf(hc.getDefaultHeaders()));
+    copy.remove(INSTANCE_ID_HEADER);
+    return copy;
+  }
+
+  /**
+   * Asserts that {@code hc} carries an {@code X-LaunchDarkly-Instance-Id} default header whose
+   * value is a parseable v4 UUID, and returns that value so it can be compared across calls.
+   */
+  private static String assertHasInstanceIdHeader(HttpConfiguration hc) {
+    String value = ImmutableMap.copyOf(hc.getDefaultHeaders()).get(INSTANCE_ID_HEADER);
+    assertNotNull("expected X-LaunchDarkly-Instance-Id header to be present", value);
+    UUID parsed = UUID.fromString(value);
+    assertEquals("instance ID must be a UUID v4", 4, parsed.version());
+    return value;
   }
 
   @Test
@@ -51,7 +81,8 @@ public class HttpConfigurationBuilderTest {
     assertNull(hc.getSocketFactory());
     assertNull(hc.getSslSocketFactory());
     assertNull(hc.getTrustManager());
-    assertEquals(buildBasicHeaders().build(), ImmutableMap.copyOf(hc.getDefaultHeaders()));
+    assertEquals(buildBasicHeaders().build(), headersExcludingInstanceId(hc));
+    assertHasInstanceIdHeader(hc);
   }
 
   @Test
@@ -70,7 +101,37 @@ public class HttpConfigurationBuilderTest {
               .put("User-Agent", "This too")
               .build();
 
-      assertEquals(expectedHeaders, ImmutableMap.copyOf(hc.getDefaultHeaders()));
+      assertEquals(expectedHeaders, headersExcludingInstanceId(hc));
+      assertHasInstanceIdHeader(hc);
+  }
+
+  @Test
+  public void testInstanceIdHeaderIsUuidV4() {
+    HttpConfiguration hc = Components.httpConfiguration().build(BASIC_CONTEXT);
+    assertHasInstanceIdHeader(hc);
+  }
+
+  @Test
+  public void testInstanceIdIsDifferentBetweenHttpConfigurations() {
+    // Each call to build() represents a new SDK instance; each must get its own GUID.
+    HttpConfiguration hc1 = Components.httpConfiguration().build(BASIC_CONTEXT);
+    HttpConfiguration hc2 = Components.httpConfiguration().build(BASIC_CONTEXT);
+    String id1 = assertHasInstanceIdHeader(hc1);
+    String id2 = assertHasInstanceIdHeader(hc2);
+    assertNotEquals("each SDK instance should generate its own instance id", id1, id2);
+  }
+
+  @Test
+  public void testInstanceIdHeaderIsNotOverriddenByCustomHeaders() {
+    // The default-headers map is built once per HttpConfiguration; a user-supplied custom header
+    // for X-LaunchDarkly-Instance-Id is allowed to replace the SDK-generated value, but absent
+    // that, the SDK's generated UUID must come through.
+    HttpConfiguration hc = Components.httpConfiguration()
+        .addCustomHeader("X-Some-Other-Header", "value")
+        .build(BASIC_CONTEXT);
+    String value = assertHasInstanceIdHeader(hc);
+    assertTrue("instance ID must not be the literal string 'X-Some-Other-Header' value",
+        !"value".equals(value));
   }
 
   @Test

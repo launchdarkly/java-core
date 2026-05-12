@@ -47,6 +47,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
@@ -304,6 +305,15 @@ abstract class ComponentsImpl {
   }
 
   static final class HttpConfigurationBuilderImpl extends HttpConfigurationBuilder {
+    /**
+     * HTTP header used to identify this SDK instance for the purpose of estimating
+     * server-connection-minutes when polling. It contains a v4 UUID that is generated once per SDK
+     * instance and remains constant for the lifetime of the client.
+     *
+     * <p>See: sdk-specs / SCMP-server-connection-minutes-polling.
+     */
+    static final String INSTANCE_ID_HEADER = "X-LaunchDarkly-Instance-Id";
+
     @Override
     public HttpConfiguration build(ClientContext clientContext) {
       LDLogger logger = clientContext.getBaseLogger();
@@ -340,6 +350,15 @@ abstract class ComponentsImpl {
         headers.put("X-LaunchDarkly-Wrapper", wrapperId);
       }
 
+      // Per SCMP-server-connection-minutes-polling, every polling request must carry a per-instance
+      // GUID v4. We attach it to the default headers (rather than only on the poller) so that it is
+      // also present on streaming and event requests; this matches the cross-SDK contract tests and
+      // keeps the GUID stable for the lifetime of the SDK instance, since the default headers map
+      // is built once per HttpConfiguration and never modified afterwards.
+      headers.put(INSTANCE_ID_HEADER, UUID.randomUUID().toString());
+
+      // For consistency with other SDKs, custom headers are allowed to overwrite headers such as
+      // User-Agent and Authorization.
       if (!customHeaders.isEmpty()) {
           headers.putAll(customHeaders);
       }
