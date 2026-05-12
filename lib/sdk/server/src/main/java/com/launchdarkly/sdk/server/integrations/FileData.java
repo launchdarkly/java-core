@@ -150,10 +150,6 @@ public abstract class FileData {
    * <p>
    * An initializer performs a one-shot load of the file data. This is used with the FDv2 data system
    * for initial data loading.
-   * <p>
-   * This class is not stable, and not subject to any backwards compatibility guarantees or semantic versioning.
-   * It is in early access. If you want access to this feature please join the EAP.
-   * <a href="https://launchdarkly.com/docs/sdk/features/data-saving-mode">https://launchdarkly.com/docs/sdk/features/data-saving-mode</a>
    *
    * @return a builder for configuring the file data initializer
    */
@@ -166,10 +162,6 @@ public abstract class FileData {
    * <p>
    * A synchronizer loads file data and can watch for changes (if autoUpdate is enabled).
    * This is used with the FDv2 data system for ongoing data synchronization.
-   * <p>
-   * This class is not stable, and not subject to any backwards compatibility guarantees or semantic versioning.
-   * It is in early access. If you want access to this feature please join the EAP.
-   * <a href="https://launchdarkly.com/docs/sdk/features/data-saving-mode">https://launchdarkly.com/docs/sdk/features/data-saving-mode</a>
    *
    * @return a builder for configuring the file data synchronizer
    */
@@ -181,10 +173,6 @@ public abstract class FileData {
 
   /**
    * Builder for creating an FDv2 {@link Initializer} that loads file data.
-   * <p>
-   * This class is not stable, and not subject to any backwards compatibility guarantees or semantic versioning.
-   * It is in early access. If you want access to this feature please join the EAP.
-   * <a href="https://launchdarkly.com/docs/sdk/features/data-saving-mode">https://launchdarkly.com/docs/sdk/features/data-saving-mode</a>
    */
   public static final class FileInitializerBuilder implements DataSourceBuilder<Initializer> {
     private final FileDataSourceBuilder delegate = new FileDataSourceBuilder();
@@ -274,10 +262,6 @@ public abstract class FileData {
 
   /**
    * Builder for creating an FDv2 {@link Synchronizer} that loads and watches file data.
-   * <p>
-   * This class is not stable, and not subject to any backwards compatibility guarantees or semantic versioning.
-   * It is in early access. If you want access to this feature please join the EAP.
-   * <a href="https://launchdarkly.com/docs/sdk/features/data-saving-mode">https://launchdarkly.com/docs/sdk/features/data-saving-mode</a>
    */
   public static final class FileSynchronizerBuilder implements DataSourceBuilder<Synchronizer> {
     private final FileDataSourceBuilder delegate = new FileDataSourceBuilder();

@@ -12,9 +12,6 @@ import java.util.concurrent.Future;
  * Internal interface for the data system abstraction.
  * <p>
  * This interface is package-private and should not be used by application code.
- * <p>
- * This class is not stable, and not subject to any backwards compatibility guarantees or semantic versioning.
- * It is in early access. If you want access to this feature please join the EAP. https://launchdarkly.com/docs/sdk/features/data-saving-mode
  */
 interface DataSystem {
   /**

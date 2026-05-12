@@ -3,9 +3,6 @@ package com.launchdarkly.sdk.server.subsystems;
 
 /**
  * Interface for building synchronizers and initializers.
- * <p>
- * This class is not stable, and not subject to any backwards compatibility guarantees or semantic versioning.
- * It is in early access. If you want access to this feature, please join the EAP. https://launchdarkly.com/docs/sdk/features/data-saving-mode
  * @param <TDataSource>
  */
 public interface DataSourceBuilder<TDataSource> {

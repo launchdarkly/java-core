@@ -421,10 +421,6 @@ public final class LDConfig {
      * When the data system configuration is used it overrides {@link #dataSource(ComponentConfigurer)} and
      * {@link #dataStore(ComponentConfigurer)} in the configuration.
      * <p>
-     * This class is not stable, and not subject to any backwards compatibility guarantees or semantic versioning.
-     * It is in early access. If you want access to this feature please join the EAP. https://launchdarkly.com/docs/sdk/features/data-saving-mode
-     * </p>
-     * <p>
      * <b>Example:</b>
      * </p>
      * <pre><code>
