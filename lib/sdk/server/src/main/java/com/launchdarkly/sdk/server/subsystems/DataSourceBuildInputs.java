@@ -10,9 +10,6 @@ import java.util.concurrent.ScheduledExecutorService;
 /**
  * Build information (dependencies and configuration) provided to initializer and synchronizer builders.
  * <p>
- * This class is not stable, and not subject to any backwards compatibility guarantees or semantic versioning.
- * It is in early access. If you want access to this feature, please join the EAP. https://launchdarkly.com/docs/sdk/features/data-saving-mode
- * <p>
  * This consolidates all the parameters needed to construct data source components,
  * including HTTP configuration, logging, scheduling, and selector state.
  */

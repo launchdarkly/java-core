@@ -16,9 +16,6 @@ import java.util.Map;
  * <p>
  * Component factories for {@link DataSource} implementations will receive an implementation of this
  * interface in the {@link ClientContext#getDataSourceUpdateSink()} property of {@link ClientContext}.
- * <p>
- * This interface is not stable, and not subject to any backwards compatibility guarantees or semantic versioning.
- * It is in early access. If you want access to this feature please join the EAP. https://launchdarkly.com/docs/sdk/features/data-saving-mode
  * 
  * @since 5.0.0
  * @see DataSource

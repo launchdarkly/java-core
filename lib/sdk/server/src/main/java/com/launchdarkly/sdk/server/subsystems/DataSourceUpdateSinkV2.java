@@ -10,9 +10,6 @@ import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider;
  * <p>
  * This interface extends {@link TransactionalDataSourceUpdateSink} to add status tracking
  * and status update capabilities required for FDv2 data sources.
- * <p>
- * This interface is not stable, and not subject to any backwards compatibility guarantees or semantic versioning.
- * It is in early access. If you want access to this feature please join the EAP. https://launchdarkly.com/docs/sdk/features/data-saving-mode
  * 
  * @since 5.0.0
  * @see TransactionalDataSourceUpdateSink
