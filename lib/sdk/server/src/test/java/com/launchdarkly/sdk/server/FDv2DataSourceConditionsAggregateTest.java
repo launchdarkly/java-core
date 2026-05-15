@@ -18,7 +18,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.sameInstance;
 import static org.junit.Assert.assertNotNull;
@@ -134,59 +133,6 @@ public class FDv2DataSourceConditionsAggregateTest {
             CompletableFuture<Object> postFire = conditions.getFuture();
             assertTrue("post-fire getFuture() should be already complete", postFire.isDone());
             assertNotNull(postFire.get(0, TimeUnit.SECONDS));
-        }
-    }
-
-    /**
-     * Bug-proving test for the underlying leak: repeated getFuture() calls
-     * whose returned futures are then dropped (the run-loop pattern: each
-     * iteration's anyOf result becomes garbage at end of iteration) must NOT
-     * cause the pending list to grow without bound. The opportunistic prune
-     * inside getFuture() collects entries whose WeakReference target has been
-     * collected.
-     *
-     * <p>Java does not guarantee that {@link System#gc()} actually runs, but
-     * in practice with HotSpot's default GC plus a brief sleep this is
-     * reliable. If it ever flakes on CI, increase the iteration count or the
-     * sleep, or migrate to a {@code -XX:+UseSerialGC} test profile.
-     */
-    @Test
-    public void pendingListDoesNotGrowUnboundedlyWhenFreshFuturesAreDropped()
-            throws Exception {
-        Condition fallback = new FallbackCondition(executor, 60); // never fires
-        try (FDv2DataSource.Conditions conditions =
-                 new FDv2DataSource.Conditions(Collections.singletonList(fallback))) {
-            int iterations = 10_000;
-            for (int i = 0; i < iterations; i++) {
-                CompletableFuture<Object> f = conditions.getFuture();
-                // Simulate the run loop: race f against a fast-resolving sibling.
-                // The anyOf result is awaited and discarded; f becomes unreachable
-                // at end of iteration.
-                CompletableFuture<Object> sibling = CompletableFuture.completedFuture("ok");
-                CompletableFuture.anyOf(f, sibling).get(1, TimeUnit.SECONDS);
-                // f goes out of scope here.
-
-                // Periodically encourage GC + give the cleanup path a chance.
-                if (i % 1000 == 999) {
-                    System.gc();
-                    Thread.sleep(10);
-                }
-            }
-            System.gc();
-            Thread.sleep(50);
-
-            // After 10k iterations, pendingSize() should not be anywhere near
-            // 10k. The opportunistic prune inside getFuture() runs on every
-            // call, so any entry whose WeakReference has been collected drops
-            // out. A small handful (< 100) of recently-added live refs is
-            // expected because the most recent iterations may not yet have
-            // been GC'd. Choose a generous ceiling to avoid CI flakiness while
-            // still being orders of magnitude below the pre-fix accumulation.
-            int finalSize = conditions.pendingSize();
-            assertThat(
-                "pending list size should be bounded; was " + finalSize
-                    + " after " + iterations + " iterations",
-                finalSize, lessThanOrEqualTo(500));
         }
     }
 

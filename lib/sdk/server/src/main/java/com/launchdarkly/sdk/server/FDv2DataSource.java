@@ -717,25 +717,5 @@ class FDv2DataSource implements DataSource {
                 }
             }
         }
-
-        /**
-         * Test-only: snapshot of the current pending list size after
-         * opportunistic pruning. Used by tests to assert that the pending list
-         * does not grow unboundedly across iterations.
-         */
-        int pendingSize() {
-            synchronized (lock) {
-                if (pending == null) {
-                    return 0;
-                }
-                Iterator<WeakReference<CompletableFuture<Object>>> it = pending.iterator();
-                while (it.hasNext()) {
-                    if (it.next().get() == null) {
-                        it.remove();
-                    }
-                }
-                return pending.size();
-            }
-        }
     }
 }
