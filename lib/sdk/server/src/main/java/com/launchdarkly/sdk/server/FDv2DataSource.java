@@ -11,9 +11,11 @@ import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSinkV2;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -591,21 +593,115 @@ class FDv2DataSource implements DataSource {
 
     /**
      * Helper class to manage the lifecycle of conditions with automatic cleanup.
+     *
+     * <p>{@link #getFuture()} returns a <em>fresh</em> {@link CompletableFuture}
+     * per call rather than returning the same shared instance. This matters
+     * because the run loop calls {@code CompletableFuture.anyOf(getFuture(),
+     * synchronizerNext)} on every iteration: if {@code getFuture()} returned a
+     * shared instance, each {@code anyOf} call would permanently attach an
+     * {@code OrRelay} {@code Completion} to its {@code stack}. On a healthy
+     * primary synchronizer that streams ChangeSets without ever arming the
+     * fallback timer, the aggregate never completes, so those Completion nodes
+     * accumulate monotonically for the synchronizer's full tenure -- a real
+     * memory leak proportional to event rate.
+     *
+     * <p>The fix: a single permanent listener on the underlying aggregate fans
+     * out completion to every fresh future handed out by {@link #getFuture()}.
+     * Fresh futures are tracked via {@link WeakReference} on a pending list, so
+     * a fresh future whose only strong references were in the caller's loop
+     * iteration becomes garbage-collectable once that iteration ends. Pending
+     * entries whose referent has been collected are pruned opportunistically on
+     * subsequent {@code getFuture()} calls and on {@link #close()}.
+     *
+     * <p>Package-private (rather than private) so that direct unit tests can
+     * exercise the API surface and assert per-call distinctness.
      */
-    private static class Conditions implements AutoCloseable {
+    static class Conditions implements AutoCloseable {
         private final List<Condition> conditions;
-        private final CompletableFuture<Object> conditionsFuture;
+        private final CompletableFuture<Object> aggregate;
+        private final Object lock = new Object();
+
+        /**
+         * Holds the value the aggregate completed with, once it has completed.
+         * {@code volatile} so the fast path in {@link #getFuture()} avoids
+         * taking the lock. Set under {@code lock} together with clearing
+         * {@code pending} so the two stay consistent.
+         */
+        private volatile Object completedValue;
+
+        /**
+         * Tracks futures previously returned by {@link #getFuture()} that have
+         * not yet been completed. {@code null} once the aggregate has fired
+         * (and all pending entries have been drained). Mutated only under
+         * {@code lock}.
+         */
+        private List<WeakReference<CompletableFuture<Object>>> pending = new ArrayList<>();
 
         public Conditions(List<Condition> conditions) {
             this.conditions = conditions;
-            this.conditionsFuture = conditions.isEmpty()
+            this.aggregate = conditions.isEmpty()
                 ? new CompletableFuture<>() // Never completes if no conditions
                 : CompletableFuture.anyOf(
-                conditions.stream().map(Condition::execute).toArray(CompletableFuture[]::new));
+                    conditions.stream().map(Condition::execute).toArray(CompletableFuture[]::new));
+
+            // Single permanent listener. This is the only Completion node ever
+            // attached to aggregate.stack -- subsequent getFuture() calls do
+            // not touch the aggregate at all.
+            this.aggregate.whenComplete((result, throwable) -> {
+                List<WeakReference<CompletableFuture<Object>>> snapshot;
+                synchronized (lock) {
+                    completedValue = (throwable == null) ? result : null;
+                    snapshot = pending;
+                    pending = null;
+                }
+                if (snapshot == null) {
+                    return;
+                }
+                for (WeakReference<CompletableFuture<Object>> ref : snapshot) {
+                    CompletableFuture<Object> cf = ref.get();
+                    if (cf == null) {
+                        continue; // Already GC'd -- nothing to complete.
+                    }
+                    if (throwable != null) {
+                        cf.completeExceptionally(throwable);
+                    } else {
+                        cf.complete(result);
+                    }
+                }
+            });
         }
 
+        /**
+         * Returns a fresh future that will complete when the underlying
+         * aggregate condition fires, or an already-completed future if the
+         * aggregate has already fired by the time this method is called.
+         */
         public CompletableFuture<Object> getFuture() {
-            return conditionsFuture;
+            Object v = completedValue;
+            if (v != null) {
+                return CompletableFuture.completedFuture(v);
+            }
+
+            CompletableFuture<Object> fresh = new CompletableFuture<>();
+            synchronized (lock) {
+                if (pending == null) {
+                    // Raced with aggregate completion. completedValue is now
+                    // guaranteed populated (set under lock before pending was
+                    // nulled).
+                    return CompletableFuture.completedFuture(completedValue);
+                }
+                // Opportunistic prune of weak refs whose target has been
+                // collected. Keeps pending bounded even if the aggregate never
+                // fires.
+                Iterator<WeakReference<CompletableFuture<Object>>> it = pending.iterator();
+                while (it.hasNext()) {
+                    if (it.next().get() == null) {
+                        it.remove();
+                    }
+                }
+                pending.add(new WeakReference<>(fresh));
+            }
+            return fresh;
         }
 
         public void inform(FDv2SourceResult result) {
@@ -615,6 +711,31 @@ class FDv2DataSource implements DataSource {
         @Override
         public void close() {
             conditions.forEach(Condition::close);
+            synchronized (lock) {
+                if (pending != null) {
+                    pending.clear();
+                }
+            }
+        }
+
+        /**
+         * Test-only: snapshot of the current pending list size after
+         * opportunistic pruning. Used by tests to assert that the pending list
+         * does not grow unboundedly across iterations.
+         */
+        int pendingSize() {
+            synchronized (lock) {
+                if (pending == null) {
+                    return 0;
+                }
+                Iterator<WeakReference<CompletableFuture<Object>>> it = pending.iterator();
+                while (it.hasNext()) {
+                    if (it.next().get() == null) {
+                        it.remove();
+                    }
+                }
+                return pending.size();
+            }
         }
     }
 }
