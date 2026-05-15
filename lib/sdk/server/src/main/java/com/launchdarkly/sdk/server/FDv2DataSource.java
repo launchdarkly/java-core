@@ -622,12 +622,30 @@ class FDv2DataSource implements DataSource {
         private final Object lock = new Object();
 
         /**
-         * Holds the value the aggregate completed with, once it has completed.
-         * {@code volatile} so the fast path in {@link #getFuture()} avoids
-         * taking the lock. Set under {@code lock} together with clearing
-         * {@code pending} so the two stay consistent.
+         * Set to {@code true} once the aggregate has completed (either
+         * normally or exceptionally). {@code volatile} so the fast path in
+         * {@link #getFuture()} avoids taking the lock. Set under {@code lock}
+         * together with populating {@code firedResult}/{@code firedThrowable}
+         * and clearing {@code pending}, so a reader that observes
+         * {@code isFired == true} also observes the corresponding values via
+         * the JMM happens-before edge.
          */
-        private volatile Object completedValue;
+        private volatile boolean isFired;
+
+        /**
+         * Result value the aggregate completed with, or {@code null} if it
+         * completed exceptionally. Only meaningful when {@code isFired} is
+         * true. Written under {@code lock}; readable without the lock once
+         * {@code isFired} has been observed true (volatile happens-before).
+         */
+        private Object firedResult;
+
+        /**
+         * Throwable the aggregate completed exceptionally with, or
+         * {@code null} if it completed normally. Same visibility rules as
+         * {@code firedResult}.
+         */
+        private Throwable firedThrowable;
 
         /**
          * Tracks futures previously returned by {@link #getFuture()} that have
@@ -650,7 +668,9 @@ class FDv2DataSource implements DataSource {
             this.aggregate.whenComplete((result, throwable) -> {
                 List<WeakReference<CompletableFuture<Object>>> snapshot;
                 synchronized (lock) {
-                    completedValue = (throwable == null) ? result : null;
+                    firedResult = result;
+                    firedThrowable = throwable;
+                    isFired = true;
                     snapshot = pending;
                     pending = null;
                 }
@@ -673,22 +693,22 @@ class FDv2DataSource implements DataSource {
 
         /**
          * Returns a fresh future that will complete when the underlying
-         * aggregate condition fires, or an already-completed future if the
-         * aggregate has already fired by the time this method is called.
+         * aggregate condition fires, or an already-completed future (normal or
+         * exceptional) if the aggregate has already fired by the time this
+         * method is called.
          */
         public CompletableFuture<Object> getFuture() {
-            Object v = completedValue;
-            if (v != null) {
-                return CompletableFuture.completedFuture(v);
+            if (isFired) {
+                return makeCompletedFuture();
             }
 
             CompletableFuture<Object> fresh = new CompletableFuture<>();
             synchronized (lock) {
                 if (pending == null) {
-                    // Raced with aggregate completion. completedValue is now
-                    // guaranteed populated (set under lock before pending was
-                    // nulled).
-                    return CompletableFuture.completedFuture(completedValue);
+                    // Raced with aggregate completion. isFired is now
+                    // guaranteed true and firedResult/firedThrowable are
+                    // populated (set under lock before pending was nulled).
+                    return makeCompletedFuture();
                 }
                 // Opportunistic prune of weak refs whose target has been
                 // collected. Keeps pending bounded even if the aggregate never
@@ -716,6 +736,20 @@ class FDv2DataSource implements DataSource {
                     pending.clear();
                 }
             }
+        }
+
+        /**
+         * Materializes a new already-completed CompletableFuture mirroring
+         * whichever terminal state {@link #aggregate} reached. Caller must
+         * have observed {@code isFired == true}.
+         */
+        private CompletableFuture<Object> makeCompletedFuture() {
+            if (firedThrowable != null) {
+                CompletableFuture<Object> cf = new CompletableFuture<>();
+                cf.completeExceptionally(firedThrowable);
+                return cf;
+            }
+            return CompletableFuture.completedFuture(firedResult);
         }
     }
 }
