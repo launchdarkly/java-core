@@ -11,12 +11,12 @@ import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSinkV2;
 
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
-import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -594,24 +594,28 @@ class FDv2DataSource implements DataSource {
     /**
      * Helper class to manage the lifecycle of conditions with automatic cleanup.
      *
-     * <p>{@link #getFuture()} returns a <em>fresh</em> {@link CompletableFuture}
-     * per call rather than returning the same shared instance. This matters
-     * because the run loop calls {@code CompletableFuture.anyOf(getFuture(),
-     * synchronizerNext)} on every iteration: if {@code getFuture()} returned a
-     * shared instance, each {@code anyOf} call would permanently attach an
-     * {@code OrRelay} {@code Completion} to its {@code stack}. On a healthy
-     * primary synchronizer that streams ChangeSets without ever arming the
-     * fallback timer, the aggregate never completes, so those Completion nodes
+     * <p>Before the aggregate completes, {@link #getFuture()} returns a
+     * <em>fresh</em> {@link CompletableFuture} per call. This matters because
+     * the run loop calls {@code CompletableFuture.anyOf(getFuture(),
+     * synchronizerNext)} on every iteration: if {@code getFuture()} returned
+     * the shared underlying aggregate while it was still pending, each
+     * {@code anyOf} call would permanently attach an {@code OrRelay}
+     * {@code Completion} to its {@code stack}. On a healthy primary
+     * synchronizer that streams ChangeSets without ever arming the fallback
+     * timer, the aggregate never completes, so those Completion nodes would
      * accumulate monotonically for the synchronizer's full tenure -- a real
      * memory leak proportional to event rate.
      *
-     * <p>The fix: a single permanent listener on the underlying aggregate fans
-     * out completion to every fresh future handed out by {@link #getFuture()}.
-     * Fresh futures are tracked via {@link WeakReference} on a pending list, so
-     * a fresh future whose only strong references were in the caller's loop
-     * iteration becomes garbage-collectable once that iteration ends. Pending
-     * entries whose referent has been collected are pruned opportunistically on
-     * subsequent {@code getFuture()} calls and on {@link #close()}.
+     * <p>After the aggregate completes, {@link #getFuture()} returns the
+     * aggregate directly: any continuation registered on an already-completed
+     * CompletableFuture fires synchronously at registration time and is
+     * removed from the stack immediately by {@code cleanStack}, so the same
+     * accumulation cannot happen.
+     *
+     * <p>Fresh pre-completion futures are tracked in a {@link WeakHashMap}-backed
+     * set, so a fresh future whose only strong references were in the caller's
+     * loop iteration becomes garbage-collectable -- and automatically removed
+     * from {@code pending} -- once that iteration ends.
      *
      * <p>Package-private (rather than private) so that direct unit tests can
      * exercise the API surface and assert per-call distinctness.
@@ -622,38 +626,15 @@ class FDv2DataSource implements DataSource {
         private final Object lock = new Object();
 
         /**
-         * Set to {@code true} once the aggregate has completed (either
-         * normally or exceptionally). {@code volatile} so the fast path in
-         * {@link #getFuture()} avoids taking the lock. Set under {@code lock}
-         * together with populating {@code firedResult}/{@code firedThrowable}
-         * and clearing {@code pending}, so a reader that observes
-         * {@code isFired == true} also observes the corresponding values via
-         * the JMM happens-before edge.
-         */
-        private volatile boolean isFired;
-
-        /**
-         * Result value the aggregate completed with, or {@code null} if it
-         * completed exceptionally. Only meaningful when {@code isFired} is
-         * true. Written under {@code lock}; readable without the lock once
-         * {@code isFired} has been observed true (volatile happens-before).
-         */
-        private Object firedResult;
-
-        /**
-         * Throwable the aggregate completed exceptionally with, or
-         * {@code null} if it completed normally. Same visibility rules as
-         * {@code firedResult}.
-         */
-        private Throwable firedThrowable;
-
-        /**
          * Tracks futures previously returned by {@link #getFuture()} that have
-         * not yet been completed. {@code null} once the aggregate has fired
-         * (and all pending entries have been drained). Mutated only under
+         * not yet been completed. Held weakly via {@link WeakHashMap} so that
+         * fresh futures abandoned by the caller (the typical end-of-iteration
+         * case) become GC-collectable. Set to {@code null} once the aggregate
+         * has fired and the entries have been drained. Mutated only under
          * {@code lock}.
          */
-        private List<WeakReference<CompletableFuture<Object>>> pending = new ArrayList<>();
+        private Set<CompletableFuture<Object>> pending =
+            Collections.newSetFromMap(new WeakHashMap<>());
 
         public Conditions(List<Condition> conditions) {
             this.conditions = conditions;
@@ -663,25 +644,22 @@ class FDv2DataSource implements DataSource {
                     conditions.stream().map(Condition::execute).toArray(CompletableFuture[]::new));
 
             // Single permanent listener. This is the only Completion node ever
-            // attached to aggregate.stack -- subsequent getFuture() calls do
-            // not touch the aggregate at all.
+            // attached to aggregate.stack while the aggregate is still pending
+            // -- subsequent pre-completion getFuture() calls do not touch the
+            // aggregate at all.
             this.aggregate.whenComplete((result, throwable) -> {
-                List<WeakReference<CompletableFuture<Object>>> snapshot;
+                List<CompletableFuture<Object>> snapshot;
                 synchronized (lock) {
-                    firedResult = result;
-                    firedThrowable = throwable;
-                    isFired = true;
-                    snapshot = pending;
+                    if (pending == null) {
+                        return;
+                    }
+                    // Copy under the lock: the ArrayList holds strong
+                    // references so entries that survived GC to this point
+                    // stay alive until we complete them below.
+                    snapshot = new ArrayList<>(pending);
                     pending = null;
                 }
-                if (snapshot == null) {
-                    return;
-                }
-                for (WeakReference<CompletableFuture<Object>> ref : snapshot) {
-                    CompletableFuture<Object> cf = ref.get();
-                    if (cf == null) {
-                        continue; // Already GC'd -- nothing to complete.
-                    }
+                for (CompletableFuture<Object> cf : snapshot) {
                     if (throwable != null) {
                         cf.completeExceptionally(throwable);
                     } else {
@@ -692,34 +670,23 @@ class FDv2DataSource implements DataSource {
         }
 
         /**
-         * Returns a fresh future that will complete when the underlying
-         * aggregate condition fires, or an already-completed future (normal or
-         * exceptional) if the aggregate has already fired by the time this
-         * method is called.
+         * Returns a future that will complete when the underlying aggregate
+         * condition fires. Pre-completion, this is a fresh future per call;
+         * post-completion, this is the aggregate itself (already done).
          */
         public CompletableFuture<Object> getFuture() {
-            if (isFired) {
-                return makeCompletedFuture();
+            if (aggregate.isDone()) {
+                return aggregate;
             }
 
             CompletableFuture<Object> fresh = new CompletableFuture<>();
             synchronized (lock) {
                 if (pending == null) {
-                    // Raced with aggregate completion. isFired is now
-                    // guaranteed true and firedResult/firedThrowable are
-                    // populated (set under lock before pending was nulled).
-                    return makeCompletedFuture();
+                    // Raced with aggregate completion between isDone() and
+                    // the lock acquisition; aggregate is now done.
+                    return aggregate;
                 }
-                // Opportunistic prune of weak refs whose target has been
-                // collected. Keeps pending bounded even if the aggregate never
-                // fires.
-                Iterator<WeakReference<CompletableFuture<Object>>> it = pending.iterator();
-                while (it.hasNext()) {
-                    if (it.next().get() == null) {
-                        it.remove();
-                    }
-                }
-                pending.add(new WeakReference<>(fresh));
+                pending.add(fresh);
             }
             return fresh;
         }
@@ -736,20 +703,6 @@ class FDv2DataSource implements DataSource {
                     pending.clear();
                 }
             }
-        }
-
-        /**
-         * Materializes a new already-completed CompletableFuture mirroring
-         * whichever terminal state {@link #aggregate} reached. Caller must
-         * have observed {@code isFired == true}.
-         */
-        private CompletableFuture<Object> makeCompletedFuture() {
-            if (firedThrowable != null) {
-                CompletableFuture<Object> cf = new CompletableFuture<>();
-                cf.completeExceptionally(firedThrowable);
-                return cf;
-            }
-            return CompletableFuture.completedFuture(firedResult);
         }
     }
 }
