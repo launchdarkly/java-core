@@ -106,26 +106,46 @@ public class HttpConfigurationBuilderTest {
   }
 
   @Test
-  public void testInstanceIdHeaderIsUuidV4() {
+  public void testInstanceIdHeaderMirrorsClientContext() {
+    // The HTTP builder emits whatever instance ID ClientContext provides; generation is the
+    // LDClient/ClientContext's responsibility, not the builder's.
     HttpConfiguration hc = Components.httpConfiguration().build(BASIC_CONTEXT);
-    assertHasInstanceIdHeader(hc);
+    String headerValue = assertHasInstanceIdHeader(hc);
+    assertEquals(BASIC_CONTEXT.getInstanceId(), headerValue);
   }
 
   @Test
-  public void testInstanceIdIsDifferentBetweenHttpConfigurations() {
-    // Each call to build() represents a new SDK instance; each must get its own GUID.
+  public void testInstanceIdIsDifferentBetweenClientContexts() {
+    // Each ClientContext auto-generates its own instance ID, so building HttpConfigurations
+    // from two distinct contexts produces distinct header values. This is the
+    // cross-SDK-instance uniqueness property the contract tests assert against.
+    ClientContext context1 = new ClientContext(SDK_KEY);
+    ClientContext context2 = new ClientContext(SDK_KEY);
+    HttpConfiguration hc1 = Components.httpConfiguration().build(context1);
+    HttpConfiguration hc2 = Components.httpConfiguration().build(context2);
+    String id1 = assertHasInstanceIdHeader(hc1);
+    String id2 = assertHasInstanceIdHeader(hc2);
+    assertNotEquals("each SDK instance should have its own instance id", id1, id2);
+  }
+
+  @Test
+  public void testInstanceIdHeaderIsStableAcrossBuildsFromSameContext() {
+    // Multiple build() calls against the same ClientContext (which is what happens during
+    // LDClient initialization when ClientContextImpl rebuilds the context across logging/HTTP
+    // stages) must produce the same instance id.
     HttpConfiguration hc1 = Components.httpConfiguration().build(BASIC_CONTEXT);
     HttpConfiguration hc2 = Components.httpConfiguration().build(BASIC_CONTEXT);
     String id1 = assertHasInstanceIdHeader(hc1);
     String id2 = assertHasInstanceIdHeader(hc2);
-    assertNotEquals("each SDK instance should generate its own instance id", id1, id2);
+    assertEquals(id1, id2);
+    assertEquals(BASIC_CONTEXT.getInstanceId(), id1);
   }
 
   @Test
   public void testInstanceIdHeaderIsNotOverriddenByCustomHeaders() {
     // The default-headers map is built once per HttpConfiguration; a user-supplied custom header
     // for X-LaunchDarkly-Instance-Id is allowed to replace the SDK-generated value, but absent
-    // that, the SDK's generated UUID must come through.
+    // that, the context-supplied UUID must come through.
     HttpConfiguration hc = Components.httpConfiguration()
         .addCustomHeader("X-Some-Other-Header", "value")
         .build(BASIC_CONTEXT);

@@ -47,7 +47,6 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
@@ -350,12 +349,13 @@ abstract class ComponentsImpl {
         headers.put("X-LaunchDarkly-Wrapper", wrapperId);
       }
 
-      // Per SCMP-server-connection-minutes-polling, every polling request must carry a per-instance
-      // GUID v4. We attach it to the default headers (rather than only on the poller) so that it is
-      // also present on streaming and event requests; this matches the cross-SDK contract tests and
-      // keeps the GUID stable for the lifetime of the SDK instance, since the default headers map
-      // is built once per HttpConfiguration and never modified afterwards.
-      headers.put(INSTANCE_ID_HEADER, UUID.randomUUID().toString());
+      // The instance ID originates on ClientContext (generated once when LDClient is constructed)
+      // so every subsystem built from the same context observes a consistent value for the
+      // lifetime of the SDK instance.
+      String instanceId = clientContext.getInstanceId();
+      if (instanceId != null && !instanceId.isEmpty()) {
+        headers.put(INSTANCE_ID_HEADER, instanceId);
+      }
 
       // For consistency with other SDKs, custom headers are allowed to overwrite headers such as
       // User-Agent and Authorization.
