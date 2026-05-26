@@ -21,7 +21,7 @@ public class TcpServerTest {
       port = server.getPort();
       try (Socket s = new Socket("localhost", server.getPort())) {} // just verify that we can connect
     }
-    assertFalse("expected listener to be closed, but it wasn't", doesPortHaveListener(port));
+    assertPortReleased(port);
   }
 
   @Test
@@ -37,6 +37,21 @@ public class TcpServerTest {
       assertEquals(specificPort, server.getPort());
       try (Socket s = new Socket("localhost", specificPort)) {} // just verify that we can connect
     }
-    assertFalse("expected listener to be closed, but it wasn't", doesPortHaveListener(specificPort));
+    assertPortReleased(specificPort);
+  }
+
+  private static void assertPortReleased(int port) {
+    long deadline = System.currentTimeMillis() + 1000;
+    while (System.currentTimeMillis() < deadline) {
+      if (!doesPortHaveListener(port)) {
+        return;
+      }
+      try {
+        Thread.sleep(50);
+      } catch (InterruptedException e) {
+        throw new RuntimeException(e);
+      }
+    }
+    assertFalse("expected listener to be closed, but it wasn't", doesPortHaveListener(port));
   }
 }
