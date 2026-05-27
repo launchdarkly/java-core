@@ -24,6 +24,8 @@ import org.junit.Test;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.launchdarkly.sdk.server.TestComponents.clientContext;
@@ -198,7 +200,14 @@ public class LDConfigTest {
     assertEquals(defaults.getSocketTimeout(), hc.getSocketTimeout());
     assertNull(hc.getSslSocketFactory());
     assertNull(hc.getTrustManager());
-    assertEquals(ImmutableMap.copyOf(defaults.getDefaultHeaders()), ImmutableMap.copyOf(hc.getDefaultHeaders()));
+    // The X-LaunchDarkly-Instance-Id header is a fresh UUID per HttpConfiguration, so it will
+    // differ between the two configurations; compare the remaining headers and verify the
+    // instance-id header is present on both.
+    Map<String, String> defaultHeaders = new HashMap<>(ImmutableMap.copyOf(defaults.getDefaultHeaders()));
+    Map<String, String> hcHeaders = new HashMap<>(ImmutableMap.copyOf(hc.getDefaultHeaders()));
+    assertNotNull(defaultHeaders.remove("X-LaunchDarkly-Instance-Id"));
+    assertNotNull(hcHeaders.remove("X-LaunchDarkly-Instance-Id"));
+    assertEquals(defaultHeaders, hcHeaders);
   }
 
   @Test

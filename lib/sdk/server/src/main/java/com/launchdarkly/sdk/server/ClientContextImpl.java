@@ -8,6 +8,7 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreUpdateSink;
 import com.launchdarkly.sdk.server.subsystems.HttpConfiguration;
 import com.launchdarkly.sdk.server.subsystems.LoggingConfiguration;
 
+import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -37,7 +38,7 @@ final class ClientContextImpl extends ClientContext {
   ) {
     super(baseContext.getSdkKey(), baseContext.getApplicationInfo(), baseContext.getHttp(),
         baseContext.getLogging(), baseContext.isOffline(), baseContext.getServiceEndpoints(),
-        baseContext.getThreadPriority(), baseContext.getWrapperInfo());
+        baseContext.getThreadPriority(), baseContext.getWrapperInfo(), baseContext.getInstanceId());
     this.sharedExecutor = sharedExecutor;
     this.diagnosticStore = diagnosticStore;
     this.dataSourceUpdateSink = null;
@@ -79,22 +80,29 @@ final class ClientContextImpl extends ClientContext {
       LDConfig config,
       ScheduledExecutorService sharedExecutor
       ) {
+    // Generate the instance ID once and thread it through every ClientContext we build for this
+    // LDClient. Subsystems built from any of these contexts will all observe the same value.
+    String instanceId = UUID.randomUUID().toString();
+
     ClientContext minimalContext = new ClientContext(sdkKey, config.applicationInfo, null,
-        null, config.offline, config.serviceEndpoints, config.threadPriority, config.wrapperInfo);
+        null, config.offline, config.serviceEndpoints, config.threadPriority, config.wrapperInfo,
+        instanceId);
     LoggingConfiguration loggingConfig = config.logging.build(minimalContext);
-    
+
     ClientContext contextWithLogging = new ClientContext(sdkKey, config.applicationInfo, null,
-        loggingConfig, config.offline, config.serviceEndpoints, config.threadPriority, config.wrapperInfo);
+        loggingConfig, config.offline, config.serviceEndpoints, config.threadPriority,
+        config.wrapperInfo, instanceId);
     HttpConfiguration httpConfig = config.http.build(contextWithLogging);
-    
+
     if (httpConfig.getProxy() != null) {
       contextWithLogging.getBaseLogger().info("Using proxy: {} {} authentication.",
           httpConfig.getProxy(),
           httpConfig.getProxyAuthentication() == null ? "without" : "with");
     }
-    
-    ClientContext contextWithHttpAndLogging = new ClientContext(sdkKey, config.applicationInfo, httpConfig,
-        loggingConfig, config.offline, config.serviceEndpoints, config.threadPriority, config.wrapperInfo);
+
+    ClientContext contextWithHttpAndLogging = new ClientContext(sdkKey, config.applicationInfo,
+        httpConfig, loggingConfig, config.offline, config.serviceEndpoints, config.threadPriority,
+        config.wrapperInfo, instanceId);
     
     // Create a diagnostic store only if diagnostics are enabled. Diagnostics are enabled as long as 1. the
     // opt-out property was not set in the config, and 2. we are using the standard event processor.

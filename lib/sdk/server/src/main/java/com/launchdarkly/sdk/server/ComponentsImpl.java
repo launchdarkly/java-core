@@ -304,6 +304,15 @@ abstract class ComponentsImpl {
   }
 
   static final class HttpConfigurationBuilderImpl extends HttpConfigurationBuilder {
+    /**
+     * HTTP header used to identify this SDK instance for the purpose of estimating
+     * server-connection-minutes when polling. It contains a v4 UUID that is generated once per SDK
+     * instance and remains constant for the lifetime of the client.
+     *
+     * <p>See: sdk-specs / SCMP-server-connection-minutes-polling.
+     */
+    static final String INSTANCE_ID_HEADER = "X-LaunchDarkly-Instance-Id";
+
     @Override
     public HttpConfiguration build(ClientContext clientContext) {
       LDLogger logger = clientContext.getBaseLogger();
@@ -340,6 +349,16 @@ abstract class ComponentsImpl {
         headers.put("X-LaunchDarkly-Wrapper", wrapperId);
       }
 
+      // The instance ID originates on ClientContext (generated once when LDClient is constructed)
+      // so every subsystem built from the same context observes a consistent value for the
+      // lifetime of the SDK instance.
+      String instanceId = clientContext.getInstanceId();
+      if (instanceId != null && !instanceId.isEmpty()) {
+        headers.put(INSTANCE_ID_HEADER, instanceId);
+      }
+
+      // For consistency with other SDKs, custom headers are allowed to overwrite headers such as
+      // User-Agent and Authorization.
       if (!customHeaders.isEmpty()) {
           headers.putAll(customHeaders);
       }

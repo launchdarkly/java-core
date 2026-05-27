@@ -245,6 +245,14 @@ public class DefaultFeatureRequestorTest extends BaseTest {
   private void verifyHeaders(RequestInfo req) {
     HttpConfiguration httpConfig = clientContext(sdkKey, LDConfig.DEFAULT).getHttp();
     for (Map.Entry<String, String> kv: httpConfig.getDefaultHeaders()) {
+      // X-LaunchDarkly-Instance-Id is a per-HttpConfiguration random UUID, so the value generated
+      // here won't match the one used by the requestor in the test. We only verify that *some*
+      // instance ID header is present on the request; per-builder uniqueness is covered in
+      // HttpConfigurationBuilderTest.
+      if (kv.getKey().equals("X-LaunchDarkly-Instance-Id")) {
+        assertNotNull(req.getHeader(kv.getKey()));
+        continue;
+      }
       assertThat(req.getHeader(kv.getKey()), equalTo(kv.getValue()));
     }
   }

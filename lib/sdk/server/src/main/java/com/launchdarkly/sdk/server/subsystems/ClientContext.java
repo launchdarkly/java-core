@@ -8,6 +8,8 @@ import com.launchdarkly.sdk.server.interfaces.ApplicationInfo;
 import com.launchdarkly.sdk.server.interfaces.ServiceEndpoints;
 import com.launchdarkly.sdk.server.interfaces.WrapperInfo;
 
+import java.util.UUID;
+
 /**
  * Context information provided by the {@link com.launchdarkly.sdk.server.LDClient} when creating components.
  * <p>
@@ -31,11 +33,60 @@ public class ClientContext {
   private final boolean offline;
   private final ServiceEndpoints serviceEndpoints;
   private final int threadPriority;
+  private final String instanceId;
   private WrapperInfo wrapperInfo;
 
   /**
-   * Constructor that sets all properties. All should be non-null.
-   * 
+   * Constructor that sets all properties including an explicit instance ID. All should be
+   * non-null.
+   *
+   * <p>The instance ID is sent on every outbound request in the {@code X-LaunchDarkly-Instance-Id}
+   * header. It must be generated once per LDClient and remain stable for the client's lifetime.
+   * The eight-argument constructor auto-generates a v4 UUID for callers that do not need to
+   * supply their own value.
+   *
+   * @param sdkKey the SDK key
+   * @param applicationInfo application metadata properties from
+   *   {@link Builder#applicationInfo(com.launchdarkly.sdk.server.integrations.ApplicationInfoBuilder)}
+   * @param http HTTP configuration properties from {@link Builder#http(ComponentConfigurer)}
+   * @param logging logging configuration properties from {@link Builder#logging(ComponentConfigurer)}
+   * @param offline true if the SDK should be entirely offline
+   * @param serviceEndpoints service endpoint URI properties from
+   *   {@link Builder#serviceEndpoints(com.launchdarkly.sdk.server.integrations.ServiceEndpointsBuilder)}
+   * @param threadPriority worker thread priority from {@link Builder#threadPriority(int)}
+   * @param wrapperInfo wrapper configuration from {@link Builder#wrapper(com.launchdarkly.sdk.server.integrations.WrapperInfoBuilder)}
+   * @param instanceId per-LDClient identifier for the {@code X-LaunchDarkly-Instance-Id} header
+   */
+  public ClientContext(
+      String sdkKey,
+      ApplicationInfo applicationInfo,
+      HttpConfiguration http,
+      LoggingConfiguration logging,
+      boolean offline,
+      ServiceEndpoints serviceEndpoints,
+      int threadPriority,
+      WrapperInfo wrapperInfo,
+      String instanceId
+      ) {
+    this.sdkKey = sdkKey;
+    this.applicationInfo = applicationInfo;
+    this.http = http;
+    this.logging = logging;
+    this.offline = offline;
+    this.serviceEndpoints = serviceEndpoints;
+    this.threadPriority = threadPriority;
+    this.wrapperInfo = wrapperInfo;
+    this.instanceId = instanceId;
+
+    this.baseLogger = logging == null ? LDLogger.none() :
+      LDLogger.withAdapter(logging.getLogAdapter(), logging.getBaseLoggerName());
+  }
+
+  /**
+   * Constructor that sets all properties. All should be non-null. Auto-generates a v4 UUID for
+   * the instance ID; use the nine-argument constructor if you need to thread an existing value
+   * through (for example, when copying a context for an in-flight LDClient).
+   *
    * @param sdkKey the SDK key
    * @param applicationInfo application metadata properties from
    *   {@link Builder#applicationInfo(com.launchdarkly.sdk.server.integrations.ApplicationInfoBuilder)}
@@ -57,27 +108,19 @@ public class ClientContext {
       int threadPriority,
       WrapperInfo wrapperInfo
       ) {
-    this.sdkKey = sdkKey;
-    this.applicationInfo = applicationInfo;
-    this.http = http;
-    this.logging = logging;
-    this.offline = offline;
-    this.serviceEndpoints = serviceEndpoints;
-    this.threadPriority = threadPriority;
-    this.wrapperInfo = wrapperInfo;
-    
-    this.baseLogger = logging == null ? LDLogger.none() :
-      LDLogger.withAdapter(logging.getLogAdapter(), logging.getBaseLoggerName());
+    this(sdkKey, applicationInfo, http, logging, offline, serviceEndpoints, threadPriority,
+        wrapperInfo, UUID.randomUUID().toString());
   }
-  
+
   /**
    * Copy constructor.
-   * 
+   *
    * @param copyFrom the instance to copy from
    */
   protected ClientContext(ClientContext copyFrom) {
     this(copyFrom.sdkKey, copyFrom.applicationInfo, copyFrom.http, copyFrom.logging,
-        copyFrom.offline, copyFrom.serviceEndpoints, copyFrom.threadPriority, copyFrom.wrapperInfo);
+        copyFrom.offline, copyFrom.serviceEndpoints, copyFrom.threadPriority, copyFrom.wrapperInfo,
+        copyFrom.instanceId);
   }
   
   /**
@@ -86,20 +129,32 @@ public class ClientContext {
    * @param sdkKey the SDK key
    */
   public ClientContext(String sdkKey) {
+    this(sdkKey, UUID.randomUUID().toString());
+  }
+
+  // Private delegating constructor: generates a single instance id up front and threads it
+  // both into the default HttpConfiguration (so the X-LaunchDarkly-Instance-Id default
+  // header carries it) and into this.instanceId (so getInstanceId() returns the same value).
+  // The earlier shape, where the public single-arg ctor called defaultHttp(sdkKey) and then
+  // let the eight-arg ctor auto-generate a fresh UUID, produced two different ids -- one in
+  // the headers and one returned by getInstanceId().
+  private ClientContext(String sdkKey, String instanceId) {
     this(
         sdkKey,
         new ApplicationInfo(null, null),
-        defaultHttp(sdkKey),
+        defaultHttp(sdkKey, instanceId),
         defaultLogging(),
         false,
         Components.serviceEndpoints().createServiceEndpoints(),
         Thread.MIN_PRIORITY,
-      null
+        null,
+        instanceId
         );
   }
-  
-  private static HttpConfiguration defaultHttp(String sdkKey) {
-    ClientContext minimalContext = new ClientContext(sdkKey, null, null, null, false, null, 0, null);
+
+  private static HttpConfiguration defaultHttp(String sdkKey, String instanceId) {
+    ClientContext minimalContext = new ClientContext(sdkKey, null, null, null, false, null, 0, null,
+        instanceId);
     return Components.httpConfiguration().build(minimalContext);
   }
   
@@ -199,11 +254,22 @@ public class ClientContext {
   /**
    * Returns the worker thread priority that is set by
    * {@link Builder#threadPriority(int)}.
-   * 
+   *
    * @return the thread priority
    */
   public int getThreadPriority() {
     return threadPriority;
+  }
+
+  /**
+   * Returns the per-LDClient instance identifier sent in the {@code X-LaunchDarkly-Instance-Id}
+   * header on outbound requests. The value is generated once when the {@link ClientContext} is
+   * constructed and is stable for the client's lifetime.
+   *
+   * @return the instance ID
+   */
+  public String getInstanceId() {
+    return instanceId;
   }
 
   /**
