@@ -129,20 +129,32 @@ public class ClientContext {
    * @param sdkKey the SDK key
    */
   public ClientContext(String sdkKey) {
+    this(sdkKey, UUID.randomUUID().toString());
+  }
+
+  // Private delegating constructor: generates a single instance id up front and threads it
+  // both into the default HttpConfiguration (so the X-LaunchDarkly-Instance-Id default
+  // header carries it) and into this.instanceId (so getInstanceId() returns the same value).
+  // The earlier shape, where the public single-arg ctor called defaultHttp(sdkKey) and then
+  // let the eight-arg ctor auto-generate a fresh UUID, produced two different ids -- one in
+  // the headers and one returned by getInstanceId().
+  private ClientContext(String sdkKey, String instanceId) {
     this(
         sdkKey,
         new ApplicationInfo(null, null),
-        defaultHttp(sdkKey),
+        defaultHttp(sdkKey, instanceId),
         defaultLogging(),
         false,
         Components.serviceEndpoints().createServiceEndpoints(),
         Thread.MIN_PRIORITY,
-      null
+        null,
+        instanceId
         );
   }
-  
-  private static HttpConfiguration defaultHttp(String sdkKey) {
-    ClientContext minimalContext = new ClientContext(sdkKey, null, null, null, false, null, 0, null);
+
+  private static HttpConfiguration defaultHttp(String sdkKey, String instanceId) {
+    ClientContext minimalContext = new ClientContext(sdkKey, null, null, null, false, null, 0, null,
+        instanceId);
     return Components.httpConfiguration().build(minimalContext);
   }
   
