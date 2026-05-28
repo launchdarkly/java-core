@@ -35,6 +35,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeThat;
@@ -713,6 +714,115 @@ public class PersistentDataStoreWrapperTest extends BaseTest {
     assertThat(core.initedCount.get(), greaterThan(initedCount));
   }
   
+  @Test
+  public void disableCacheIsIdempotent() {
+    assumeThat(testMode.isCached(), is(true));
+    wrapper.disableCache();
+    wrapper.disableCache(); // must not throw
+  }
+
+  @Test
+  public void disableCacheIsSafeOnUncachedWrapper() {
+    assumeThat(testMode.isCached(), is(false));
+    wrapper.disableCache(); // must not throw
+  }
+
+  @Test
+  public void getAfterDisableCacheReturnsCurrentCoreState() {
+    assumeThat(testMode.isCached(), is(true));
+    TestItem item1v1 = new TestItem("key", 1);
+    TestItem item1v2 = new TestItem("key", 2);
+
+    core.forceSet(TEST_ITEMS, item1v1);
+    // Prime the cache.
+    assertThat(wrapper.get(TEST_ITEMS, item1v1.key), equalTo(item1v1.toItemDescriptor()));
+
+    wrapper.disableCache();
+
+    // Mutate the core behind the wrapper's back; if the cache were still
+    // serving reads we would see the stale v1.
+    core.forceSet(TEST_ITEMS, item1v2);
+    assertThat(wrapper.get(TEST_ITEMS, item1v2.key), equalTo(item1v2.toItemDescriptor()));
+  }
+
+  @Test
+  public void getAllAfterDisableCacheReturnsCurrentCoreState() {
+    assumeThat(testMode.isCached(), is(true));
+    TestItem item1 = new TestItem("keyA", 1);
+    TestItem item2 = new TestItem("keyB", 1);
+
+    core.forceSet(TEST_ITEMS, item1);
+    // Prime the cache.
+    Map<String, ItemDescriptor> primed = toItemsMap(wrapper.getAll(TEST_ITEMS));
+    assertThat(primed.size(), is(1));
+
+    wrapper.disableCache();
+
+    core.forceSet(TEST_ITEMS, item2);
+    Map<String, ItemDescriptor> afterDrop = toItemsMap(wrapper.getAll(TEST_ITEMS));
+    assertThat(afterDrop.size(), is(2));
+  }
+
+  @Test
+  public void upsertAfterDisableCacheWritesThroughToCoreOnly() {
+    assumeThat(testMode.isCached(), is(true));
+    TestItem item = new TestItem("key", 1);
+
+    wrapper.disableCache();
+
+    assertThat(wrapper.upsert(TEST_ITEMS, item.key, item.toItemDescriptor()), is(true));
+    // The write must have landed in the core.
+    assertThat(core.data.get(TEST_ITEMS).get(item.key), equalTo(item.toSerializedItemDescriptor()));
+    // And subsequent reads must reach the core (no repopulated cache).
+    assertThat(wrapper.get(TEST_ITEMS, item.key), equalTo(item.toItemDescriptor()));
+  }
+
+  @Test
+  public void initAfterDisableCacheWritesThroughToCoreWithoutRepopulatingCache() {
+    assumeThat(testMode.isCached(), is(true));
+    TestItem itemA = new TestItem("keyA", 1);
+    TestItem itemB = new TestItem("keyA", 2);
+
+    wrapper.disableCache();
+
+    wrapper.init(new DataBuilder().add(TEST_ITEMS, itemA).build());
+
+    assertThat(core.data.get(TEST_ITEMS).get(itemA.key), equalTo(itemA.toSerializedItemDescriptor()));
+
+    // Mutate the core behind the wrapper's back; if the cache had repopulated
+    // we would still see itemA on the next read.
+    core.forceSet(TEST_ITEMS, itemB);
+    assertThat(wrapper.get(TEST_ITEMS, itemB.key), equalTo(itemB.toItemDescriptor()));
+  }
+
+  @Test
+  public void getCacheStatsAfterDisableCacheReturnsNull() {
+    assumeThat(testMode.isCached(), is(true));
+    // Build a wrapper with stats recording enabled so getCacheStats is non-null pre-disable.
+    PersistentDataStoreWrapper w = new PersistentDataStoreWrapper(
+        new MockPersistentDataStore(),
+        testMode.getCacheTtl(),
+        PersistentDataStoreBuilder.StaleValuesPolicy.EVICT,
+        true,
+        this::updateStatus,
+        sharedExecutor,
+        testLogger);
+    try {
+      assertNotNull(w.getCacheStats());
+      w.disableCache();
+      assertNull(w.getCacheStats());
+    } finally {
+      try { w.close(); } catch (IOException e) { /* ignore */ }
+    }
+  }
+
+  @Test
+  public void closeAfterDisableCacheDoesNotThrow() throws IOException {
+    assumeThat(testMode.isCached(), is(true));
+    wrapper.disableCache();
+    wrapper.close(); // safety belt; tearDown will also call close, which must be safe
+  }
+
   private void causeStoreError(MockPersistentDataStore core, PersistentDataStoreWrapper w) {
     core.unavailable = true;
     core.fakeError = new RuntimeException(FAKE_ERROR.getMessage());

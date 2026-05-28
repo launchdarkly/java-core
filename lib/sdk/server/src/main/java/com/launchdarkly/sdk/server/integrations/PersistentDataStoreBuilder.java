@@ -32,10 +32,19 @@ import java.util.concurrent.TimeUnit;
  * </code></pre>
  * 
  * In this example, {@code .url()} is an option specifically for the Redis integration, whereas
- * {@code cacheSeconds()} is an option that can be used for any persistent data store. 
+ * {@code cacheSeconds()} is an option that can be used for any persistent data store.
  * <p>
  * Note that this class is abstract; the actual implementation is created by calling
  * {@link Components#persistentDataStore(ComponentConfigurer)}.
+ * <p>
+ * Under the FDv2 data system, the cache options configured here ({@link #cacheTime(Duration)},
+ * {@link #cacheSeconds(long)}, {@link #cacheMillis(long)}, {@link #cacheForever()},
+ * {@link #noCaching()}, {@link #staleValuesPolicy(StaleValuesPolicy)},
+ * {@link #recordCacheStats(boolean)}) only govern the brief bootstrap window before the in-memory
+ * store has received its first full payload. Once the in-memory store takes over as the active
+ * read source, the persistent-store cache is released and these settings have no further effect.
+ * These options are kept for backward compatibility and may be deprecated in a future major
+ * version.
  * @since 4.12.0
  */
 public abstract class PersistentDataStoreBuilder implements ComponentConfigurer<DataStore> {

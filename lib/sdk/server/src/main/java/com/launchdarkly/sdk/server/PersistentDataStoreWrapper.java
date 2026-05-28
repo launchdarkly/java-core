@@ -43,7 +43,7 @@ import static com.google.common.collect.Iterables.isEmpty;
  * <p>
  * This class is only constructed by {@link PersistentDataStoreBuilder}.
  */
-final class PersistentDataStoreWrapper implements DataStore, SettableCache {
+final class PersistentDataStoreWrapper implements DataStore, SettableCache, DisableableCache {
   private final PersistentDataStore core;
   private final LoadingCache<CacheKey, Optional<ItemDescriptor>> itemCache;
   private final LoadingCache<DataKind, KeyedItems<ItemDescriptor>> allCache;
@@ -54,9 +54,15 @@ final class PersistentDataStoreWrapper implements DataStore, SettableCache {
   private final AtomicBoolean inited = new AtomicBoolean(false);
   private final ListeningExecutorService cacheExecutor;
   private final LDLogger logger;
-  
+
   private final Object externalStoreLock = new Object();
   private volatile CacheExporter externalCache;
+
+  // Once true, the cache is bypassed on reads and writes; entries already in
+  // the cache have been invalidated by disableCache(). The cache instances
+  // themselves remain alive until GC reclaims them; the LoadingCache loaders
+  // are short-circuited because every touch site checks this flag first.
+  private volatile boolean cacheDisabled;
   
   PersistentDataStoreWrapper(
       final PersistentDataStore core,
@@ -152,13 +158,25 @@ final class PersistentDataStoreWrapper implements DataStore, SettableCache {
   }
 
   @Override
+  public void disableCache() {
+    if (cacheDisabled) return;
+    // Volatile write publishes the bypass flag before clearing cache contents.
+    // Future readers observe cacheDisabled == true and skip the cache call
+    // sites.
+    cacheDisabled = true;
+    if (itemCache != null) itemCache.invalidateAll();
+    if (allCache != null) allCache.invalidateAll();
+    if (initCache != null) initCache.invalidateAll();
+  }
+
+  @Override
   public boolean isInitialized() {
     if (inited.get()) {
       return true;
     }
     boolean result;
     try {
-      if (initCache != null) {
+      if (initCache != null && !cacheDisabled) {
         result = initCache.get("");
       } else {
         result = core.isInitialized();
@@ -187,7 +205,7 @@ final class PersistentDataStoreWrapper implements DataStore, SettableCache {
       allBuilder.add(new AbstractMap.SimpleEntry<>(kind, items));
     }
     RuntimeException failure = initCore(new FullDataSet<>(allBuilder.build(), allData.shouldPersist()));
-    if (itemCache != null && allCache != null) {
+    if (itemCache != null && allCache != null && !cacheDisabled) {
       itemCache.invalidateAll();
       allCache.invalidateAll();
       if (failure != null && !cacheIndefinitely) {
@@ -228,7 +246,7 @@ final class PersistentDataStoreWrapper implements DataStore, SettableCache {
   @Override
   public ItemDescriptor get(DataKind kind, String key) {
     try {
-      ItemDescriptor ret = itemCache != null ? itemCache.get(CacheKey.forItem(kind, key)).orNull() :
+      ItemDescriptor ret = (itemCache != null && !cacheDisabled) ? itemCache.get(CacheKey.forItem(kind, key)).orNull() :
         getAndDeserializeItem(kind, key);
       processError(null);
       return ret;
@@ -242,7 +260,7 @@ final class PersistentDataStoreWrapper implements DataStore, SettableCache {
   public KeyedItems<ItemDescriptor> getAll(DataKind kind) {
     try {
       KeyedItems<ItemDescriptor> ret;
-      ret = allCache != null ? allCache.get(kind) : getAllAndDeserialize(kind);
+      ret = (allCache != null && !cacheDisabled) ? allCache.get(kind) : getAllAndDeserialize(kind);
       processError(null);
       return ret;
     } catch (Exception e) {
@@ -281,7 +299,7 @@ final class PersistentDataStoreWrapper implements DataStore, SettableCache {
       }
       failure = e;
     }
-    if (itemCache != null) {
+    if (itemCache != null && !cacheDisabled) {
       CacheKey cacheKey = CacheKey.forItem(kind, key);
       if (failure == null) {
         if (updated) {
@@ -297,7 +315,7 @@ final class PersistentDataStoreWrapper implements DataStore, SettableCache {
         }
       }
     }
-    if (allCache != null) {
+    if (allCache != null && !cacheDisabled) {
       // If the cache has a finite TTL, then we should remove the "all items" cache entry to force
       // a reread the next time All is called. However, if it's an infinite TTL, we need to just
       // update the item within the existing "all items" entry (since we want things to still work
@@ -340,7 +358,7 @@ final class PersistentDataStoreWrapper implements DataStore, SettableCache {
 
   @Override
   public CacheStats getCacheStats() {
-    if (itemCache == null || allCache == null) {
+    if (itemCache == null || allCache == null || cacheDisabled) {
       return null;
     }
     com.google.common.cache.CacheStats itemStats = itemCache.stats();
@@ -443,8 +461,9 @@ final class PersistentDataStoreWrapper implements DataStore, SettableCache {
     }
 
     // Fall back to cache-based recovery if external store is not available/initialized
-    // and we're in infinite cache mode
-    if (cacheIndefinitely && allCache != null) {
+    // and we're in infinite cache mode. Under FDv2 this branch is dead once
+    // disableCache has run: the externalCache path above supersedes it.
+    if (cacheIndefinitely && allCache != null && !cacheDisabled) {
       // If we're in infinite cache mode, then we can assume the cache has a full set of current
       // flag data (since presumably the data source has still been running) and we can just
       // write the contents of the cache to the underlying data store.
