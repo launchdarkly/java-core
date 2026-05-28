@@ -208,6 +208,13 @@ public class StreamProcessorTest extends BaseTest {
         assertThat(req.getPath(), equalTo("/all"));
         
         for (Map.Entry<String, String> kv: httpConfig.getDefaultHeaders()) {
+          // X-LaunchDarkly-Instance-Id is a per-HttpConfiguration random UUID and the
+          // configuration here is a fresh build, distinct from the one used by the stream
+          // processor; only assert presence.
+          if (kv.getKey().equals("X-LaunchDarkly-Instance-Id")) {
+            assertNotNull(req.getHeader(kv.getKey()));
+            continue;
+          }
           assertThat(req.getHeader(kv.getKey()), equalTo(kv.getValue()));
         }
         assertThat(req.getHeader("Accept"), equalTo("text/event-stream"));
