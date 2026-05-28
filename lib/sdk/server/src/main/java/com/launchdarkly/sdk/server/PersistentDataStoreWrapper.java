@@ -162,12 +162,7 @@ final class PersistentDataStoreWrapper implements DataStore, SettableCache, Disa
     if (cacheDisabled) return;
     // Volatile write publishes the bypass flag before clearing cache contents.
     // Future readers observe cacheDisabled == true and skip the cache call
-    // sites; an in-flight reader past the flag check may still complete its
-    // current cache operation and, on a miss, fire the LoadingCache loader
-    // which can repopulate. Those leftover entries hold fresh values and are
-    // unreachable from any subsequent read (every future caller bypasses), so
-    // they don't cause stale reads or torn observations; they simply persist
-    // until GC reclaims the cache. See dotnet-core#274 for the analysis.
+    // sites.
     cacheDisabled = true;
     if (itemCache != null) itemCache.invalidateAll();
     if (allCache != null) allCache.invalidateAll();
