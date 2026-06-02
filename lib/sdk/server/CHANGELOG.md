@@ -2,6 +2,19 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.14.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.13.4...launchdarkly-java-server-sdk-7.14.0) (2026-05-28)
+
+
+### Features
+
+* add X-LaunchDarkly-Instance-Id header (SDK-2356) ([#162](https://github.com/launchdarkly/java-core/issues/162)) ([a363777](https://github.com/launchdarkly/java-core/commit/a363777b45b550ec89cc7f2eca67f9b0681e1590))
+* Drop persistent-store cache after FDv2 in-memory store init ([#167](https://github.com/launchdarkly/java-core/issues/167)) ([90f14f1](https://github.com/launchdarkly/java-core/commit/90f14f1f4f5bdb5d6bdcf4ed290f451c5ffda183))
+
+
+### Bug Fixes
+
+* honor FDv1 fallback directive during initializer phase ([#158](https://github.com/launchdarkly/java-core/issues/158)) ([b0a3957](https://github.com/launchdarkly/java-core/commit/b0a3957afa481c9938684f22c521965e616f2785))
+
 ## [7.13.4](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.13.3...launchdarkly-java-server-sdk-7.13.4) (2026-04-24)
 
 

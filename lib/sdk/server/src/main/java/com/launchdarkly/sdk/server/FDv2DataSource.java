@@ -15,6 +15,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -591,21 +593,102 @@ class FDv2DataSource implements DataSource {
 
     /**
      * Helper class to manage the lifecycle of conditions with automatic cleanup.
+     *
+     * <p>Before the aggregate completes, {@link #getFuture()} returns a
+     * <em>fresh</em> {@link CompletableFuture} per call. This matters because
+     * the run loop calls {@code CompletableFuture.anyOf(getFuture(),
+     * synchronizerNext)} on every iteration: if {@code getFuture()} returned
+     * the shared underlying aggregate while it was still pending, each
+     * {@code anyOf} call would permanently attach an {@code OrRelay}
+     * {@code Completion} to its {@code stack}. On a healthy primary
+     * synchronizer that streams ChangeSets without ever arming the fallback
+     * timer, the aggregate never completes, so those Completion nodes would
+     * accumulate monotonically for the synchronizer's full tenure -- a real
+     * memory leak proportional to event rate.
+     *
+     * <p>After the aggregate completes, {@link #getFuture()} returns the
+     * aggregate directly: any continuation registered on an already-completed
+     * CompletableFuture fires synchronously at registration time and is
+     * removed from the stack immediately by {@code cleanStack}, so the same
+     * accumulation cannot happen.
+     *
+     * <p>Fresh pre-completion futures are tracked in a {@link WeakHashMap}-backed
+     * set, so a fresh future whose only strong references were in the caller's
+     * loop iteration becomes garbage-collectable -- and automatically removed
+     * from {@code pending} -- once that iteration ends.
+     *
+     * <p>Package-private (rather than private) so that direct unit tests can
+     * exercise the API surface and assert per-call distinctness.
      */
-    private static class Conditions implements AutoCloseable {
+    static class Conditions implements AutoCloseable {
         private final List<Condition> conditions;
-        private final CompletableFuture<Object> conditionsFuture;
+        private final CompletableFuture<Object> aggregate;
+        private final Object lock = new Object();
+
+        /**
+         * Tracks futures previously returned by {@link #getFuture()} that have
+         * not yet been completed. Held weakly via {@link WeakHashMap} so that
+         * fresh futures abandoned by the caller (the typical end-of-iteration
+         * case) become GC-collectable. Set to {@code null} once the aggregate
+         * has fired and the entries have been drained. Mutated only under
+         * {@code lock}.
+         */
+        private Set<CompletableFuture<Object>> pending =
+            Collections.newSetFromMap(new WeakHashMap<>());
 
         public Conditions(List<Condition> conditions) {
             this.conditions = conditions;
-            this.conditionsFuture = conditions.isEmpty()
+            this.aggregate = conditions.isEmpty()
                 ? new CompletableFuture<>() // Never completes if no conditions
                 : CompletableFuture.anyOf(
-                conditions.stream().map(Condition::execute).toArray(CompletableFuture[]::new));
+                    conditions.stream().map(Condition::execute).toArray(CompletableFuture[]::new));
+
+            // Single permanent listener. This is the only Completion node ever
+            // attached to aggregate.stack while the aggregate is still pending
+            // -- subsequent pre-completion getFuture() calls do not touch the
+            // aggregate at all.
+            this.aggregate.whenComplete((result, throwable) -> {
+                List<CompletableFuture<Object>> snapshot;
+                synchronized (lock) {
+                    if (pending == null) {
+                        return;
+                    }
+                    // Copy under the lock: the ArrayList holds strong
+                    // references so entries that survived GC to this point
+                    // stay alive until we complete them below.
+                    snapshot = new ArrayList<>(pending);
+                    pending = null;
+                }
+                for (CompletableFuture<Object> cf : snapshot) {
+                    if (throwable != null) {
+                        cf.completeExceptionally(throwable);
+                    } else {
+                        cf.complete(result);
+                    }
+                }
+            });
         }
 
+        /**
+         * Returns a future that will complete when the underlying aggregate
+         * condition fires. Pre-completion, this is a fresh future per call;
+         * post-completion, this is the aggregate itself (already done).
+         */
         public CompletableFuture<Object> getFuture() {
-            return conditionsFuture;
+            if (aggregate.isDone()) {
+                return aggregate;
+            }
+
+            CompletableFuture<Object> fresh = new CompletableFuture<>();
+            synchronized (lock) {
+                if (pending == null) {
+                    // Raced with aggregate completion between isDone() and
+                    // the lock acquisition; aggregate is now done.
+                    return aggregate;
+                }
+                pending.add(fresh);
+            }
+            return fresh;
         }
 
         public void inform(FDv2SourceResult result) {
@@ -615,6 +698,11 @@ class FDv2DataSource implements DataSource {
         @Override
         public void close() {
             conditions.forEach(Condition::close);
+            synchronized (lock) {
+                if (pending != null) {
+                    pending.clear();
+                }
+            }
         }
     }
 }

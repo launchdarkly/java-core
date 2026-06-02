@@ -149,6 +149,9 @@ final class WriteThroughStore implements DataStore, TransactionalDataStore {
     }
     synchronized (activeStoreLock) {
       activeReadStore = memoryStore;
+      if (persistentStore instanceof DisableableCache) {
+        ((DisableableCache) persistentStore).disableCache();
+      }
     }
   }
 

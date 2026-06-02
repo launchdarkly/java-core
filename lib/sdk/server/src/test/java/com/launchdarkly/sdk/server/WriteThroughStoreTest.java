@@ -533,6 +533,95 @@ public class WriteThroughStoreTest {
     assertFalse(result2.getVersion() == 20);
   }
 
+  // Cache Disable Tests
+
+  @Test
+  public void applyFirstBasisCallsDisableCacheOnPersistentStore() throws Exception {
+    InMemoryDataStore memoryStore = new InMemoryDataStore();
+    MockDisableableCachePersistentStore persistentStore = new MockDisableableCachePersistentStore();
+
+    store = new WriteThroughStore(memoryStore, persistentStore, DataStoreMode.READ_WRITE);
+
+    store.apply(createFullChangeSet());
+
+    assertEquals(1, persistentStore.disableCacheCallCount);
+  }
+
+  @Test
+  public void applySubsequentApplyDoesNotCallDisableCacheAgain() throws Exception {
+    InMemoryDataStore memoryStore = new InMemoryDataStore();
+    MockDisableableCachePersistentStore persistentStore = new MockDisableableCachePersistentStore();
+
+    store = new WriteThroughStore(memoryStore, persistentStore, DataStoreMode.READ_WRITE);
+
+    store.apply(createFullChangeSet());
+
+    TestItem item3 = new TestItem("key3", "item3", 30);
+    Map<DataKind, KeyedItems<ItemDescriptor>> deltaData = ImmutableMap.of(
+        TEST_ITEMS,
+        new KeyedItems<>(ImmutableList.of(
+            new AbstractMap.SimpleEntry<>("key3", new ItemDescriptor(30, item3))
+        ))
+    );
+    ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> delta = new ChangeSet<>(
+        ChangeSetType.Partial,
+        Selector.make(2, "state2"),
+        deltaData.entrySet(),
+        null,
+        true
+    );
+    store.apply(delta);
+
+    assertEquals(1, persistentStore.disableCacheCallCount);
+  }
+
+  @Test
+  public void initFirstCallCallsDisableCacheOnPersistentStore() throws Exception {
+    InMemoryDataStore memoryStore = new InMemoryDataStore();
+    MockDisableableCachePersistentStore persistentStore = new MockDisableableCachePersistentStore();
+
+    store = new WriteThroughStore(memoryStore, persistentStore, DataStoreMode.READ_WRITE);
+
+    store.init(createTestDataSet());
+
+    assertEquals(1, persistentStore.disableCacheCallCount);
+  }
+
+  @Test
+  public void applyReadOnlyModeStillCallsDisableCache() throws Exception {
+    InMemoryDataStore memoryStore = new InMemoryDataStore();
+    MockDisableableCachePersistentStore persistentStore = new MockDisableableCachePersistentStore();
+
+    store = new WriteThroughStore(memoryStore, persistentStore, DataStoreMode.READ_ONLY);
+
+    store.apply(createFullChangeSet());
+
+    // Reads bypass the persistent store in both modes post-switch, so the cache
+    // is dead weight regardless of mode.
+    assertEquals(1, persistentStore.disableCacheCallCount);
+  }
+
+  @Test
+  public void applyNonDisableableStoreDoesNotThrow() throws Exception {
+    InMemoryDataStore memoryStore = new InMemoryDataStore();
+    MockPersistentStore persistentStore = new MockPersistentStore(); // does not implement DisableableCache
+
+    store = new WriteThroughStore(memoryStore, persistentStore, DataStoreMode.READ_WRITE);
+
+    // Probe must be a no-op for stores that don't implement the interface.
+    store.apply(createFullChangeSet());
+    assertTrue(persistentStore.wasInitCalled);
+  }
+
+  @Test
+  public void applyWithoutPersistenceDoesNotThrow() throws Exception {
+    InMemoryDataStore memoryStore = new InMemoryDataStore();
+
+    store = new WriteThroughStore(memoryStore, null, DataStoreMode.READ_WRITE);
+
+    store.apply(createFullChangeSet()); // null persistentStore -- probe must short-circuit
+  }
+
   // Selector Tests
 
   @Test
@@ -1018,6 +1107,16 @@ public class WriteThroughStoreTest {
     @Override
     public Selector getSelector() {
       return Selector.EMPTY;
+    }
+  }
+
+  private static class MockDisableableCachePersistentStore extends MockTransactionalPersistentStore
+      implements DisableableCache {
+    public volatile int disableCacheCallCount;
+
+    @Override
+    public void disableCache() {
+      disableCacheCallCount++;
     }
   }
 }
