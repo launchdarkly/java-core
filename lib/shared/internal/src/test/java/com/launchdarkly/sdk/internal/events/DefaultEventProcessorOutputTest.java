@@ -258,6 +258,7 @@ public class DefaultEventProcessorOutputTest extends BaseEventTest {
       ep.sendEvent(identifyEvent(LDContext.create("otherUser")));
       ep.flushBlocking(); // wait till flush is done so we know we received the first response, with the date
       es.awaitRequest();
+      ep.waitUntilInactive(); // ensure the flush worker has finished processing the response (setting lastKnownPastTime)
 
       es.receivedParams.clear();
       es.result = new EventSender.Result(true, false, null);
@@ -289,6 +290,7 @@ public class DefaultEventProcessorOutputTest extends BaseEventTest {
       ep.sendEvent(identifyEvent(LDContext.create("otherUser")));
       ep.flushBlocking(); // wait till flush is done so we know we received the first response, with the date
       es.awaitRequest();
+      ep.waitUntilInactive(); // ensure the flush worker has finished processing the response (setting lastKnownPastTime)
 
       es.receivedParams.clear();
       es.result = new EventSender.Result(true, false, null);
