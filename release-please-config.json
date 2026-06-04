@@ -3,6 +3,14 @@
   "separate-pull-requests": true,
   "include-component-in-tag": true,
   "packages": {
+    "lib/java-server-sdk-ai": {
+      "package-name": "launchdarkly-java-server-sdk-ai",
+      "bump-minor-pre-major": true,
+      "include-v-in-tag": false,
+      "extra-files": [
+        "gradle.properties"
+      ]
+    },
     "lib/java-server-sdk-otel": {
       "package-name": "lib/java-server-sdk-otel",
       "bump-minor-pre-major": true,
