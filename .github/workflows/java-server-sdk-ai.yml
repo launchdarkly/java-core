@@ -22,5 +22,5 @@ jobs:
       - name: Shared CI Steps
         uses: ./.github/actions/ci
         with:
-          workspace_path: 'lib/java-server-sdk-ai'
+          workspace_path: 'lib/sdk/server-ai'
           java_version: ${{ matrix.java-version }}

@@ -3,7 +3,7 @@
   "separate-pull-requests": true,
   "include-component-in-tag": true,
   "packages": {
-    "lib/java-server-sdk-ai": {
+    "lib/sdk/server-ai": {
       "package-name": "launchdarkly-java-server-sdk-ai",
       "bump-minor-pre-major": true,
       "include-v-in-tag": false,
