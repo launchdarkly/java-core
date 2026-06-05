@@ -46,11 +46,14 @@ ext.versions = [
     // appears in this library's public signature, so it is exposed as an `api` dependency.
     "sdk": "7.14.0",
     // jmustache: Mustache engine for AI Config message/instruction interpolation.
-    // Audit (AIC-2662): com.samskivert:jmustache 1.16 is BSD 2-Clause licensed, actively
-    // maintained, and ships as a single self-contained jar with no transitive runtime
-    // dependencies (verified via the published POM). Chosen over mustache.java / Handlebars.java
-    // for its zero-dependency footprint; HTML escaping is disabled to match the JS/Python SDKs.
-    "jmustache": "1.16"
+    // Audit (AIC-2662): com.samskivert:jmustache is BSD 2-Clause licensed and ships as a single
+    // self-contained jar with no transitive runtime dependencies (verified via the published POM).
+    // Chosen over mustache.java / Handlebars.java for its zero-dependency footprint; HTML escaping
+    // is disabled to match the JS/Python SDKs.
+    // Pinned to 1.15 (NOT 1.16): 1.16 is compiled for Java 9 (class file 53.0) and throws
+    // UnsupportedClassVersionError on the Java 8 runtimes this SDK supports. 1.15 is the last
+    // release compiled for Java 8 and exposes the same compiler API we use.
+    "jmustache": "1.15"
 ]
 
 ext.libraries = [:]
