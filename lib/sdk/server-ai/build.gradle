@@ -44,10 +44,13 @@ ext {
 ext.versions = [
     // The *lowest* version of the base SDK we are compatible with. LDClientInterface
     // appears in this library's public signature, so it is exposed as an `api` dependency.
-    "sdk": "7.14.0"
-    // NOTE: a Mustache templating dependency (for AI Config message/instruction interpolation)
-    // will be added in a later step once it has been fully audited (license / maintenance /
-    // transitive deps). See AIC-2662.
+    "sdk": "7.14.0",
+    // jmustache: Mustache engine for AI Config message/instruction interpolation.
+    // Audit (AIC-2662): com.samskivert:jmustache 1.16 is BSD 2-Clause licensed, actively
+    // maintained, and ships as a single self-contained jar with no transitive runtime
+    // dependencies (verified via the published POM). Chosen over mustache.java / Handlebars.java
+    // for its zero-dependency footprint; HTML escaping is disabled to match the JS/Python SDKs.
+    "jmustache": "1.16"
 ]
 
 ext.libraries = [:]
@@ -55,6 +58,9 @@ ext.libraries = [:]
 dependencies {
     // Exposed on the public API surface (LDClientInterface), therefore `api` not `implementation`.
     api "com.launchdarkly:launchdarkly-java-server-sdk:${versions.sdk}"
+
+    // Mustache templating, kept as `implementation` so it is not leaked onto consumers' classpath.
+    implementation "com.samskivert:jmustache:${versions.jmustache}"
 
     testImplementation "org.hamcrest:hamcrest-all:1.3"
     testImplementation "junit:junit:4.13.2"
@@ -74,11 +80,6 @@ java {
 javadoc {
     // exclude internal implementation classes from the published API documentation
     exclude internalPackageGlob
-    // The foundation module (AIC-2661) intentionally ships no public types yet, only
-    // package-info.java. The javadoc tool reports "No public or protected classes found to
-    // document" in that state, so we tolerate it here. TODO(AIC-2662): set failOnError = true
-    // once the data-model public types land.
-    failOnError = false
     options {
         // suppress noisy "no comment" warnings; checkstyle enforces Javadoc on the public surface
         addStringOption('Xdoclint:all,-missing', '-quiet')
