@@ -46,10 +46,12 @@ ext.versions = [
     // appears in this library's public signature, so it is exposed as an `api` dependency.
     "sdk": "7.14.0"
     // NOTE: the Mustache templating engine (for AI Config message/instruction interpolation) is
-    // intentionally not declared here. Per the SDK team's supply-chain guidance we will not link the
-    // external com.samskivert:jmustache artifact; the library will be vendored (source copied into an
-    // internal, relocated package) along with the Interpolator in AIC-2695, which must land before the
-    // v1.0 release (AIC-2666).
+    // intentionally NOT declared as an external dependency. Per the SDK team's supply-chain guidance
+    // we do not link the external com.samskivert:jmustache artifact; its source has been vendored
+    // (copied into the relocated internal package com.launchdarkly.sdk.server.ai.internal.mustache)
+    // so it is compiled from source and ships inside this jar with no third-party runtime dependency.
+    // See THIRD-PARTY-NOTICES.txt for the upstream license (BSD 3-Clause, Copyright (c) 2010 Michael
+    // Bayne) and src/.../internal/mustache for the vendored source (AIC-2695).
 ]
 
 ext.libraries = [:]
@@ -109,6 +111,13 @@ jacocoTestReport {
 checkstyle {
     toolVersion = "9.3"
     configFile = file("${project.rootDir}/checkstyle.xml")
+}
+
+// The vendored Mustache source (com.launchdarkly.sdk.server.ai.internal.mustache) is third-party
+// code kept as close to upstream as possible; do not subject it to our checkstyle conventions.
+def vendoredPackageGlob = "**/com/launchdarkly/sdk/server/ai/internal/mustache/**"
+tasks.named('checkstyleMain') {
+    exclude vendoredPackageGlob
 }
 
 idea {
