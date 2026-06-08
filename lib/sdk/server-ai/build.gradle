@@ -44,16 +44,12 @@ ext {
 ext.versions = [
     // The *lowest* version of the base SDK we are compatible with. LDClientInterface
     // appears in this library's public signature, so it is exposed as an `api` dependency.
-    "sdk": "7.14.0",
-    // jmustache: Mustache engine for AI Config message/instruction interpolation.
-    // Audit (AIC-2662): com.samskivert:jmustache is BSD 2-Clause licensed and ships as a single
-    // self-contained jar with no transitive runtime dependencies (verified via the published POM).
-    // Chosen over mustache.java / Handlebars.java for its zero-dependency footprint; HTML escaping
-    // is disabled to match the JS/Python SDKs.
-    // Pinned to 1.15 (NOT 1.16): 1.16 is compiled for Java 9 (class file 53.0) and throws
-    // UnsupportedClassVersionError on the Java 8 runtimes this SDK supports. 1.15 is the last
-    // release compiled for Java 8 and exposes the same compiler API we use.
-    "jmustache": "1.15"
+    "sdk": "7.14.0"
+    // NOTE: the Mustache templating engine (for AI Config message/instruction interpolation) is
+    // intentionally not declared here. Per the SDK team's supply-chain guidance we will not link the
+    // external com.samskivert:jmustache artifact; the library will be vendored (source copied into an
+    // internal, relocated package) along with the Interpolator in AIC-2695, which must land before the
+    // v1.0 release (AIC-2666).
 ]
 
 ext.libraries = [:]
@@ -61,9 +57,6 @@ ext.libraries = [:]
 dependencies {
     // Exposed on the public API surface (LDClientInterface), therefore `api` not `implementation`.
     api "com.launchdarkly:launchdarkly-java-server-sdk:${versions.sdk}"
-
-    // Mustache templating, kept as `implementation` so it is not leaked onto consumers' classpath.
-    implementation "com.samskivert:jmustache:${versions.jmustache}"
 
     testImplementation "org.hamcrest:hamcrest-all:1.3"
     testImplementation "junit:junit:4.13.2"
