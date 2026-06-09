@@ -7,6 +7,9 @@ import static org.hamcrest.Matchers.nullValue;
 
 import com.launchdarkly.sdk.LDValue;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -69,5 +72,44 @@ public class LDValueConverterTest {
     // Should neither throw nor StackOverflow; the top level is still a List.
     Object converted = LDValueConverter.toJavaObject(LDValue.parse(json.toString()));
     assertThat(converted, instanceOf(List.class));
+  }
+
+  @Test
+  public void fromJavaObjectConvertsScalars() {
+    assertThat(LDValueConverter.fromJavaObject(null), is(LDValue.ofNull()));
+    assertThat(LDValueConverter.fromJavaObject("hi"), is(LDValue.of("hi")));
+    assertThat(LDValueConverter.fromJavaObject(Boolean.TRUE), is(LDValue.of(true)));
+    assertThat(LDValueConverter.fromJavaObject(7), is(LDValue.of(7)));
+    assertThat(LDValueConverter.fromJavaObject(7L), is(LDValue.of(7L)));
+    assertThat(LDValueConverter.fromJavaObject(0.5), is(LDValue.of(0.5)));
+  }
+
+  @Test
+  public void fromJavaObjectConvertsNestedMapsAndLists() {
+    Map<String, Object> input = new LinkedHashMap<>();
+    input.put("a", 1L);
+    input.put("b", Arrays.asList("x", 2L));
+    Map<String, Object> nested = new LinkedHashMap<>();
+    nested.put("d", true);
+    input.put("c", nested);
+
+    LDValue value = LDValueConverter.fromJavaObject(input);
+    assertThat(value, is(LDValue.parse("{\"a\":1,\"b\":[\"x\",2],\"c\":{\"d\":true}}")));
+  }
+
+  @Test
+  public void fromJavaObjectRoundTrips() {
+    LDValue original = LDValue.parse("{\"name\":\"gpt-4\",\"n\":3,\"f\":0.25,\"on\":true,\"list\":[1,2]}");
+    Object asJava = LDValueConverter.toJavaObject(original);
+    assertThat(LDValueConverter.fromJavaObject(asJava), is(original));
+  }
+
+  @Test
+  public void fromJavaObjectDropsUnsupportedTypes() {
+    // An unsupported value type becomes JSON null rather than throwing.
+    assertThat(LDValueConverter.fromJavaObject(new Object()), is(LDValue.ofNull()));
+    List<Object> list = new ArrayList<>();
+    list.add(new Object());
+    assertThat(LDValueConverter.fromJavaObject(list), is(LDValue.parse("[null]")));
   }
 }
