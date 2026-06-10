@@ -1,9 +1,7 @@
 package com.launchdarkly.sdk.server.ai.internal;
 
-import com.launchdarkly.sdk.ArrayBuilder;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.LDValueType;
-import com.launchdarkly.sdk.ObjectBuilder;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -69,64 +67,6 @@ public final class LDValueConverter {
       return map;
     }
     return null;
-  }
-
-  /**
-   * Converts a plain Java value back into an {@link LDValue}.
-   * <p>
-   * This is the inverse of {@link #toJavaObject(LDValue)} and is used to render a caller-supplied
-   * default config back into the JSON flag-value shape so it can flow through the base SDK's
-   * variation call. Supported inputs are {@link LDValue}, {@link String}, {@link Boolean},
-   * {@link Number}, {@link Map} (with string keys), and {@link Iterable}; any other type (or a
-   * {@code null}) becomes {@link LDValue#ofNull()}. Conversion depth is capped (see
-   * {@link #MAX_DEPTH}); values nested more deeply are dropped to {@code null}.
-   *
-   * @param value the value to convert; may be {@code null}
-   * @return the equivalent {@link LDValue}, never {@code null}
-   */
-  public static LDValue fromJavaObject(Object value) {
-    return fromJavaObject(value, 0);
-  }
-
-  private static LDValue fromJavaObject(Object value, int depth) {
-    if (value == null || depth >= MAX_DEPTH) {
-      return LDValue.ofNull();
-    }
-    if (value instanceof LDValue) {
-      return (LDValue) value;
-    }
-    if (value instanceof String) {
-      return LDValue.of((String) value);
-    }
-    if (value instanceof Boolean) {
-      return LDValue.of((Boolean) value);
-    }
-    if (value instanceof Integer) {
-      return LDValue.of((Integer) value);
-    }
-    if (value instanceof Long) {
-      return LDValue.of((Long) value);
-    }
-    if (value instanceof Number) {
-      return LDValue.of(((Number) value).doubleValue());
-    }
-    if (value instanceof Map) {
-      ObjectBuilder builder = LDValue.buildObject();
-      for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
-        if (entry.getKey() != null) {
-          builder.put(entry.getKey().toString(), fromJavaObject(entry.getValue(), depth + 1));
-        }
-      }
-      return builder.build();
-    }
-    if (value instanceof Iterable) {
-      ArrayBuilder builder = LDValue.buildArray();
-      for (Object element : (Iterable<?>) value) {
-        builder.add(fromJavaObject(element, depth + 1));
-      }
-      return builder.build();
-    }
-    return LDValue.ofNull();
   }
 
   private static Object convert(LDValue value, int depth) {

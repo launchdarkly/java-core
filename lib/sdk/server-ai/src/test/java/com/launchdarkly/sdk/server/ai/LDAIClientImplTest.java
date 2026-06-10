@@ -202,7 +202,8 @@ public class LDAIClientImplTest {
 
   @Test
   public void absentFlagReturnsConfiguredDefault() {
-    // Simulate an absent flag: the base SDK echoes back the default value we passed in.
+    // Simulate an absent flag: the base SDK returns the null sentinel default we pass in, which the
+    // client treats as "flag not found" and resolves to the caller's typed default.
     when(client.jsonValueVariation(anyString(), any(), any()))
         .thenAnswer(inv -> inv.getArgument(2, LDValue.class));
 

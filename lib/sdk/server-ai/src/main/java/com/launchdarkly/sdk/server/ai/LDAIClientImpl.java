@@ -4,22 +4,16 @@ import com.launchdarkly.logging.LDLogAdapter;
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.logging.LDSLF4J;
 import com.launchdarkly.logging.Logs;
-import com.launchdarkly.sdk.ArrayBuilder;
 import com.launchdarkly.sdk.ContextKind;
 import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
-import com.launchdarkly.sdk.ObjectBuilder;
+import com.launchdarkly.sdk.LDValueType;
 import com.launchdarkly.sdk.server.ai.datamodel.AIConfigMode;
-import com.launchdarkly.sdk.server.ai.datamodel.JudgeConfiguration;
 import com.launchdarkly.sdk.server.ai.datamodel.LDMessage;
-import com.launchdarkly.sdk.server.ai.datamodel.ModelConfig;
-import com.launchdarkly.sdk.server.ai.datamodel.ProviderConfig;
-import com.launchdarkly.sdk.server.ai.datamodel.ToolConfig;
 import com.launchdarkly.sdk.server.ai.internal.AIConfigFlagValue;
 import com.launchdarkly.sdk.server.ai.internal.AIConfigParser;
 import com.launchdarkly.sdk.server.ai.internal.AISdkInfo;
 import com.launchdarkly.sdk.server.ai.internal.Interpolator;
-import com.launchdarkly.sdk.server.ai.internal.LDValueConverter;
 import com.launchdarkly.sdk.server.ai.internal.NoOpAIConfigTracker;
 import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
 
@@ -160,9 +154,9 @@ public final class LDAIClientImpl implements LDAIClient {
   }
 
   /**
-   * Core evaluation: render the default as a flag value (so the base SDK returns it verbatim when
-   * the flag is absent), evaluate, validate the mode, and build the typed config with interpolated
-   * prompt content.
+   * Core evaluation: evaluate the flag with a null sentinel default, validate the mode, and build
+   * the typed config with interpolated prompt content. When the flag is absent or cannot be
+   * evaluated, the caller's typed default is returned directly (no JSON round-trip).
    */
   private AIConfig evaluate(
       String key,
@@ -170,8 +164,15 @@ public final class LDAIClientImpl implements LDAIClient {
       AIConfigDefault defaultValue,
       AIConfigMode mode,
       Map<String, Object> variables) {
-    LDValue defaultFlagValue = toFlagValue(defaultValue, mode);
-    LDValue value = client.jsonValueVariation(key, context, defaultFlagValue);
+    LDValue value = client.jsonValueVariation(key, context, LDValue.ofNull());
+
+    // A valid AI Config variation is always a JSON object (it carries the _ldMeta block). When the
+    // flag is absent or cannot be evaluated the base SDK hands back our null sentinel; in that case
+    // we return the caller's typed default directly rather than serializing it and parsing it back.
+    if (value == null || value.getType() != LDValueType.OBJECT) {
+      return buildConfigFromDefault(key, mode, defaultValue, context, variables);
+    }
+
     AIConfigFlagValue parsed = AIConfigParser.parse(value);
 
     AIConfigMode flagMode = parsed.getMode() != null ? parsed.getMode() : AIConfigMode.COMPLETION;
@@ -225,6 +226,56 @@ public final class LDAIClientImpl implements LDAIClient {
     }
   }
 
+  /**
+   * Builds the typed config straight from the caller-supplied default, used when the flag is absent
+   * or cannot be evaluated. Prompt content is interpolated exactly as it is for an evaluated flag.
+   */
+  private AIConfig buildConfigFromDefault(
+      String key,
+      AIConfigMode mode,
+      AIConfigDefault defaultValue,
+      LDContext context,
+      Map<String, Object> variables) {
+    switch (mode) {
+      case AGENT: {
+        AIAgentConfigDefault agent = (AIAgentConfigDefault) defaultValue;
+        return new AIAgentConfig(
+            key,
+            agent.isEnabled(),
+            agent.getModel(),
+            agent.getProvider(),
+            interpolate(agent.getInstructions(), variables, context),
+            agent.getJudgeConfiguration(),
+            agent.getTools(),
+            TRACKER_FACTORY);
+      }
+      case JUDGE: {
+        AIJudgeConfigDefault judge = (AIJudgeConfigDefault) defaultValue;
+        return new AIJudgeConfig(
+            key,
+            judge.isEnabled(),
+            judge.getModel(),
+            judge.getProvider(),
+            interpolateMessages(judge.getMessages(), variables, context),
+            judge.getEvaluationMetricKey(),
+            TRACKER_FACTORY);
+      }
+      case COMPLETION:
+      default: {
+        AICompletionConfigDefault completion = (AICompletionConfigDefault) defaultValue;
+        return new AICompletionConfig(
+            key,
+            completion.isEnabled(),
+            completion.getModel(),
+            completion.getProvider(),
+            interpolateMessages(completion.getMessages(), variables, context),
+            completion.getJudgeConfiguration(),
+            completion.getTools(),
+            TRACKER_FACTORY);
+      }
+    }
+  }
+
   private AIConfig disabledConfig(String key, AIConfigMode mode) {
     switch (mode) {
       case AGENT:
@@ -251,126 +302,6 @@ public final class LDAIClientImpl implements LDAIClient {
 
   private String interpolate(String template, Map<String, Object> variables, LDContext context) {
     return interpolator.interpolate(template, variables, context);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Default -> flag value rendering (inverse of AIConfigParser). Kept in sync with the field names
-  // the parser reads so a default round-trips back to an equivalent config.
-  // ---------------------------------------------------------------------------
-
-  private static LDValue toFlagValue(AIConfigDefault config, AIConfigMode mode) {
-    ObjectBuilder builder = LDValue.buildObject();
-    builder.put("_ldMeta", LDValue.buildObject()
-        .put("enabled", config.isEnabled())
-        .put("mode", mode.getWireValue())
-        .build());
-
-    if (config.getModel() != null) {
-      builder.put("model", modelToLdValue(config.getModel()));
-    }
-    if (config.getProvider() != null) {
-      builder.put("provider", providerToLdValue(config.getProvider()));
-    }
-
-    if (config instanceof AICompletionConfigDefault) {
-      AICompletionConfigDefault completion = (AICompletionConfigDefault) config;
-      putMessages(builder, completion.getMessages());
-      putJudgeConfiguration(builder, completion.getJudgeConfiguration());
-      putTools(builder, completion.getTools());
-    } else if (config instanceof AIAgentConfigDefault) {
-      AIAgentConfigDefault agent = (AIAgentConfigDefault) config;
-      if (agent.getInstructions() != null) {
-        builder.put("instructions", agent.getInstructions());
-      }
-      putJudgeConfiguration(builder, agent.getJudgeConfiguration());
-      putTools(builder, agent.getTools());
-    } else if (config instanceof AIJudgeConfigDefault) {
-      AIJudgeConfigDefault judge = (AIJudgeConfigDefault) config;
-      putMessages(builder, judge.getMessages());
-      if (judge.getEvaluationMetricKey() != null) {
-        builder.put("evaluationMetricKey", judge.getEvaluationMetricKey());
-      }
-    }
-
-    return builder.build();
-  }
-
-  private static LDValue modelToLdValue(ModelConfig model) {
-    ObjectBuilder builder = LDValue.buildObject();
-    if (model.getName() != null) {
-      builder.put("name", model.getName());
-    }
-    if (!model.getParameters().isEmpty()) {
-      builder.put("parameters", LDValueConverter.fromJavaObject(model.getParameters()));
-    }
-    if (!model.getCustom().isEmpty()) {
-      builder.put("custom", LDValueConverter.fromJavaObject(model.getCustom()));
-    }
-    return builder.build();
-  }
-
-  private static LDValue providerToLdValue(ProviderConfig provider) {
-    ObjectBuilder builder = LDValue.buildObject();
-    if (provider.getName() != null) {
-      builder.put("name", provider.getName());
-    }
-    return builder.build();
-  }
-
-  private static void putMessages(ObjectBuilder builder, List<LDMessage> messages) {
-    if (messages == null) {
-      return;
-    }
-    ArrayBuilder array = LDValue.buildArray();
-    for (LDMessage message : messages) {
-      array.add(LDValue.buildObject()
-          .put("role", message.getRole().getWireValue())
-          .put("content", message.getContent())
-          .build());
-    }
-    builder.put("messages", array.build());
-  }
-
-  private static void putJudgeConfiguration(ObjectBuilder builder, JudgeConfiguration judgeConfiguration) {
-    if (judgeConfiguration == null) {
-      return;
-    }
-    ArrayBuilder judges = LDValue.buildArray();
-    for (JudgeConfiguration.Judge judge : judgeConfiguration.getJudges()) {
-      judges.add(LDValue.buildObject()
-          .put("key", judge.getKey())
-          .put("samplingRate", judge.getSamplingRate())
-          .build());
-    }
-    builder.put("judgeConfiguration", LDValue.buildObject().put("judges", judges.build()).build());
-  }
-
-  private static void putTools(ObjectBuilder builder, Map<String, ToolConfig> tools) {
-    if (tools == null) {
-      return;
-    }
-    ObjectBuilder toolsObject = LDValue.buildObject();
-    for (Map.Entry<String, ToolConfig> entry : tools.entrySet()) {
-      ToolConfig tool = entry.getValue();
-      ObjectBuilder toolObject = LDValue.buildObject();
-      if (tool.getName() != null) {
-        toolObject.put("name", tool.getName());
-      }
-      if (tool.getDescription() != null) {
-        toolObject.put("description", tool.getDescription());
-      }
-      if (tool.getType() != null) {
-        toolObject.put("type", tool.getType());
-      }
-      if (!tool.getParameters().isEmpty()) {
-        toolObject.put("parameters", LDValueConverter.fromJavaObject(tool.getParameters()));
-      }
-      if (!tool.getCustomParameters().isEmpty()) {
-        toolObject.put("customParameters", LDValueConverter.fromJavaObject(tool.getCustomParameters()));
-      }
-      toolsObject.put(entry.getKey(), toolObject.build());
-    }
-    builder.put("tools", toolsObject.build());
   }
 
   private static LDLogger defaultLogger() {
