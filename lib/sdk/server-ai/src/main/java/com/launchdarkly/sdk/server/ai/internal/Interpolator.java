@@ -1,8 +1,6 @@
 package com.launchdarkly.sdk.server.ai.internal;
 
 import com.launchdarkly.sdk.LDContext;
-import com.launchdarkly.sdk.LDValue;
-import com.launchdarkly.sdk.json.JsonSerialization;
 import com.launchdarkly.sdk.server.ai.internal.mustache.Mustache;
 import com.launchdarkly.sdk.server.ai.internal.mustache.Template;
 
@@ -86,12 +84,46 @@ public final class Interpolator {
     return compiled.execute(variables);
   }
 
+  /**
+   * Encodes the evaluation context directly into the nested map structure exposed to templates as
+   * {@code ldctx}, without round-tripping through JSON serialization. A single-kind context becomes
+   * a map of its attributes; a multi-kind context becomes {@code {"kind":"multi", <kind>: {...}}}
+   * with one nested map per individual context.
+   */
   private static Map<String, Object> contextToMap(LDContext context) {
     if (context == null || !context.isValid()) {
       return new HashMap<>();
     }
-    LDValue asValue = LDValue.parse(JsonSerialization.serialize(context));
-    Map<String, Object> map = LDValueConverter.toMap(asValue);
-    return map == null ? new HashMap<String, Object>() : map;
+    if (context.isMultiple()) {
+      Map<String, Object> map = new HashMap<>();
+      map.put("kind", "multi");
+      int count = context.getIndividualContextCount();
+      for (int i = 0; i < count; i++) {
+        LDContext individual = context.getIndividualContext(i);
+        if (individual != null) {
+          map.put(individual.getKind().toString(), singleContextToMap(individual));
+        }
+      }
+      return map;
+    }
+    return singleContextToMap(context);
+  }
+
+  private static Map<String, Object> singleContextToMap(LDContext context) {
+    Map<String, Object> map = new HashMap<>();
+    map.put("kind", context.getKind().toString());
+    map.put("key", context.getKey());
+    if (context.getName() != null) {
+      map.put("name", context.getName());
+    }
+    if (context.isAnonymous()) {
+      map.put("anonymous", true);
+    }
+    // Custom attribute values can be arbitrary JSON; convert each LDValue to a plain Java value
+    // (depth-capped) so nested objects/arrays remain addressable from templates.
+    for (String attribute : context.getCustomAttributeNames()) {
+      map.put(attribute, LDValueConverter.toJavaObject(context.getValue(attribute)));
+    }
+    return map;
   }
 }

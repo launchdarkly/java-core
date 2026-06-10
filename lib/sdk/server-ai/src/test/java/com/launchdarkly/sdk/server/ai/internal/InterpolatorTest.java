@@ -68,6 +68,24 @@ public class InterpolatorTest {
   }
 
   @Test
+  public void exposesNestedCustomAttribute() {
+    LDContext context = LDContext.builder("user-key")
+        .set("address", com.launchdarkly.sdk.LDValue.buildObject().put("city", "Oakland").build())
+        .build();
+    assertThat(interpolator.interpolate("{{ldctx.address.city}}", null, context), is("Oakland"));
+  }
+
+  @Test
+  public void exposesMultiKindContextByKind() {
+    LDContext multi = LDContext.createMulti(
+        LDContext.builder("user-key").name("Bob").build(),
+        LDContext.builder(com.launchdarkly.sdk.ContextKind.of("org"), "org-key").set("tier", "gold").build());
+    String result = interpolator.interpolate(
+        "{{ldctx.kind}}/{{ldctx.user.key}}/{{ldctx.user.name}}/{{ldctx.org.tier}}", null, multi);
+    assertThat(result, is("multi/user-key/Bob/gold"));
+  }
+
+  @Test
   public void ldctxOverridesUserSuppliedValue() {
     Map<String, Object> userLdctx = new HashMap<>();
     userLdctx.put("key", "WRONG");
