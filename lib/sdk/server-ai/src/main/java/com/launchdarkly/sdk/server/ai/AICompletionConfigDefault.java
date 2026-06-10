@@ -1,8 +1,8 @@
 package com.launchdarkly.sdk.server.ai;
 
-import com.launchdarkly.sdk.server.ai.datamodel.JudgeConfiguration;
-import com.launchdarkly.sdk.server.ai.datamodel.LDMessage;
-import com.launchdarkly.sdk.server.ai.datamodel.ToolConfig;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.JudgeConfiguration;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Message;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Tool;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -17,9 +17,9 @@ import java.util.Map;
  * Build instances with {@link #builder()}. Instances are immutable.
  */
 public final class AICompletionConfigDefault extends AIConfigDefault {
-  private final List<LDMessage> messages;
+  private final List<Message> messages;
   private final JudgeConfiguration judgeConfiguration;
-  private final Map<String, ToolConfig> tools;
+  private final Map<String, Tool> tools;
 
   private AICompletionConfigDefault(Builder builder) {
     super(builder);
@@ -35,7 +35,7 @@ public final class AICompletionConfigDefault extends AIConfigDefault {
    *
    * @return an unmodifiable list of messages, or {@code null} if none were specified
    */
-  public List<LDMessage> getMessages() {
+  public List<Message> getMessages() {
     return messages;
   }
 
@@ -53,7 +53,7 @@ public final class AICompletionConfigDefault extends AIConfigDefault {
    *
    * @return an unmodifiable map of tools, or {@code null} if none were specified
    */
-  public Map<String, ToolConfig> getTools() {
+  public Map<String, Tool> getTools() {
     return tools;
   }
 
@@ -79,9 +79,9 @@ public final class AICompletionConfigDefault extends AIConfigDefault {
    * Builder for {@link AICompletionConfigDefault}.
    */
   public static final class Builder extends AbstractBuilder<Builder> {
-    private List<LDMessage> messages;
+    private List<Message> messages;
     private JudgeConfiguration judgeConfiguration;
-    private Map<String, ToolConfig> tools;
+    private Map<String, Tool> tools;
 
     private Builder() {
     }
@@ -97,7 +97,7 @@ public final class AICompletionConfigDefault extends AIConfigDefault {
      * @param messages the messages; may be {@code null}
      * @return this builder
      */
-    public Builder messages(List<LDMessage> messages) {
+    public Builder messages(List<Message> messages) {
       this.messages = messages;
       return this;
     }
@@ -119,7 +119,7 @@ public final class AICompletionConfigDefault extends AIConfigDefault {
      * @param tools the tools; may be {@code null}
      * @return this builder
      */
-    public Builder tools(Map<String, ToolConfig> tools) {
+    public Builder tools(Map<String, Tool> tools) {
       this.tools = tools;
       return this;
     }

@@ -8,8 +8,8 @@ import com.launchdarkly.sdk.ContextKind;
 import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.LDValueType;
-import com.launchdarkly.sdk.server.ai.datamodel.AIConfigMode;
-import com.launchdarkly.sdk.server.ai.datamodel.LDMessage;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Mode;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Message;
 import com.launchdarkly.sdk.server.ai.internal.AIConfigFlagValue;
 import com.launchdarkly.sdk.server.ai.internal.AIConfigParser;
 import com.launchdarkly.sdk.server.ai.internal.AISdkInfo;
@@ -101,7 +101,7 @@ public final class LDAIClientImpl implements LDAIClient {
     client.trackMetric(TRACK_USAGE_COMPLETION_CONFIG, context, LDValue.of(key), 1);
     AICompletionConfigDefault effectiveDefault =
         defaultValue != null ? defaultValue : AICompletionConfigDefault.disabled();
-    return (AICompletionConfig) evaluate(key, context, effectiveDefault, AIConfigMode.COMPLETION, variables);
+    return (AICompletionConfig) evaluate(key, context, effectiveDefault, Mode.COMPLETION, variables);
   }
 
   @Override
@@ -143,14 +143,14 @@ public final class LDAIClientImpl implements LDAIClient {
     client.trackMetric(TRACK_USAGE_JUDGE_CONFIG, context, LDValue.of(key), 1);
     AIJudgeConfigDefault effectiveDefault =
         defaultValue != null ? defaultValue : AIJudgeConfigDefault.disabled();
-    return (AIJudgeConfig) evaluate(key, context, effectiveDefault, AIConfigMode.JUDGE, variables);
+    return (AIJudgeConfig) evaluate(key, context, effectiveDefault, Mode.JUDGE, variables);
   }
 
   private AIAgentConfig evaluateAgent(
       String key, LDContext context, AIAgentConfigDefault defaultValue, Map<String, Object> variables) {
     AIAgentConfigDefault effectiveDefault =
         defaultValue != null ? defaultValue : AIAgentConfigDefault.disabled();
-    return (AIAgentConfig) evaluate(key, context, effectiveDefault, AIConfigMode.AGENT, variables);
+    return (AIAgentConfig) evaluate(key, context, effectiveDefault, Mode.AGENT, variables);
   }
 
   /**
@@ -162,7 +162,7 @@ public final class LDAIClientImpl implements LDAIClient {
       String key,
       LDContext context,
       AIConfigDefault defaultValue,
-      AIConfigMode mode,
+      Mode mode,
       Map<String, Object> variables) {
     LDValue value = client.jsonValueVariation(key, context, LDValue.ofNull());
 
@@ -175,7 +175,7 @@ public final class LDAIClientImpl implements LDAIClient {
 
     AIConfigFlagValue parsed = AIConfigParser.parse(value);
 
-    AIConfigMode flagMode = parsed.getMode() != null ? parsed.getMode() : AIConfigMode.COMPLETION;
+    Mode flagMode = parsed.getMode() != null ? parsed.getMode() : Mode.COMPLETION;
     if (flagMode != mode) {
       logger.warn(
           "AI Config mode mismatch for {}: expected {}, got {}. Returning disabled config.",
@@ -188,7 +188,7 @@ public final class LDAIClientImpl implements LDAIClient {
 
   private AIConfig buildConfig(
       String key,
-      AIConfigMode mode,
+      Mode mode,
       AIConfigFlagValue parsed,
       LDContext context,
       Map<String, Object> variables) {
@@ -232,7 +232,7 @@ public final class LDAIClientImpl implements LDAIClient {
    */
   private AIConfig buildConfigFromDefault(
       String key,
-      AIConfigMode mode,
+      Mode mode,
       AIConfigDefault defaultValue,
       LDContext context,
       Map<String, Object> variables) {
@@ -276,7 +276,7 @@ public final class LDAIClientImpl implements LDAIClient {
     }
   }
 
-  private AIConfig disabledConfig(String key, AIConfigMode mode) {
+  private AIConfig disabledConfig(String key, Mode mode) {
     switch (mode) {
       case AGENT:
         return new AIAgentConfig(key, false, null, null, null, null, null, TRACKER_FACTORY);
@@ -288,13 +288,13 @@ public final class LDAIClientImpl implements LDAIClient {
     }
   }
 
-  private List<LDMessage> interpolateMessages(
-      List<LDMessage> messages, Map<String, Object> variables, LDContext context) {
+  private List<Message> interpolateMessages(
+      List<Message> messages, Map<String, Object> variables, LDContext context) {
     if (messages == null) {
       return null;
     }
-    List<LDMessage> result = new ArrayList<>(messages.size());
-    for (LDMessage message : messages) {
+    List<Message> result = new ArrayList<>(messages.size());
+    for (Message message : messages) {
       result.add(message.withContent(interpolator.interpolate(message.getContent(), variables, context)));
     }
     return result;

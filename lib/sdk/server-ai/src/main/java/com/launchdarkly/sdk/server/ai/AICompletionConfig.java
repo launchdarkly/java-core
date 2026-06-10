@@ -1,11 +1,11 @@
 package com.launchdarkly.sdk.server.ai;
 
-import com.launchdarkly.sdk.server.ai.datamodel.AIConfigMode;
-import com.launchdarkly.sdk.server.ai.datamodel.JudgeConfiguration;
-import com.launchdarkly.sdk.server.ai.datamodel.LDMessage;
-import com.launchdarkly.sdk.server.ai.datamodel.ModelConfig;
-import com.launchdarkly.sdk.server.ai.datamodel.ProviderConfig;
-import com.launchdarkly.sdk.server.ai.datamodel.ToolConfig;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Mode;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.JudgeConfiguration;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Message;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Model;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Provider;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Tool;
 
 import java.util.Collections;
 import java.util.List;
@@ -20,20 +20,20 @@ import java.util.function.Supplier;
  * supplied variables and evaluation context. Instances are immutable.
  */
 public final class AICompletionConfig extends AIConfig {
-  private final List<LDMessage> messages;
+  private final List<Message> messages;
   private final JudgeConfiguration judgeConfiguration;
-  private final Map<String, ToolConfig> tools;
+  private final Map<String, Tool> tools;
 
   AICompletionConfig(
       String key,
       boolean enabled,
-      ModelConfig model,
-      ProviderConfig provider,
-      List<LDMessage> messages,
+      Model model,
+      Provider provider,
+      List<Message> messages,
       JudgeConfiguration judgeConfiguration,
-      Map<String, ToolConfig> tools,
+      Map<String, Tool> tools,
       Supplier<LDAIConfigTracker> trackerFactory) {
-    super(key, enabled, AIConfigMode.COMPLETION, model, provider, trackerFactory);
+    super(key, enabled, Mode.COMPLETION, model, provider, trackerFactory);
     this.messages = messages == null ? null : Collections.unmodifiableList(messages);
     this.judgeConfiguration = judgeConfiguration;
     this.tools = tools == null ? null : Collections.unmodifiableMap(tools);
@@ -44,7 +44,7 @@ public final class AICompletionConfig extends AIConfig {
    *
    * @return an unmodifiable list of messages, or {@code null} if none were specified
    */
-  public List<LDMessage> getMessages() {
+  public List<Message> getMessages() {
     return messages;
   }
 
@@ -62,7 +62,7 @@ public final class AICompletionConfig extends AIConfig {
    *
    * @return an unmodifiable map of tools, or {@code null} if none were specified
    */
-  public Map<String, ToolConfig> getTools() {
+  public Map<String, Tool> getTools() {
     return tools;
   }
 }

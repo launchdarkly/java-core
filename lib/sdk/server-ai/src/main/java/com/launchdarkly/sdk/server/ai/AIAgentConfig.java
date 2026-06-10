@@ -1,10 +1,10 @@
 package com.launchdarkly.sdk.server.ai;
 
-import com.launchdarkly.sdk.server.ai.datamodel.AIConfigMode;
-import com.launchdarkly.sdk.server.ai.datamodel.JudgeConfiguration;
-import com.launchdarkly.sdk.server.ai.datamodel.ModelConfig;
-import com.launchdarkly.sdk.server.ai.datamodel.ProviderConfig;
-import com.launchdarkly.sdk.server.ai.datamodel.ToolConfig;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Mode;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.JudgeConfiguration;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Model;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Provider;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Tool;
 
 import java.util.Collections;
 import java.util.Map;
@@ -20,18 +20,18 @@ import java.util.function.Supplier;
 public final class AIAgentConfig extends AIConfig {
   private final String instructions;
   private final JudgeConfiguration judgeConfiguration;
-  private final Map<String, ToolConfig> tools;
+  private final Map<String, Tool> tools;
 
   AIAgentConfig(
       String key,
       boolean enabled,
-      ModelConfig model,
-      ProviderConfig provider,
+      Model model,
+      Provider provider,
       String instructions,
       JudgeConfiguration judgeConfiguration,
-      Map<String, ToolConfig> tools,
+      Map<String, Tool> tools,
       Supplier<LDAIConfigTracker> trackerFactory) {
-    super(key, enabled, AIConfigMode.AGENT, model, provider, trackerFactory);
+    super(key, enabled, Mode.AGENT, model, provider, trackerFactory);
     this.instructions = instructions;
     this.judgeConfiguration = judgeConfiguration;
     this.tools = tools == null ? null : Collections.unmodifiableMap(tools);
@@ -60,7 +60,7 @@ public final class AIAgentConfig extends AIConfig {
    *
    * @return an unmodifiable map of tools, or {@code null} if none were specified
    */
-  public Map<String, ToolConfig> getTools() {
+  public Map<String, Tool> getTools() {
     return tools;
   }
 }

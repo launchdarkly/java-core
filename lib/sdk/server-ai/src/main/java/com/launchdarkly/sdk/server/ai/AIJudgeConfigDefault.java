@@ -1,6 +1,6 @@
 package com.launchdarkly.sdk.server.ai;
 
-import com.launchdarkly.sdk.server.ai.datamodel.LDMessage;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Message;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -13,7 +13,7 @@ import java.util.List;
  * Build instances with {@link #builder()}. Instances are immutable.
  */
 public final class AIJudgeConfigDefault extends AIConfigDefault {
-  private final List<LDMessage> messages;
+  private final List<Message> messages;
   private final String evaluationMetricKey;
 
   private AIJudgeConfigDefault(Builder builder) {
@@ -28,7 +28,7 @@ public final class AIJudgeConfigDefault extends AIConfigDefault {
    *
    * @return an unmodifiable list of messages, or {@code null} if none were specified
    */
-  public List<LDMessage> getMessages() {
+  public List<Message> getMessages() {
     return messages;
   }
 
@@ -63,7 +63,7 @@ public final class AIJudgeConfigDefault extends AIConfigDefault {
    * Builder for {@link AIJudgeConfigDefault}.
    */
   public static final class Builder extends AbstractBuilder<Builder> {
-    private List<LDMessage> messages;
+    private List<Message> messages;
     private String evaluationMetricKey;
 
     private Builder() {
@@ -80,7 +80,7 @@ public final class AIJudgeConfigDefault extends AIConfigDefault {
      * @param messages the messages; may be {@code null}
      * @return this builder
      */
-    public Builder messages(List<LDMessage> messages) {
+    public Builder messages(List<Message> messages) {
       this.messages = messages;
       return this;
     }

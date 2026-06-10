@@ -1,8 +1,8 @@
 package com.launchdarkly.sdk.server.ai;
 
-import com.launchdarkly.sdk.server.ai.datamodel.AIConfigMode;
-import com.launchdarkly.sdk.server.ai.datamodel.ModelConfig;
-import com.launchdarkly.sdk.server.ai.datamodel.ProviderConfig;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Mode;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Model;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Provider;
 
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -20,17 +20,17 @@ import java.util.function.Supplier;
 public abstract class AIConfig {
   private final String key;
   private final boolean enabled;
-  private final AIConfigMode mode;
-  private final ModelConfig model;
-  private final ProviderConfig provider;
+  private final Mode mode;
+  private final Model model;
+  private final Provider provider;
   private final Supplier<LDAIConfigTracker> trackerFactory;
 
   AIConfig(
       String key,
       boolean enabled,
-      AIConfigMode mode,
-      ModelConfig model,
-      ProviderConfig provider,
+      Mode mode,
+      Model model,
+      Provider provider,
       Supplier<LDAIConfigTracker> trackerFactory) {
     this.key = key;
     this.enabled = enabled;
@@ -66,7 +66,7 @@ public abstract class AIConfig {
    *
    * @return the mode, never {@code null}
    */
-  public AIConfigMode getMode() {
+  public Mode getMode() {
     return mode;
   }
 
@@ -75,7 +75,7 @@ public abstract class AIConfig {
    *
    * @return the model, or {@code null} if none was specified
    */
-  public ModelConfig getModel() {
+  public Model getModel() {
     return model;
   }
 
@@ -84,7 +84,7 @@ public abstract class AIConfig {
    *
    * @return the provider, or {@code null} if none was specified
    */
-  public ProviderConfig getProvider() {
+  public Provider getProvider() {
     return provider;
   }
 

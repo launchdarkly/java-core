@@ -21,9 +21,9 @@ import com.launchdarkly.logging.LogCapture;
 import com.launchdarkly.logging.Logs;
 import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
-import com.launchdarkly.sdk.server.ai.datamodel.AIConfigMode;
-import com.launchdarkly.sdk.server.ai.datamodel.LDMessage;
-import com.launchdarkly.sdk.server.ai.datamodel.ModelConfig;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Mode;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Message;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Model;
 import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
 
 import java.util.ArrayList;
@@ -129,11 +129,11 @@ public class LDAIClientImplTest {
     assertThat(config, is(notNullValue()));
     assertThat(config.getKey(), is("key"));
     assertThat(config.isEnabled(), is(true));
-    assertThat(config.getMode(), is(AIConfigMode.COMPLETION));
+    assertThat(config.getMode(), is(Mode.COMPLETION));
     assertThat(config.getModel().getName(), is("gpt-4"));
     assertThat(config.getMessages(), hasSize(1));
     assertThat(config.getMessages().get(0).getContent(), is("Hello World"));
-    assertThat(config.getMessages().get(0).getRole(), is(LDMessage.Role.SYSTEM));
+    assertThat(config.getMessages().get(0).getRole(), is(Message.Role.SYSTEM));
   }
 
   @Test
@@ -156,7 +156,7 @@ public class LDAIClientImplTest {
     variables.put("topic", "climate");
     AIAgentConfig config = ai.agentConfig("key", context, null, variables);
 
-    assertThat(config.getMode(), is(AIConfigMode.AGENT));
+    assertThat(config.getMode(), is(Mode.AGENT));
     assertThat(config.getInstructions(), is("You research climate"));
   }
 
@@ -167,7 +167,7 @@ public class LDAIClientImplTest {
     when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
 
     AIJudgeConfig config = ai.judgeConfig("key", context, null, null);
-    assertThat(config.getMode(), is(AIConfigMode.JUDGE));
+    assertThat(config.getMode(), is(Mode.JUDGE));
     assertThat(config.getEvaluationMetricKey(), is("relevance"));
   }
 
@@ -185,7 +185,7 @@ public class LDAIClientImplTest {
     assertThat(config, is(notNullValue()));
     assertThat(config.isEnabled(), is(false));
     assertThat(config.getMessages(), is(nullValue()));
-    assertThat(config.getMode(), is(AIConfigMode.COMPLETION));
+    assertThat(config.getMode(), is(Mode.COMPLETION));
     assertThat(warnings(), hasSize(1));
     assertThat(warnings().get(0), containsString("mode mismatch"));
   }
@@ -209,8 +209,8 @@ public class LDAIClientImplTest {
 
     AICompletionConfigDefault dflt = AICompletionConfigDefault.builder()
         .enabled(true)
-        .model(ModelConfig.builder("default-model").build())
-        .messages(Arrays.asList(new LDMessage(LDMessage.Role.SYSTEM, "default {{x}}")))
+        .model(Model.builder("default-model").build())
+        .messages(Arrays.asList(new Message(Message.Role.SYSTEM, "default {{x}}")))
         .build();
 
     Map<String, Object> variables = new HashMap<>();
@@ -240,7 +240,7 @@ public class LDAIClientImplTest {
 
     AICompletionConfigDefault dflt = AICompletionConfigDefault.builder()
         .enabled(false)
-        .messages(Arrays.asList(new LDMessage(LDMessage.Role.SYSTEM, "should not appear")))
+        .messages(Arrays.asList(new Message(Message.Role.SYSTEM, "should not appear")))
         .build();
     AICompletionConfig config = ai.completionConfig("key", context, dflt, variables(/* none */));
 

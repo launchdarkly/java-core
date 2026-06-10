@@ -1,7 +1,7 @@
 package com.launchdarkly.sdk.server.ai;
 
-import com.launchdarkly.sdk.server.ai.datamodel.ModelConfig;
-import com.launchdarkly.sdk.server.ai.datamodel.ProviderConfig;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Model;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Provider;
 
 /**
  * The common, mode-independent surface of a caller-supplied default AI Config.
@@ -14,8 +14,8 @@ import com.launchdarkly.sdk.server.ai.datamodel.ProviderConfig;
  */
 public abstract class AIConfigDefault {
   private final Boolean enabled;
-  private final ModelConfig model;
-  private final ProviderConfig provider;
+  private final Model model;
+  private final Provider provider;
 
   AIConfigDefault(AbstractBuilder<?> builder) {
     this.enabled = builder.enabled;
@@ -46,7 +46,7 @@ public abstract class AIConfigDefault {
    *
    * @return the model, or {@code null} if none was specified
    */
-  public ModelConfig getModel() {
+  public Model getModel() {
     return model;
   }
 
@@ -55,7 +55,7 @@ public abstract class AIConfigDefault {
    *
    * @return the provider, or {@code null} if none was specified
    */
-  public ProviderConfig getProvider() {
+  public Provider getProvider() {
     return provider;
   }
 
@@ -69,8 +69,8 @@ public abstract class AIConfigDefault {
    */
   protected abstract static class AbstractBuilder<B extends AbstractBuilder<B>> {
     private Boolean enabled;
-    private ModelConfig model;
-    private ProviderConfig provider;
+    private Model model;
+    private Provider provider;
 
     /**
      * Returns this builder as the concrete subtype.
@@ -96,7 +96,7 @@ public abstract class AIConfigDefault {
      * @param model the model configuration; may be {@code null}
      * @return this builder
      */
-    public B model(ModelConfig model) {
+    public B model(Model model) {
       this.model = model;
       return self();
     }
@@ -107,7 +107,7 @@ public abstract class AIConfigDefault {
      * @param provider the provider configuration; may be {@code null}
      * @return this builder
      */
-    public B provider(ProviderConfig provider) {
+    public B provider(Provider provider) {
       this.provider = provider;
       return self();
     }

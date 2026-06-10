@@ -1,7 +1,7 @@
 package com.launchdarkly.sdk.server.ai;
 
-import com.launchdarkly.sdk.server.ai.datamodel.JudgeConfiguration;
-import com.launchdarkly.sdk.server.ai.datamodel.ToolConfig;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.JudgeConfiguration;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Tool;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -16,7 +16,7 @@ import java.util.Map;
 public final class AIAgentConfigDefault extends AIConfigDefault {
   private final String instructions;
   private final JudgeConfiguration judgeConfiguration;
-  private final Map<String, ToolConfig> tools;
+  private final Map<String, Tool> tools;
 
   private AIAgentConfigDefault(Builder builder) {
     super(builder);
@@ -49,7 +49,7 @@ public final class AIAgentConfigDefault extends AIConfigDefault {
    *
    * @return an unmodifiable map of tools, or {@code null} if none were specified
    */
-  public Map<String, ToolConfig> getTools() {
+  public Map<String, Tool> getTools() {
     return tools;
   }
 
@@ -77,7 +77,7 @@ public final class AIAgentConfigDefault extends AIConfigDefault {
   public static final class Builder extends AbstractBuilder<Builder> {
     private String instructions;
     private JudgeConfiguration judgeConfiguration;
-    private Map<String, ToolConfig> tools;
+    private Map<String, Tool> tools;
 
     private Builder() {
     }
@@ -115,7 +115,7 @@ public final class AIAgentConfigDefault extends AIConfigDefault {
      * @param tools the tools; may be {@code null}
      * @return this builder
      */
-    public Builder tools(Map<String, ToolConfig> tools) {
+    public Builder tools(Map<String, Tool> tools) {
       this.tools = tools;
       return this;
     }
