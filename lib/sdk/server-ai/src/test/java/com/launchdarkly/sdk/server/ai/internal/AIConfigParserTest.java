@@ -8,9 +8,9 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 
 import com.launchdarkly.sdk.LDValue;
-import com.launchdarkly.sdk.server.ai.datamodel.AIConfigMode;
-import com.launchdarkly.sdk.server.ai.datamodel.JudgeConfiguration;
-import com.launchdarkly.sdk.server.ai.datamodel.LDMessage;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.JudgeConfiguration;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Message;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Mode;
 
 import java.util.List;
 
@@ -37,14 +37,14 @@ public class AIConfigParserTest {
     assertThat(parsed.isEnabled(), is(true));
     assertThat(parsed.getVariationKey(), is("v1"));
     assertThat(parsed.getVersion(), is(3));
-    assertThat(parsed.getMode(), is(AIConfigMode.COMPLETION));
+    assertThat(parsed.getMode(), is(Mode.COMPLETION));
     assertThat(parsed.getModel().getName(), is("gpt-4"));
     assertThat(parsed.getModel().getParameter("temperature"), is((Object) 0.7));
     assertThat(parsed.getModel().getParameter("maxTokens"), is((Object) 100L));
     assertThat(parsed.getModel().getCustom("team"), is((Object) "core"));
     assertThat(parsed.getProvider().getName(), is("openai"));
     assertThat(parsed.getMessages(), hasSize(2));
-    assertThat(parsed.getMessages().get(0).getRole(), is(LDMessage.Role.SYSTEM));
+    assertThat(parsed.getMessages().get(0).getRole(), is(Message.Role.SYSTEM));
     JudgeConfiguration judges = parsed.getJudgeConfiguration();
     assertThat(judges.getJudges(), hasSize(1));
     assertThat(judges.getJudges().get(0).getKey(), is("j1"));
@@ -58,7 +58,7 @@ public class AIConfigParserTest {
     LDValue value = LDValue.parse("{\"_ldMeta\":{\"enabled\":true,\"mode\":\"agent\"},"
         + "\"instructions\":\"Help {{name}}\"}");
     AIConfigFlagValue parsed = AIConfigParser.parse(value);
-    assertThat(parsed.getMode(), is(AIConfigMode.AGENT));
+    assertThat(parsed.getMode(), is(Mode.AGENT));
     assertThat(parsed.getInstructions(), is("Help {{name}}"));
     assertThat(parsed.getMessages(), is(nullValue()));
   }
@@ -88,9 +88,9 @@ public class AIConfigParserTest {
         + "{\"role\":\"user\",\"content\":123},"  // non-string content
         + "{\"role\":\"assistant\",\"content\":\"valid\"}"
         + "]}");
-    List<LDMessage> messages = AIConfigParser.parse(value).getMessages();
+    List<Message> messages = AIConfigParser.parse(value).getMessages();
     assertThat(messages, hasSize(1));
-    assertThat(messages.get(0).getRole(), is(LDMessage.Role.ASSISTANT));
+    assertThat(messages.get(0).getRole(), is(Message.Role.ASSISTANT));
     assertThat(messages.get(0).getContent(), is("valid"));
   }
 

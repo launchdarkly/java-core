@@ -1,11 +1,11 @@
 package com.launchdarkly.sdk.server.ai.internal;
 
-import com.launchdarkly.sdk.server.ai.datamodel.AIConfigMode;
-import com.launchdarkly.sdk.server.ai.datamodel.JudgeConfiguration;
-import com.launchdarkly.sdk.server.ai.datamodel.LDMessage;
-import com.launchdarkly.sdk.server.ai.datamodel.ModelConfig;
-import com.launchdarkly.sdk.server.ai.datamodel.ProviderConfig;
-import com.launchdarkly.sdk.server.ai.datamodel.ToolConfig;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.JudgeConfiguration;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Message;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Mode;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Model;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Provider;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Tool;
 
 import java.util.Collections;
 import java.util.List;
@@ -29,12 +29,12 @@ public final class AIConfigFlagValue {
   private final Boolean enabled;
   private final String variationKey;
   private final Integer version;
-  private final AIConfigMode mode;
-  private final ModelConfig model;
-  private final ProviderConfig provider;
-  private final List<LDMessage> messages;
+  private final Mode mode;
+  private final Model model;
+  private final Provider provider;
+  private final List<Message> messages;
   private final String instructions;
-  private final Map<String, ToolConfig> tools;
+  private final Map<String, Tool> tools;
   private final JudgeConfiguration judgeConfiguration;
   private final String evaluationMetricKey;
 
@@ -93,7 +93,7 @@ public final class AIConfigFlagValue {
    *
    * @return the mode, or {@code null} if absent or unrecognized
    */
-  public AIConfigMode getMode() {
+  public Mode getMode() {
     return mode;
   }
 
@@ -102,7 +102,7 @@ public final class AIConfigFlagValue {
    *
    * @return the model, or {@code null} if absent
    */
-  public ModelConfig getModel() {
+  public Model getModel() {
     return model;
   }
 
@@ -111,7 +111,7 @@ public final class AIConfigFlagValue {
    *
    * @return the provider, or {@code null} if absent
    */
-  public ProviderConfig getProvider() {
+  public Provider getProvider() {
     return provider;
   }
 
@@ -120,7 +120,7 @@ public final class AIConfigFlagValue {
    *
    * @return an unmodifiable list of messages, or {@code null} if absent
    */
-  public List<LDMessage> getMessages() {
+  public List<Message> getMessages() {
     return messages;
   }
 
@@ -138,7 +138,7 @@ public final class AIConfigFlagValue {
    *
    * @return an unmodifiable map keyed by tool name, or {@code null} if absent
    */
-  public Map<String, ToolConfig> getTools() {
+  public Map<String, Tool> getTools() {
     return tools;
   }
 
@@ -176,12 +176,12 @@ public final class AIConfigFlagValue {
     private Boolean enabled;
     private String variationKey;
     private Integer version;
-    private AIConfigMode mode;
-    private ModelConfig model;
-    private ProviderConfig provider;
-    private List<LDMessage> messages;
+    private Mode mode;
+    private Model model;
+    private Provider provider;
+    private List<Message> messages;
     private String instructions;
-    private Map<String, ToolConfig> tools;
+    private Map<String, Tool> tools;
     private JudgeConfiguration judgeConfiguration;
     private String evaluationMetricKey;
 
@@ -227,7 +227,7 @@ public final class AIConfigFlagValue {
      * @param v the mode
      * @return this builder
      */
-    public Builder mode(AIConfigMode v) {
+    public Builder mode(Mode v) {
       this.mode = v;
       return this;
     }
@@ -238,7 +238,7 @@ public final class AIConfigFlagValue {
      * @param v the model
      * @return this builder
      */
-    public Builder model(ModelConfig v) {
+    public Builder model(Model v) {
       this.model = v;
       return this;
     }
@@ -249,7 +249,7 @@ public final class AIConfigFlagValue {
      * @param v the provider
      * @return this builder
      */
-    public Builder provider(ProviderConfig v) {
+    public Builder provider(Provider v) {
       this.provider = v;
       return this;
     }
@@ -260,7 +260,7 @@ public final class AIConfigFlagValue {
      * @param v the messages
      * @return this builder
      */
-    public Builder messages(List<LDMessage> v) {
+    public Builder messages(List<Message> v) {
       this.messages = v;
       return this;
     }
@@ -282,7 +282,7 @@ public final class AIConfigFlagValue {
      * @param v the tools
      * @return this builder
      */
-    public Builder tools(Map<String, ToolConfig> v) {
+    public Builder tools(Map<String, Tool> v) {
       this.tools = v;
       return this;
     }

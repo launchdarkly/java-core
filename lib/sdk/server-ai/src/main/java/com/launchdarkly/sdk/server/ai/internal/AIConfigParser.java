@@ -2,12 +2,12 @@ package com.launchdarkly.sdk.server.ai.internal;
 
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.LDValueType;
-import com.launchdarkly.sdk.server.ai.datamodel.AIConfigMode;
-import com.launchdarkly.sdk.server.ai.datamodel.JudgeConfiguration;
-import com.launchdarkly.sdk.server.ai.datamodel.LDMessage;
-import com.launchdarkly.sdk.server.ai.datamodel.ModelConfig;
-import com.launchdarkly.sdk.server.ai.datamodel.ProviderConfig;
-import com.launchdarkly.sdk.server.ai.datamodel.ToolConfig;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.JudgeConfiguration;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Message;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Mode;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Model;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Provider;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Tool;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -66,20 +66,20 @@ public final class AIConfigParser {
     if (version.getType() == LDValueType.NUMBER) {
       builder.version(version.intValue());
     }
-    builder.mode(AIConfigMode.fromWireValue(asStringOrNull(meta.get("mode"))));
+    builder.mode(Mode.fromWireValue(asStringOrNull(meta.get("mode"))));
   }
 
   /**
    * Parses a {@code model} object.
    *
    * @param model the model value
-   * @return a {@link ModelConfig}, or {@code null} if the value is not an object
+   * @return a {@link Model}, or {@code null} if the value is not an object
    */
-  static ModelConfig parseModel(LDValue model) {
+  static Model parseModel(LDValue model) {
     if (model == null || model.getType() != LDValueType.OBJECT) {
       return null;
     }
-    return ModelConfig.builder(asStringOrNull(model.get("name")))
+    return Model.builder(asStringOrNull(model.get("name")))
         .parameters(LDValueConverter.toMap(model.get("parameters")))
         .custom(LDValueConverter.toMap(model.get("custom")))
         .build();
@@ -89,13 +89,13 @@ public final class AIConfigParser {
    * Parses a {@code provider} object.
    *
    * @param provider the provider value
-   * @return a {@link ProviderConfig}, or {@code null} if the value is not an object
+   * @return a {@link Provider}, or {@code null} if the value is not an object
    */
-  static ProviderConfig parseProvider(LDValue provider) {
+  static Provider parseProvider(LDValue provider) {
     if (provider == null || provider.getType() != LDValueType.OBJECT) {
       return null;
     }
-    return new ProviderConfig(asStringOrNull(provider.get("name")));
+    return new Provider(asStringOrNull(provider.get("name")));
   }
 
   /**
@@ -103,23 +103,23 @@ public final class AIConfigParser {
    * are skipped.
    *
    * @param messages the messages value
-   * @return a list of {@link LDMessage}, or {@code null} if the value is not an array
+   * @return a list of {@link Message}, or {@code null} if the value is not an array
    */
-  static List<LDMessage> parseMessages(LDValue messages) {
+  static List<Message> parseMessages(LDValue messages) {
     if (messages == null || messages.getType() != LDValueType.ARRAY) {
       return null;
     }
-    List<LDMessage> result = new ArrayList<>(messages.size());
+    List<Message> result = new ArrayList<>(messages.size());
     for (LDValue entry : messages.values()) {
       if (entry == null || entry.getType() != LDValueType.OBJECT) {
         continue;
       }
-      LDMessage.Role role = LDMessage.Role.fromWireValue(asStringOrNull(entry.get("role")));
+      Message.Role role = Message.Role.fromWireValue(asStringOrNull(entry.get("role")));
       LDValue content = entry.get("content");
       if (role == null || content.getType() != LDValueType.STRING) {
         continue;
       }
-      result.add(new LDMessage(role, content.stringValue()));
+      result.add(new Message(role, content.stringValue()));
     }
     return result;
   }
@@ -131,12 +131,12 @@ public final class AIConfigParser {
    * @param flagValue the full flag value object
    * @return a map keyed by tool name, or {@code null} when no tools are present
    */
-  static Map<String, ToolConfig> resolveTools(LDValue flagValue) {
+  static Map<String, Tool> resolveTools(LDValue flagValue) {
     LDValue tools = flagValue.get("tools");
     if (tools.getType() == LDValueType.OBJECT) {
-      Map<String, ToolConfig> result = new LinkedHashMap<>();
+      Map<String, Tool> result = new LinkedHashMap<>();
       for (String name : tools.keys()) {
-        ToolConfig tool = parseTool(name, tools.get(name));
+        Tool tool = parseTool(name, tools.get(name));
         if (tool != null) {
           result.put(name, tool);
         }
@@ -148,13 +148,13 @@ public final class AIConfigParser {
     if (rawTools.getType() != LDValueType.ARRAY) {
       return null;
     }
-    Map<String, ToolConfig> result = new LinkedHashMap<>();
+    Map<String, Tool> result = new LinkedHashMap<>();
     for (LDValue entry : rawTools.values()) {
       String name = asStringOrNull(entry.get("name"));
       if (name == null) {
         continue;
       }
-      ToolConfig tool = parseTool(name, entry);
+      Tool tool = parseTool(name, entry);
       if (tool != null) {
         result.put(name, tool);
       }
@@ -162,7 +162,7 @@ public final class AIConfigParser {
     return result.isEmpty() ? null : result;
   }
 
-  private static ToolConfig parseTool(String fallbackName, LDValue tool) {
+  private static Tool parseTool(String fallbackName, LDValue tool) {
     if (tool == null || tool.getType() != LDValueType.OBJECT) {
       return null;
     }
@@ -170,7 +170,7 @@ public final class AIConfigParser {
     if (name == null) {
       name = fallbackName;
     }
-    return ToolConfig.builder(name)
+    return Tool.builder(name)
         .description(asStringOrNull(tool.get("description")))
         .type(asStringOrNull(tool.get("type")))
         .parameters(LDValueConverter.toMap(tool.get("parameters")))
