@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Renders AI Config message and instruction templates using Mustache, following the cross-SDK
- * interpolation policy shared with the JS and Python SDKs:
+ * interpolation policy shared with other SDKs:
  * <ul>
  *   <li><b>No HTML escaping.</b> The escape function is the identity, so {@code {{x}}} and
  *       {@code {{{x}}}} render identically and values are emitted verbatim.</li>
