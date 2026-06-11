@@ -98,8 +98,6 @@ public final class Interpolator {
     if (context.isMultiple()) {
       Map<String, Object> map = new HashMap<>();
       map.put("kind", "multi");
-      // Expose the canonical multi-kind key at the top level (matching other SDKs) so
-      // {{ldctx.key}} resolves for multi-kind contexts.
       map.put("key", context.getFullyQualifiedKey());
       int count = context.getIndividualContextCount();
       for (int i = 0; i < count; i++) {
@@ -124,7 +122,6 @@ public final class Interpolator {
     if (context.getName() != null) {
       map.put("name", context.getName());
     }
-    // Always expose anonymous as true/false (matching other SDKs) rather than only when true.
     map.put("anonymous", context.isAnonymous());
     // Custom attribute values can be arbitrary JSON; convert each LDValue to a plain Java value
     // (depth-capped) so nested objects/arrays remain addressable from templates.
