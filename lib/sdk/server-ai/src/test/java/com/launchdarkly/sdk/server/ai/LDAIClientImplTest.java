@@ -71,15 +71,6 @@ public class LDAIClientImplTest {
     verify(client).trackMetric(eq("$ld:ai:sdk:info"), any(LDContext.class), eq(expected), eq(1.0));
   }
 
-  @Test
-  public void constructorDoesNotThrowWhenSdkInfoTrackingFails() {
-    LDClientInterface throwingClient = mock(LDClientInterface.class);
-    org.mockito.Mockito.doThrow(new RuntimeException("not initialized"))
-        .when(throwingClient).trackMetric(eq("$ld:ai:sdk:info"), any(), any(), eq(1.0));
-    // Must not propagate out of the constructor.
-    new LDAIClientImpl(throwingClient, logger);
-  }
-
   // ---- Usage events ---------------------------------------------------------
 
   @Test
@@ -174,18 +165,27 @@ public class LDAIClientImplTest {
   // ---- Mode validation ------------------------------------------------------
 
   @Test
-  public void modeMismatchReturnsDisabledConfigAndWarnsOnce() {
+  public void modeMismatchReturnsDefaultConfigAndWarnsOnce() {
     String agentJson = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"agent\"},"
         + "\"instructions\":\"hi\"}";
     when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(agentJson));
 
-    // Requesting a completion config against an agent-mode flag.
-    AICompletionConfig config = ai.completionConfig("key", context, null, null);
+    // Requesting a completion config against an agent-mode flag returns the caller's default.
+    AICompletionConfigDefault dflt = AICompletionConfigDefault.builder()
+        .enabled(true)
+        .model(Model.builder("default-model").build())
+        .messages(Arrays.asList(new Message(Message.Role.SYSTEM, "default {{x}}")))
+        .build();
+    Map<String, Object> variables = new HashMap<>();
+    variables.put("x", "value");
+
+    AICompletionConfig config = ai.completionConfig("key", context, dflt, variables);
 
     assertThat(config, is(notNullValue()));
-    assertThat(config.isEnabled(), is(false));
-    assertThat(config.getMessages(), is(nullValue()));
     assertThat(config.getMode(), is(Mode.COMPLETION));
+    assertThat(config.isEnabled(), is(true));
+    assertThat(config.getModel().getName(), is("default-model"));
+    assertThat(config.getMessages().get(0).getContent(), is("default value"));
     assertThat(warnings(), hasSize(1));
     assertThat(warnings().get(0), containsString("mode mismatch"));
   }

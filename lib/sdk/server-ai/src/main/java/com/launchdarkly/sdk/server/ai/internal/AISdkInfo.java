@@ -25,8 +25,9 @@ public final class AISdkInfo {
    * lookup so that it resolves correctly in unit tests and when the classes are used outside the
    * packaged jar.
    */
-  // x-release-please-version
+  // x-release-please-start-version
   public static final String VERSION = "0.1.0";
+  // x-release-please-end
 
   private AISdkInfo() {
   }

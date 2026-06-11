@@ -78,18 +78,12 @@ public final class LDAIClientImpl implements LDAIClient {
     this.logger = Objects.requireNonNull(logger, "logger");
     this.interpolator = new Interpolator();
 
-    // Report SDK info once. Guard it: if the base client is not yet fully initialized, a track call
-    // must never propagate an exception out of this constructor.
-    try {
-      LDValue info = LDValue.buildObject()
-          .put("aiSdkName", AISdkInfo.NAME)
-          .put("aiSdkVersion", AISdkInfo.VERSION)
-          .put("aiSdkLanguage", AISdkInfo.LANGUAGE)
-          .build();
-      client.trackMetric(TRACK_SDK_INFO, INIT_TRACK_CONTEXT, info, 1);
-    } catch (Exception e) {
-      this.logger.warn("Unable to record AI SDK info event: {}", e.toString());
-    }
+    LDValue info = LDValue.buildObject()
+        .put("aiSdkName", AISdkInfo.NAME)
+        .put("aiSdkVersion", AISdkInfo.VERSION)
+        .put("aiSdkLanguage", AISdkInfo.LANGUAGE)
+        .build();
+    client.trackMetric(TRACK_SDK_INFO, INIT_TRACK_CONTEXT, info, 1);
   }
 
   @Override
@@ -178,9 +172,9 @@ public final class LDAIClientImpl implements LDAIClient {
     Mode flagMode = parsed.getMode() != null ? parsed.getMode() : Mode.COMPLETION;
     if (flagMode != mode) {
       logger.warn(
-          "AI Config mode mismatch for {}: expected {}, got {}. Returning disabled config.",
+          "AI Config mode mismatch for {}: expected {}, got {}. Returning default config.",
           key, mode.getWireValue(), flagMode.getWireValue());
-      return disabledConfig(key, mode);
+      return buildConfigFromDefault(key, mode, defaultValue, context, variables);
     }
 
     return buildConfig(key, mode, parsed, context, variables);
@@ -273,18 +267,6 @@ public final class LDAIClientImpl implements LDAIClient {
             completion.getTools(),
             TRACKER_FACTORY);
       }
-    }
-  }
-
-  private AIConfig disabledConfig(String key, Mode mode) {
-    switch (mode) {
-      case AGENT:
-        return new AIAgentConfig(key, false, null, null, null, null, null, TRACKER_FACTORY);
-      case JUDGE:
-        return new AIJudgeConfig(key, false, null, null, null, null, TRACKER_FACTORY);
-      case COMPLETION:
-      default:
-        return new AICompletionConfig(key, false, null, null, null, null, null, TRACKER_FACTORY);
     }
   }
 

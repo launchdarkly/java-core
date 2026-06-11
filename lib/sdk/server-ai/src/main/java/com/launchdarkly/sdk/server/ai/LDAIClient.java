@@ -14,10 +14,10 @@ import java.util.Map;
  * variables (and the evaluation context, exposed to templates as {@code ldctx}), and returns a
  * strongly-typed config.
  * <p>
- * When the flag is absent or cannot be evaluated, the caller-supplied default is returned as the
- * corresponding config type. When the variation's mode does not match the requested kind, a
- * disabled config of the requested type is returned and a warning is logged; a config is never
- * returned in a state that would force the caller into a {@code NullPointerException}.
+ * When the flag is absent, cannot be evaluated, or its mode does not match the requested kind, the
+ * caller-supplied default is returned as the corresponding config type (a warning is logged on a
+ * mode mismatch); a config is never returned in a state that would force the caller into a
+ * {@code NullPointerException}.
  * <p>
  * Implementations are thread-safe.
  */
