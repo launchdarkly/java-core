@@ -78,10 +78,6 @@ if (judge != null) {
 }
 ```
 
-`Evaluator` runs several judges over the same input/output with per-judge fault isolation and a
-per-judge timeout, returning one `JudgeResult` per judge in order. `Evaluator.noop()` returns an
-empty result list.
-
 ## Internal API convention
 
 Public, supported types live directly under `com.launchdarkly.sdk.server.ai` (and its documented

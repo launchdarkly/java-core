@@ -26,8 +26,10 @@ import java.util.concurrent.TimeoutException;
  * <p>
  * The evaluator does not record results; recording the returned {@link JudgeResult}s (for example
  * via a tracker) is the caller's responsibility. Instances are immutable and thread-safe.
+ * <p>
+ * This type is not part of the public API in v1.0 and may change without notice.
  */
-public final class Evaluator {
+final class Evaluator {
   /**
    * Default per-judge timeout used when one is not supplied.
    */
