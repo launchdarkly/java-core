@@ -47,6 +47,7 @@ public final class LDAIClientImpl implements LDAIClient {
   private static final String TRACK_USAGE_AGENT_CONFIG = "$ld:ai:usage:agent-config";
   private static final String TRACK_USAGE_AGENT_CONFIGS = "$ld:ai:usage:agent-configs";
   private static final String TRACK_USAGE_JUDGE_CONFIG = "$ld:ai:usage:judge-config";
+  private static final String TRACK_USAGE_CREATE_JUDGE = "$ld:ai:usage:create-judge";
 
   private static final LDContext INIT_TRACK_CONTEXT = LDContext
       .builder("ld-internal-tracking")
@@ -143,6 +144,37 @@ public final class LDAIClientImpl implements LDAIClient {
   @Override
   public LDAIConfigTracker createTracker(String resumptionToken, LDContext context) {
     return LDAIConfigTrackerImpl.fromResumptionToken(resumptionToken, client, context, logger);
+  }
+
+  @Override
+  public Judge createJudge(
+      String key,
+      LDContext context,
+      AIJudgeConfigDefault defaultValue,
+      Map<String, Object> variables,
+      Runner runner,
+      double sampleRate) {
+    // Manual-only path: fire the create-judge usage event, then resolve the config through the
+    // internal evaluate (which does not fire $ld:ai:usage:judge-config).
+    client.trackMetric(TRACK_USAGE_CREATE_JUDGE, context, LDValue.of(key), 1);
+    try {
+      AIJudgeConfigDefault effectiveDefault =
+          defaultValue != null ? defaultValue : AIJudgeConfigDefault.disabled();
+      AIJudgeConfig judgeConfig =
+          (AIJudgeConfig) evaluate(key, context, effectiveDefault, Mode.JUDGE, variables);
+      if (!judgeConfig.isEnabled()) {
+        logger.info("Judge configuration is disabled: {}", key);
+        return null;
+      }
+      if (runner == null) {
+        logger.warn("No runner supplied for judge: {}", key);
+        return null;
+      }
+      return new Judge(judgeConfig, runner, sampleRate, logger);
+    } catch (RuntimeException e) {
+      logger.error("Failed to initialize judge {}: {}", key, e.toString());
+      return null;
+    }
   }
 
   private AIAgentConfig evaluateAgent(
