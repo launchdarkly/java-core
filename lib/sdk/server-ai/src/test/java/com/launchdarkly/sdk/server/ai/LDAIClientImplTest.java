@@ -278,4 +278,46 @@ public class LDAIClientImplTest {
   private static Map<String, Object> variables() {
     return new HashMap<>();
   }
+
+  // ---- tracker wiring -------------------------------------------------------
+
+  @Test
+  public void configTrackerCarriesVariationAndModelMetadata() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"completion\",\"variationKey\":\"var-7\",\"version\":11},"
+        + "\"model\":{\"name\":\"gpt-4\"},\"provider\":{\"name\":\"openai\"}}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AICompletionConfig config = ai.completionConfig("key", context, null, null);
+    LDAIConfigTracker tracker = config.createTracker();
+
+    assertThat(tracker.getTrackData().getConfigKey(), is("key"));
+    assertThat(tracker.getTrackData().getVariationKey(), is("var-7"));
+    assertThat(tracker.getTrackData().getVersion(), is(11));
+    assertThat(tracker.getTrackData().getModelName(), is("gpt-4"));
+    assertThat(tracker.getTrackData().getProviderName(), is("openai"));
+  }
+
+  @Test
+  public void createTrackerFromTokenSharesRunIdAndConfig() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"completion\",\"variationKey\":\"var-7\",\"version\":11}}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    LDAIConfigTracker original = ai.completionConfig("key", context, null, null).createTracker();
+    LDAIConfigTracker restored = ai.createTracker(original.getResumptionToken(), context);
+
+    assertThat(restored.getTrackData().getRunId(), is(original.getTrackData().getRunId()));
+    assertThat(restored.getTrackData().getConfigKey(), is("key"));
+    assertThat(restored.getTrackData().getVariationKey(), is("var-7"));
+    assertThat(restored.getTrackData().getVersion(), is(11));
+  }
+
+  @Test
+  public void eachCreateTrackerCallStartsANewRun() {
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.ofNull());
+    AICompletionConfig config = ai.completionConfig("key", context, null, null);
+    String runA = config.createTracker().getTrackData().getRunId();
+    String runB = config.createTracker().getTrackData().getRunId();
+    assertThat(runA, is(notNullValue()));
+    assertThat(runA.equals(runB), is(false));
+  }
 }
