@@ -97,6 +97,25 @@ public class InterpolatorTest {
   }
 
   @Test
+  public void anonymousIsAlwaysExposedAsBoolean() {
+    LDContext anon = LDContext.builder("k").anonymous(true).build();
+    assertThat(interpolator.interpolate("{{ldctx.anonymous}}", null, anon), is("true"));
+    // Matches other SDKs: anonymous is emitted even when false, rather than rendering empty.
+    LDContext named = LDContext.builder("k").build();
+    assertThat(interpolator.interpolate("{{ldctx.anonymous}}", null, named), is("false"));
+  }
+
+  @Test
+  public void multiKindExposesFullyQualifiedKeyAtTopLevel() {
+    LDContext multi = LDContext.createMulti(
+        LDContext.builder("user-key").build(),
+        LDContext.builder(com.launchdarkly.sdk.ContextKind.of("org"), "org-key").build());
+    // {{ldctx.key}} on a multi-kind context resolves to the canonical fully-qualified key.
+    assertThat(
+        interpolator.interpolate("{{ldctx.key}}", null, multi), is(multi.getFullyQualifiedKey()));
+  }
+
+  @Test
   public void ldctxOverridesUserSuppliedValue() {
     Map<String, Object> userLdctx = new HashMap<>();
     userLdctx.put("key", "WRONG");

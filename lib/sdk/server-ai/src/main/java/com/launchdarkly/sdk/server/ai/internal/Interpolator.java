@@ -87,8 +87,9 @@ public final class Interpolator {
   /**
    * Encodes the evaluation context directly into the nested map structure exposed to templates as
    * {@code ldctx}, without round-tripping through JSON serialization. A single-kind context becomes
-   * a map of its attributes; a multi-kind context becomes {@code {"kind":"multi", <kind>: {...}}}
-   * with one nested map per individual context.
+   * a map of its attributes; a multi-kind context becomes
+   * {@code {"kind":"multi", "key":<fully-qualified key>, <kind>: {...}}} with one nested map per
+   * individual context.
    */
   private static Map<String, Object> contextToMap(LDContext context) {
     if (context == null || !context.isValid()) {
@@ -97,6 +98,9 @@ public final class Interpolator {
     if (context.isMultiple()) {
       Map<String, Object> map = new HashMap<>();
       map.put("kind", "multi");
+      // Expose the canonical multi-kind key at the top level (matching other SDKs) so
+      // {{ldctx.key}} resolves for multi-kind contexts.
+      map.put("key", context.getFullyQualifiedKey());
       int count = context.getIndividualContextCount();
       for (int i = 0; i < count; i++) {
         LDContext individual = context.getIndividualContext(i);
@@ -120,9 +124,8 @@ public final class Interpolator {
     if (context.getName() != null) {
       map.put("name", context.getName());
     }
-    if (context.isAnonymous()) {
-      map.put("anonymous", true);
-    }
+    // Always expose anonymous as true/false (matching other SDKs) rather than only when true.
+    map.put("anonymous", context.isAnonymous());
     // Custom attribute values can be arbitrary JSON; convert each LDValue to a plain Java value
     // (depth-capped) so nested objects/arrays remain addressable from templates.
     for (String attribute : context.getCustomAttributeNames()) {
