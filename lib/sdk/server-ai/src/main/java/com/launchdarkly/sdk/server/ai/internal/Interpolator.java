@@ -101,17 +101,21 @@ public final class Interpolator {
       for (int i = 0; i < count; i++) {
         LDContext individual = context.getIndividualContext(i);
         if (individual != null) {
-          map.put(individual.getKind().toString(), singleContextToMap(individual));
+          // Mirror LaunchDarkly's standard context JSON: the per-kind objects nested under a
+          // multi-kind context omit "kind" because it is already implied by the property key.
+          map.put(individual.getKind().toString(), singleContextToMap(individual, false));
         }
       }
       return map;
     }
-    return singleContextToMap(context);
+    return singleContextToMap(context, true);
   }
 
-  private static Map<String, Object> singleContextToMap(LDContext context) {
+  private static Map<String, Object> singleContextToMap(LDContext context, boolean includeKind) {
     Map<String, Object> map = new HashMap<>();
-    map.put("kind", context.getKind().toString());
+    if (includeKind) {
+      map.put("kind", context.getKind().toString());
+    }
     map.put("key", context.getKey());
     if (context.getName() != null) {
       map.put("name", context.getName());

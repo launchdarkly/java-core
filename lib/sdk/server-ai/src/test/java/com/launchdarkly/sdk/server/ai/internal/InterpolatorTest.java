@@ -86,6 +86,17 @@ public class InterpolatorTest {
   }
 
   @Test
+  public void multiKindNestedContextsOmitKind() {
+    LDContext multi = LDContext.createMulti(
+        LDContext.builder("user-key").build(),
+        LDContext.builder(com.launchdarkly.sdk.ContextKind.of("org"), "org-key").build());
+    // Standard LaunchDarkly context JSON omits "kind" on the per-kind objects of a multi-kind
+    // context, so {{ldctx.user.kind}} renders empty rather than echoing the kind name.
+    assertThat(
+        interpolator.interpolate("[{{ldctx.user.kind}}]", null, multi), is("[]"));
+  }
+
+  @Test
   public void ldctxOverridesUserSuppliedValue() {
     Map<String, Object> userLdctx = new HashMap<>();
     userLdctx.put("key", "WRONG");
