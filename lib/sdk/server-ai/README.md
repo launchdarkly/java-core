@@ -18,8 +18,33 @@ This library has a minimum Java version of 8.
 This module is part of the [`java-core`](https://github.com/launchdarkly/java-core) monorepo and is
 published to Maven Central as `com.launchdarkly:launchdarkly-java-server-sdk-ai`.
 
-Full usage documentation, including AI Config retrieval, tracking, and manual judge evaluation, will be
-added as the SDK is built out (see epic AIC-2629).
+Construct an `LDAIClient` from an initialized server-side `LDClient`, then retrieve a typed config:
+
+```java
+LDClient ldClient = new LDClient(sdkKey);
+LDAIClient aiClient = new LDAIClientImpl(ldClient);
+
+Map<String, Object> variables = new HashMap<>();
+variables.put("username", "Sandy");
+
+AICompletionConfig config = aiClient.completionConfig(
+    "my-ai-config-key",
+    context,
+    AICompletionConfigDefault.disabled(), // fallback when the flag is absent
+    variables);
+
+if (config.isEnabled()) {
+    // config.getModel(), config.getProvider(), and config.getMessages() (already interpolated)
+    // are ready to pass to your model provider.
+}
+```
+
+The companion `agentConfig`/`agentConfigs` and `judgeConfig` methods retrieve agent and judge
+configs respectively. Within a prompt message or agent instruction, the evaluation context is
+available as `{{ldctx}}` (for example `{{ldctx.key}}`).
+
+Metric tracking and manual judge evaluation will be added as the SDK is built out (see epic
+AIC-2629).
 
 ## Internal API convention
 
