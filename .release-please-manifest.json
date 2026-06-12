@@ -1,5 +1,5 @@
 {
-  "lib/sdk/server-ai": "0.1.0",
+  "lib/sdk/server-ai": "0.2.0",
   "lib/java-server-sdk-otel": "0.2.0",
   "lib/java-server-sdk-redis-store": "3.1.1",
   "lib/shared/common": "2.4.0",
