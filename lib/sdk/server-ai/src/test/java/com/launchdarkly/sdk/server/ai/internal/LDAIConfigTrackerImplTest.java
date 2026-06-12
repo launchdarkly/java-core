@@ -19,7 +19,7 @@ import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.FeedbackKind;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.JudgeResult;
-import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.Metrics;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.AIMetrics;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.MetricSummary;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.TokenUsage;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.TrackData;
@@ -240,7 +240,7 @@ public class LDAIConfigTrackerImplTest {
   public void trackMetricsOfRecordsOutcomeTokensAndToolCalls() throws Exception {
     LDAIConfigTrackerImpl t = tracker();
     String result = t.trackMetricsOf(
-        r -> Metrics.builder(true)
+        r -> AIMetrics.builder(true)
             .tokens(new TokenUsage(15, 5, 10))
             .toolCalls(Arrays.asList("x"))
             .build(),
@@ -256,7 +256,7 @@ public class LDAIConfigTrackerImplTest {
   public void trackMetricsOfRecordsErrorAndRethrowsWhenOperationThrows() {
     LDAIConfigTrackerImpl t = tracker();
     assertThrows(IllegalStateException.class, () -> t.trackMetricsOf(
-        r -> Metrics.builder(true).build(),
+        r -> AIMetrics.builder(true).build(),
         () -> {
           throw new IllegalStateException("op failed");
         }));
@@ -265,14 +265,19 @@ public class LDAIConfigTrackerImplTest {
   }
 
   @Test
-  public void trackMetricsOfRecordsErrorAndRethrowsWhenExtractorThrows() {
+  public void trackMetricsOfRethrowsWithoutErrorWhenExtractorThrows() {
     LDAIConfigTrackerImpl t = tracker();
     assertThrows(RuntimeException.class, () -> t.trackMetricsOf(
         r -> {
           throw new RuntimeException("extractor failed");
         },
         () -> "answer"));
-    assertThat(named("$ld:ai:generation:error"), hasSize(1));
+    // Extractor failure is not an AI generation failure: no error event, and the outcome guard is
+    // left untouched so a later trackSuccess() can still be recorded.
+    assertThat(named("$ld:ai:generation:error"), is(empty()));
+    assertThat(named("$ld:ai:duration:total"), hasSize(1));
+    t.trackSuccess();
+    assertThat(named("$ld:ai:generation:success"), hasSize(1));
   }
 
   // ---- data / summary -------------------------------------------------------

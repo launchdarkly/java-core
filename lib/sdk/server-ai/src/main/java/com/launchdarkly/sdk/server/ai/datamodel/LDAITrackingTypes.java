@@ -126,13 +126,13 @@ public final class LDAITrackingTypes {
    * Metrics a caller extracts from an AI run, supplied to
    * {@link com.launchdarkly.sdk.server.ai.LDAIConfigTracker#trackMetricsOf}.
    */
-  public static final class Metrics {
+  public static final class AIMetrics {
     private final boolean success;
     private final TokenUsage tokens;
     private final List<String> toolCalls;
     private final Long durationMs;
 
-    private Metrics(Builder b) {
+    private AIMetrics(Builder b) {
       this.success = b.success;
       this.tokens = b.tokens;
       this.toolCalls = b.toolCalls == null
@@ -187,7 +187,7 @@ public final class LDAITrackingTypes {
     }
 
     /**
-     * Builder for {@link Metrics}.
+     * Builder for {@link AIMetrics}.
      */
     public static final class Builder {
       private final boolean success;
@@ -233,12 +233,12 @@ public final class LDAITrackingTypes {
       }
 
       /**
-       * Builds the immutable {@link Metrics}.
+       * Builds the immutable {@link AIMetrics}.
        *
-       * @return a new {@link Metrics}
+       * @return a new {@link AIMetrics}
        */
-      public Metrics build() {
-        return new Metrics(this);
+      public AIMetrics build() {
+        return new AIMetrics(this);
       }
     }
   }

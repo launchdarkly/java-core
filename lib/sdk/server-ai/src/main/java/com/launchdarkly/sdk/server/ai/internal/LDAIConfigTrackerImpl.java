@@ -7,7 +7,7 @@ import com.launchdarkly.sdk.ObjectBuilder;
 import com.launchdarkly.sdk.server.ai.LDAIConfigTracker;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.FeedbackKind;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.JudgeResult;
-import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.Metrics;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.AIMetrics;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.MetricSummary;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.TokenUsage;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.TrackData;
@@ -286,7 +286,7 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
   }
 
   @Override
-  public <T> T trackMetricsOf(Function<? super T, Metrics> metricsExtractor, Callable<T> operation)
+  public <T> T trackMetricsOf(Function<? super T, AIMetrics> metricsExtractor, Callable<T> operation)
       throws Exception {
     if (metricsExtractor == null) {
       throw new NullPointerException("metricsExtractor must not be null");
@@ -303,13 +303,10 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
       throw e;
     }
 
-    Metrics metrics;
-    try {
-      metrics = metricsExtractor.apply(result);
-    } catch (RuntimeException e) {
-      trackError();
-      throw e;
-    }
+    // The extractor runs only after the operation has already succeeded, so a failure here is a
+    // metric-extraction problem, not an AI generation failure. Let it propagate without recording a
+    // generation error (matching the .NET SDK).
+    AIMetrics metrics = metricsExtractor.apply(result);
 
     if (metrics != null) {
       if (metrics.isSuccess()) {

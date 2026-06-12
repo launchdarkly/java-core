@@ -2,7 +2,7 @@ package com.launchdarkly.sdk.server.ai;
 
 import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.FeedbackKind;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.JudgeResult;
-import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.Metrics;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.AIMetrics;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.MetricSummary;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.TokenUsage;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.TrackData;
@@ -144,18 +144,18 @@ public interface LDAIConfigTracker {
    * Runs the given operation, recording its duration and then its outcome and metrics.
    * <p>
    * The operation is timed via {@link #trackDurationOf}. If it throws, an error is recorded and the
-   * exception is rethrown. Otherwise the extractor is applied to the result; if the extractor
-   * throws, an error is recorded and the exception is rethrown. On success the extracted metrics
-   * drive {@link #trackSuccess}/{@link #trackError}, {@link #trackTokens}, and
-   * {@link #trackToolCalls}.
+   * exception is rethrown. Otherwise the extractor is applied to the result. A failure in the
+   * extractor is a metric-extraction problem rather than an AI generation failure, so the exception
+   * is rethrown without recording an error. On success the extracted metrics drive
+   * {@link #trackSuccess}/{@link #trackError}, {@link #trackTokens}, and {@link #trackToolCalls}.
    *
-   * @param metricsExtractor extracts {@link Metrics} from the operation's result
+   * @param metricsExtractor extracts {@link AIMetrics} from the operation's result
    * @param operation the AI operation to run
    * @param <T> the operation's result type
    * @return the operation's result
    * @throws Exception if the operation or the extractor throws
    */
-  <T> T trackMetricsOf(Function<? super T, Metrics> metricsExtractor, Callable<T> operation)
+  <T> T trackMetricsOf(Function<? super T, AIMetrics> metricsExtractor, Callable<T> operation)
       throws Exception;
 
   /**
