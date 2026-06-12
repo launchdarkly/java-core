@@ -96,4 +96,29 @@ public interface LDAIClient {
    * @throws IllegalArgumentException if the token is malformed
    */
   LDAIConfigTracker createTracker(String resumptionToken, LDContext context);
+
+  /**
+   * Retrieves a judge AI Config and builds a {@link Judge} for manual evaluation.
+   * <p>
+   * This fires only the {@code $ld:ai:usage:create-judge} usage event. In v1.0 the SDK does not
+   * auto-attach judges to completion or agent calls; evaluation is manual, driven by the returned
+   * judge. Because the SDK ships no provider runners yet, the caller supplies the {@link Runner}.
+   *
+   * @param key the judge AI Config key
+   * @param context the context to evaluate the configuration in
+   * @param defaultValue the default used when the flag is absent or cannot be evaluated; when
+   *     {@code null}, a disabled default is used
+   * @param variables variables interpolated into the judge prompt; may be {@code null}
+   * @param runner the runner the judge invokes; when {@code null}, no judge is created
+   * @param sampleRate the default sampling rate for the judge in {@code [0.0, 1.0]}
+   * @return a {@link Judge}, or {@code null} if the configuration is disabled or no runner was
+   *     supplied
+   */
+  Judge createJudge(
+      String key,
+      LDContext context,
+      AIJudgeConfigDefault defaultValue,
+      Map<String, Object> variables,
+      Runner runner,
+      double sampleRate);
 }

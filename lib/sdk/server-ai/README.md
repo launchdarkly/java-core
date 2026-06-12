@@ -43,8 +43,40 @@ The companion `agentConfig`/`agentConfigs` and `judgeConfig` methods retrieve ag
 configs respectively. Within a prompt message or agent instruction, the evaluation context is
 available as `{{ldctx}}` (for example `{{ldctx.key}}`).
 
-Metric tracking and manual judge evaluation will be added as the SDK is built out (see epic
-AIC-2629).
+## Tracking AI runs
+
+Every retrieved config exposes a tracker via `config.createTracker()`. Use it to record duration,
+time-to-first-token, success/error, token usage, tool calls, and feedback for an AI run. Trackers
+are thread-safe, and at-most-once metrics (duration, time-to-first-token, outcome, feedback, tokens)
+emit a single event even under concurrent calls. A run can be correlated across processes with
+`tracker.getResumptionToken()` and rebuilt later via `aiClient.createTracker(token, context)`.
+
+## Evaluating responses with judges (manual)
+
+A judge is an AI Config with `mode: judge` that scores another config's output against an evaluation
+metric.
+
+In `v1.0`, evaluation is **manual only**. The SDK parses `judgeConfiguration` and exposes it on
+configs, but it does **not** automatically invoke judges on completion or agent calls. Sample-rate
+driven auto-attachment is deferred past `v1.0`. Because no provider-specific runners ship yet, you
+supply your own `Runner` that calls your model and returns structured `{score, reasoning}` output.
+
+```java
+Runner runner = input -> {
+    // Call your model with `input`, then return its score/reasoning as structured output.
+    // metrics carries success/tokens/duration for the invocation.
+    return RunnerResult.builder(Metrics.builder(true).build())
+        .parsed(LDValue.buildObject().put("score", 0.9).put("reasoning", "grounded").build())
+        .build();
+};
+
+Judge judge = aiClient.createJudge("my-judge-key", context, null, variables, runner, 1.0);
+if (judge != null) {
+    JudgeResult result = judge.evaluate(originalInput, modelOutput);
+    // Recording the result is the caller's responsibility:
+    completionTracker.trackJudgeResult(result);
+}
+```
 
 ## Internal API convention
 

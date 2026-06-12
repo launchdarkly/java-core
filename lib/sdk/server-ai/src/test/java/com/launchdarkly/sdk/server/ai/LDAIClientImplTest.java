@@ -9,9 +9,11 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -24,6 +26,7 @@ import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Mode;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Message;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Model;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.Metrics;
 import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
 
 import java.util.ArrayList;
@@ -319,5 +322,58 @@ public class LDAIClientImplTest {
     String runB = config.createTracker().getTrackData().getRunId();
     assertThat(runA, is(notNullValue()));
     assertThat(runA.equals(runB), is(false));
+  }
+
+  // ---- createJudge ----------------------------------------------------------
+
+  private static final String JUDGE_JSON =
+      "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"judge\"},\"evaluationMetricKeys\":[\"relevance\"]}";
+
+  private static Runner stubRunner() {
+    return input -> RunnerResult.builder(Metrics.builder(true).build())
+        .parsed(LDValue.buildObject().put("score", 0.5).put("reasoning", "r").build())
+        .build();
+  }
+
+  @Test
+  public void createJudgeFiresOnlyCreateJudgeUsageEvent() {
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(JUDGE_JSON));
+
+    ai.createJudge("judge-key", context, null, null, stubRunner(), 1.0);
+
+    verify(client).trackMetric(eq("$ld:ai:usage:create-judge"), eq(context), eq(LDValue.of("judge-key")), eq(1.0));
+    verify(client, never()).trackMetric(eq("$ld:ai:usage:judge-config"), any(), any(), anyDouble());
+  }
+
+  @Test
+  public void createJudgeReturnsJudgeForEnabledConfig() {
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(JUDGE_JSON));
+
+    Runner runner = stubRunner();
+    Judge judge = ai.createJudge("judge-key", context, null, null, runner, 1.0);
+
+    assertThat(judge, is(notNullValue()));
+    assertThat(judge.getAIConfig().getKey(), is("judge-key"));
+    assertThat(judge.getAIConfig().getEvaluationMetricKey(), is("relevance"));
+    assertThat(judge.getRunner(), is(runner));
+  }
+
+  @Test
+  public void createJudgeReturnsNullWhenDisabled() {
+    String disabled = "{\"_ldMeta\":{\"enabled\":false,\"mode\":\"judge\"}}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(disabled));
+
+    Judge judge = ai.createJudge("judge-key", context, null, null, stubRunner(), 1.0);
+    assertThat(judge, is(nullValue()));
+  }
+
+  @Test
+  public void createJudgeReturnsNullWhenNoRunner() {
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(JUDGE_JSON));
+
+    Judge judge = ai.createJudge("judge-key", context, null, null, null, 1.0);
+    assertThat(judge, is(nullValue()));
+    // The usage event still fires before the runner check.
+    verify(client).trackMetric(eq("$ld:ai:usage:create-judge"), eq(context), eq(LDValue.of("judge-key")), eq(1.0));
   }
 }
