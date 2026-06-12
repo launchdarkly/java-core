@@ -81,4 +81,19 @@ public interface LDAIClient {
       LDContext context,
       AIJudgeConfigDefault defaultValue,
       Map<String, Object> variables);
+
+  /**
+   * Reconstructs a tracker from a resumption token produced by
+   * {@link LDAIConfigTracker#getResumptionToken()}.
+   * <p>
+   * The reconstructed tracker shares the original run's {@code runId}, so events it emits (for
+   * example deferred user feedback recorded in another process) correlate with the original AI run.
+   * Model and provider names are not carried in the token and are reported as empty strings.
+   *
+   * @param resumptionToken the token to reconstruct from
+   * @param context the context the tracker's events will be attributed to
+   * @return a tracker sharing the original run's identity
+   * @throws IllegalArgumentException if the token is malformed
+   */
+  LDAIConfigTracker createTracker(String resumptionToken, LDContext context);
 }
