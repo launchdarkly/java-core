@@ -111,20 +111,21 @@ public final class LDAIClientImpl implements LDAIClient {
   @Override
   public Map<String, AIAgentConfig> agentConfigs(
       List<AIAgentConfigRequest> agentConfigs, LDContext context) {
-    int count = agentConfigs == null ? 0 : agentConfigs.size();
-    client.trackMetric(TRACK_USAGE_AGENT_CONFIGS, context, LDValue.of(count), count);
-
     Map<String, AIAgentConfig> result = new LinkedHashMap<>();
+    int count = 0;
     if (agentConfigs != null) {
       for (AIAgentConfigRequest request : agentConfigs) {
         if (request == null) {
           continue;
         }
+        count++;
         result.put(
             request.getKey(),
             evaluateAgent(request.getKey(), context, request.getDefaultValue(), request.getVariables()));
       }
     }
+    client.trackMetric(TRACK_USAGE_AGENT_CONFIGS, context, LDValue.of(count), count);
+
     return result;
   }
 

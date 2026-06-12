@@ -2,6 +2,7 @@ package com.launchdarkly.sdk.server.ai;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.hasSize;
@@ -273,6 +274,19 @@ public class LDAIClientImplTest {
     Map<String, AIAgentConfig> agents = ai.agentConfigs(new ArrayList<>(), context);
     assertThat(agents.entrySet(), is(empty()));
     verify(client).trackMetric(eq("$ld:ai:usage:agent-configs"), eq(context), eq(LDValue.of(0)), eq(0.0));
+  }
+
+  @Test
+  public void agentConfigsUsageCountExcludesNullEntries() {
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.ofNull());
+    List<AIAgentConfigRequest> requests = Arrays.asList(
+        AIAgentConfigRequest.builder("a").build(),
+        null,
+        AIAgentConfigRequest.builder("b").build());
+    Map<String, AIAgentConfig> agents = ai.agentConfigs(requests, context);
+
+    assertThat(agents.keySet(), containsInAnyOrder("a", "b"));
+    verify(client).trackMetric(eq("$ld:ai:usage:agent-configs"), eq(context), eq(LDValue.of(2)), eq(2.0));
   }
 
   private static Map<String, Object> variables() {
