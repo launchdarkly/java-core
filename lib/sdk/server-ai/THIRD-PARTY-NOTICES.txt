@@ -1,0 +1,43 @@
+This product includes vendored third-party source code. The relevant licenses
+and copyright notices are reproduced below.
+
+================================================================================
+JMustache (jmustache)
+--------------------------------------------------------------------------------
+Vendored from: com.samskivert:jmustache:1.15
+Upstream:      https://github.com/samskivert/jmustache
+Location:      src/main/java/com/launchdarkly/sdk/server/ai/internal/mustache/
+
+The JMustache source has been relocated into the internal, non-public package
+com.launchdarkly.sdk.server.ai.internal.mustache and is compiled from source as
+part of this library. Aside from the relocated package declaration and a short
+provenance banner at the top of each file, the source is unmodified from the
+upstream 1.15 release.
+
+License: The (New) BSD License (BSD 3-Clause)
+
+Copyright (c) 2010, Michael Bayne
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+    * Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above copyright notice,
+      this list of conditions and the following disclaimer in the documentation
+      and/or other materials provided with the distribution.
+    * The name Michael Bayne may not be used to endorse or promote products
+      derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+================================================================================
