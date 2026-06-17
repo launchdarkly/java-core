@@ -1,0 +1,86 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+  - package-ecosystem: "gradle"
+    directory: "/lib/java-server-sdk-otel"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+  - package-ecosystem: "gradle"
+    directory: "/lib/java-server-sdk-redis-store"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+  - package-ecosystem: "gradle"
+    directory: "/lib/sdk/server"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+  - package-ecosystem: "gradle"
+    directory: "/lib/sdk/server-ai"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+  - package-ecosystem: "gradle"
+    directory: "/lib/sdk/server/benchmarks"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+  - package-ecosystem: "gradle"
+    directory: "/lib/sdk/server/contract-tests/service"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+  - package-ecosystem: "gradle"
+    directory: "/lib/sdk/server/packaging-test/test-app"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+  - package-ecosystem: "gradle"
+    directory: "/lib/shared/common"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+  - package-ecosystem: "gradle"
+    directory: "/lib/shared/common/buildSrc"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+  - package-ecosystem: "gradle"
+    directory: "/lib/shared/internal"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+  - package-ecosystem: "gradle"
+    directory: "/lib/shared/internal/buildSrc"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+  - package-ecosystem: "gradle"
+    directory: "/lib/shared/test-helpers"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+  - package-ecosystem: "gradle"
+    directory: "/lib/shared/test-helpers/buildSrc"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
