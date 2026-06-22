@@ -8,13 +8,13 @@ import com.launchdarkly.sdk.ContextKind;
 import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.LDValueType;
-import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Mode;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Message;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Mode;
 import com.launchdarkly.sdk.server.ai.internal.AIConfigFlagValue;
 import com.launchdarkly.sdk.server.ai.internal.AIConfigParser;
 import com.launchdarkly.sdk.server.ai.internal.AISdkInfo;
 import com.launchdarkly.sdk.server.ai.internal.Interpolator;
-import com.launchdarkly.sdk.server.ai.internal.NoOpAIConfigTracker;
+import com.launchdarkly.sdk.server.ai.internal.LDAIConfigTrackerImpl;
 import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
 
 import java.util.ArrayList;
@@ -22,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
@@ -51,8 +52,6 @@ public final class LDAIClientImpl implements LDAIClient {
       .anonymous(true)
       .build();
 
-  // Tracking is implemented in a later step; until then every config hands out the no-op tracker.
-  private static final Supplier<LDAIConfigTracker> TRACKER_FACTORY = () -> NoOpAIConfigTracker.INSTANCE;
 
   private final LDClientInterface client;
   private final LDLogger logger;
@@ -187,6 +186,9 @@ public final class LDAIClientImpl implements LDAIClient {
       AIConfigFlagValue parsed,
       LDContext context,
       Map<String, Object> variables) {
+    Supplier<LDAIConfigTracker> factory = trackerFactory(
+        key, parsed.getVariationKey(), parsed.getVersion(),
+        parsed.getModel(), parsed.getProvider(), context);
     switch (mode) {
       case AGENT:
         return new AIAgentConfig(
@@ -197,7 +199,7 @@ public final class LDAIClientImpl implements LDAIClient {
             interpolate(parsed.getInstructions(), variables, context),
             parsed.getJudgeConfiguration(),
             parsed.getTools(),
-            TRACKER_FACTORY);
+            factory);
       case JUDGE:
         return new AIJudgeConfig(
             key,
@@ -206,7 +208,7 @@ public final class LDAIClientImpl implements LDAIClient {
             parsed.getProvider(),
             interpolateMessages(parsed.getMessages(), variables, context),
             parsed.getEvaluationMetricKey(),
-            TRACKER_FACTORY);
+            factory);
       case COMPLETION:
       default:
         return new AICompletionConfig(
@@ -217,7 +219,7 @@ public final class LDAIClientImpl implements LDAIClient {
             interpolateMessages(parsed.getMessages(), variables, context),
             parsed.getJudgeConfiguration(),
             parsed.getTools(),
-            TRACKER_FACTORY);
+            factory);
     }
   }
 
@@ -231,6 +233,9 @@ public final class LDAIClientImpl implements LDAIClient {
       AIConfigDefault defaultValue,
       LDContext context,
       Map<String, Object> variables) {
+    // Default configs still get real trackers — the configKey was requested even if no flag was found.
+    // variationKey is null because no flag evaluation occurred.
+    Supplier<LDAIConfigTracker> factory = trackerFactory(key, null, null, null, null, context);
     switch (mode) {
       case AGENT: {
         AIAgentConfigDefault agent = (AIAgentConfigDefault) defaultValue;
@@ -242,7 +247,7 @@ public final class LDAIClientImpl implements LDAIClient {
             interpolate(agent.getInstructions(), variables, context),
             agent.getJudgeConfiguration(),
             agent.getTools(),
-            TRACKER_FACTORY);
+            factory);
       }
       case JUDGE: {
         AIJudgeConfigDefault judge = (AIJudgeConfigDefault) defaultValue;
@@ -253,7 +258,7 @@ public final class LDAIClientImpl implements LDAIClient {
             judge.getProvider(),
             interpolateMessages(judge.getMessages(), variables, context),
             judge.getEvaluationMetricKey(),
-            TRACKER_FACTORY);
+            factory);
       }
       case COMPLETION:
       default: {
@@ -266,9 +271,41 @@ public final class LDAIClientImpl implements LDAIClient {
             interpolateMessages(completion.getMessages(), variables, context),
             completion.getJudgeConfiguration(),
             completion.getTools(),
-            TRACKER_FACTORY);
+            factory);
       }
     }
+  }
+
+  /**
+   * Creates a per-evaluation tracker factory. Each call to the returned {@link Supplier} produces
+   * a fresh {@link LDAIConfigTrackerImpl} with a new {@code runId}.
+   */
+  private Supplier<LDAIConfigTracker> trackerFactory(
+      String configKey,
+      String variationKey,
+      Integer version,
+      com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Model model,
+      com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Provider provider,
+      LDContext context) {
+    String modelName = model != null && model.getName() != null ? model.getName() : "";
+    String providerName = provider != null && provider.getName() != null ? provider.getName() : "";
+    int ver = version != null ? version : 0;
+    return () -> new LDAIConfigTrackerImpl(
+        client,
+        UUID.randomUUID().toString(),
+        configKey,
+        variationKey,
+        ver,
+        modelName,
+        providerName,
+        context,
+        null, // graphKey — set by agentGraph() in Plan 3
+        logger);
+  }
+
+  @Override
+  public LDAIConfigTracker createTracker(String resumptionToken, LDContext context) {
+    return LDAIConfigTrackerImpl.fromResumptionToken(resumptionToken, client, context, logger);
   }
 
   private List<Message> interpolateMessages(
