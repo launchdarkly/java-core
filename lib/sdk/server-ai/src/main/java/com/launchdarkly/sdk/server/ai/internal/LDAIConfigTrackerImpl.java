@@ -155,7 +155,7 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
   @Override
   public void trackDuration(Duration duration) {
     if (duration == null) {
-      logger.warn("Skipping trackDuration: duration was null.");
+      logger.debug("Skipping trackDuration: duration was null.");
       return;
     }
     long ms = Math.max(0L, duration.toMillis());
@@ -181,7 +181,7 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
   @Override
   public void trackTimeToFirstToken(Duration duration) {
     if (duration == null) {
-      logger.warn("Skipping trackTimeToFirstToken: duration was null.");
+      logger.debug("Skipping trackTimeToFirstToken: duration was null.");
       return;
     }
     long ms = Math.max(0L, duration.toMillis());
@@ -213,7 +213,7 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
   @Override
   public void trackFeedback(FeedbackKind kind) {
     if (kind == null) {
-      logger.warn("Skipping trackFeedback: kind was null.");
+      logger.debug("Skipping trackFeedback: kind was null.");
       return;
     }
     // Resolve event name BEFORE claiming the guard — an exception here must not burn the slot.
@@ -228,7 +228,7 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
   @Override
   public void trackTokens(TokenUsage tokens) {
     if (tokens == null) {
-      logger.warn("Skipping trackTokens: tokens was null.");
+      logger.debug("Skipping trackTokens: tokens was null.");
       return;
     }
     boolean hasPositive = tokens.getTotal() > 0 || tokens.getInput() > 0 || tokens.getOutput() > 0;
@@ -254,7 +254,7 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
   @Override
   public void trackToolCall(String toolKey) {
     if (toolKey == null) {
-      logger.warn("Skipping trackToolCall: toolKey was null.");
+      logger.debug("Skipping trackToolCall: toolKey was null.");
       return;
     }
     toolCalls.add(toolKey);
@@ -275,7 +275,7 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
   @Override
   public void trackJudgeResult(JudgeResult result) {
     if (result == null) {
-      logger.warn("Skipping trackJudgeResult: result was null.");
+      logger.debug("Skipping trackJudgeResult: result was null.");
       return;
     }
     if (!result.isSampled()) {

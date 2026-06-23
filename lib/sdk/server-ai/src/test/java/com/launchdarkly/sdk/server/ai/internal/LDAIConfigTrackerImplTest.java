@@ -3,6 +3,7 @@ package com.launchdarkly.sdk.server.ai.internal;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
@@ -78,6 +79,13 @@ public class LDAIConfigTrackerImplTest {
   private List<String> warnings() {
     return logCapture.getMessages().stream()
         .filter(m -> m.getLevel() == LDLogLevel.WARN)
+        .map(LogCapture.Message::getText)
+        .collect(Collectors.toList());
+  }
+
+  private List<String> debugs() {
+    return logCapture.getMessages().stream()
+        .filter(m -> m.getLevel() == LDLogLevel.DEBUG)
         .map(LogCapture.Message::getText)
         .collect(Collectors.toList());
   }
@@ -172,10 +180,11 @@ public class LDAIConfigTrackerImplTest {
   }
 
   @Test
-  public void trackDurationNullIsIgnoredWithWarning() {
+  public void trackDurationNullIsIgnoredWithDebugLog() {
     tracker.trackDuration(null);
     verify(client, never()).trackMetric(eq("$ld:ai:duration:total"), any(), any(), anyDouble());
-    assertThat(warnings().size(), greaterThanOrEqualTo(1));
+    assertThat(debugs().size(), greaterThanOrEqualTo(1));
+    assertThat(warnings(), is(empty()));
   }
 
   // ---- trackDurationOf ------------------------------------------------------
@@ -215,10 +224,11 @@ public class LDAIConfigTrackerImplTest {
   }
 
   @Test
-  public void trackTimeToFirstTokenNullIsIgnoredWithWarning() {
+  public void trackTimeToFirstTokenNullIsIgnoredWithDebugLog() {
     tracker.trackTimeToFirstToken(null);
     verify(client, never()).trackMetric(eq("$ld:ai:tokens:ttf"), any(), any(), anyDouble());
-    assertThat(warnings().size(), greaterThanOrEqualTo(1));
+    assertThat(debugs().size(), greaterThanOrEqualTo(1));
+    assertThat(warnings(), is(empty()));
   }
 
   // ---- trackSuccess / trackError --------------------------------------------
@@ -299,9 +309,10 @@ public class LDAIConfigTrackerImplTest {
   }
 
   @Test
-  public void trackFeedbackNullIsIgnoredWithWarning_slotNotBurned() {
+  public void trackFeedbackNullIsIgnoredWithDebugLog_slotNotBurned() {
     tracker.trackFeedback(null);
-    assertThat(warnings().size(), greaterThanOrEqualTo(1));
+    assertThat(debugs().size(), greaterThanOrEqualTo(1));
+    assertThat(warnings(), is(empty()));
     // Slot should not be burned — a subsequent valid call should still work
     tracker.trackFeedback(FeedbackKind.POSITIVE);
     verify(client, times(1)).trackMetric(eq("$ld:ai:feedback:user:positive"), any(), any(), anyDouble());
@@ -342,10 +353,11 @@ public class LDAIConfigTrackerImplTest {
   }
 
   @Test
-  public void trackTokensNullIsIgnoredWithWarning() {
+  public void trackTokensNullIsIgnoredWithDebugLog() {
     tracker.trackTokens(null);
     verify(client, never()).trackMetric(eq("$ld:ai:tokens:total"), any(), any(), anyDouble());
-    assertThat(warnings().size(), greaterThanOrEqualTo(1));
+    assertThat(debugs().size(), greaterThanOrEqualTo(1));
+    assertThat(warnings(), is(empty()));
   }
 
   // ---- trackToolCall --------------------------------------------------------
@@ -382,10 +394,11 @@ public class LDAIConfigTrackerImplTest {
   }
 
   @Test
-  public void trackToolCallNullIsIgnoredWithWarning() {
+  public void trackToolCallNullIsIgnoredWithDebugLog() {
     tracker.trackToolCall(null);
     verify(client, never()).trackMetric(eq("$ld:ai:tool_call"), any(), any(), anyDouble());
-    assertThat(warnings().size(), greaterThanOrEqualTo(1));
+    assertThat(debugs().size(), greaterThanOrEqualTo(1));
+    assertThat(warnings(), is(empty()));
   }
 
   // ---- trackJudgeResult -----------------------------------------------------
@@ -470,9 +483,10 @@ public class LDAIConfigTrackerImplTest {
   }
 
   @Test
-  public void trackJudgeResultNullIsIgnoredWithWarning() {
+  public void trackJudgeResultNullIsIgnoredWithDebugLog() {
     tracker.trackJudgeResult(null);
-    assertThat(warnings().size(), greaterThanOrEqualTo(1));
+    assertThat(debugs().size(), greaterThanOrEqualTo(1));
+    assertThat(warnings(), is(empty()));
   }
 
   // ---- trackMetricsOf -------------------------------------------------------
