@@ -546,6 +546,18 @@ public class LDAIConfigTrackerImplTest {
   }
 
   @Test
+  public void trackMetricsOfRecordsDurationWhenExtractorThrows() {
+    try {
+      tracker.trackMetricsOf(
+          r -> { throw new RuntimeException("extractor failed"); },
+          () -> "ok");
+    } catch (Exception e) {
+      // expected; we care that duration was recorded before the throw
+    }
+    verify(client).trackMetric(eq("$ld:ai:duration:total"), any(), any(), anyDouble());
+  }
+
+  @Test
   public void trackMetricsOfTracksToolCalls() throws Exception {
     AIMetrics metrics = AIMetrics.builder()
         .success(true)

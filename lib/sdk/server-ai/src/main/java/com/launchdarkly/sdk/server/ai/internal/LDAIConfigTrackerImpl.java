@@ -318,9 +318,16 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
     // Capture operation duration immediately so a slow extractor does not inflate the metric.
     long operationElapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
 
-    // Extractor exceptions propagate to the caller — do NOT catch them here.
-    // Do NOT call trackError() on extractor failure; the AI operation itself succeeded.
-    AIMetrics metrics = Objects.requireNonNull(metricsExtractor.apply(result), "metricsExtractor returned null");
+    // Extractor exceptions propagate to the caller, but the operation's duration must still be
+    // recorded — the AI operation itself succeeded, only the user-supplied extractor failed.
+    // Do NOT call trackError(); that signals the operation failed, which is not what happened.
+    AIMetrics metrics;
+    try {
+      metrics = Objects.requireNonNull(metricsExtractor.apply(result), "metricsExtractor returned null");
+    } catch (RuntimeException e) {
+      trackDuration(Duration.ofMillis(operationElapsedMs));
+      throw e;
+    }
 
     // Duration: prefer runner-reported value (§1.1.13.2), fall back to wall-clock.
     if (metrics.getDurationMs() != null) {
