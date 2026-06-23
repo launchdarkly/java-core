@@ -78,20 +78,10 @@ public class ResumptionTokensTest {
     assertThat(d.getRunId(), is(runId));
   }
 
-  // ---- version clamping -----------------------------------------------------
+  // ---- version round-trip ---------------------------------------------------
 
   @Test
-  public void versionBelowOneIsClampedToOne() {
-    // Construct a token with version 0 directly to simulate an old token.
-    String json = "{\"runId\":\"r\",\"configKey\":\"c\",\"version\":0}";
-    String token = java.util.Base64.getUrlEncoder().withoutPadding()
-        .encodeToString(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-    ResumptionTokens.Decoded d = ResumptionTokens.decode(token);
-    assertThat(d.getVersion(), is(1));
-  }
-
-  @Test
-  public void versionOneIsNotClamped() {
+  public void versionIsPreservedOnRoundTrip() {
     String token = ResumptionTokens.encode("r", "c", null, 1, null);
     assertThat(ResumptionTokens.decode(token).getVersion(), is(1));
   }

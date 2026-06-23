@@ -160,10 +160,7 @@ final class ResumptionTokens {
       throw new IllegalArgumentException("Resumption token missing required field 'version'");
     }
 
-    // Clamp version: a missing version field defaults to 0 in older tokens, but configs default to 1.
-    int clampedVersion = Math.max(1, version);
-
-    return new Decoded(runId, configKey, variationKey, clampedVersion, graphKey);
+    return new Decoded(runId, configKey, variationKey, version, graphKey);
   }
 
   private static int skipWhitespace(String s, int pos) {

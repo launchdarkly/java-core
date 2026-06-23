@@ -289,7 +289,7 @@ public final class LDAIClientImpl implements LDAIClient {
       LDContext context) {
     String modelName = model != null && model.getName() != null ? model.getName() : "";
     String providerName = provider != null && provider.getName() != null ? provider.getName() : "";
-    int ver = version != null ? version : 0;
+    int ver = version != null ? version : 1;
     return () -> new LDAIConfigTrackerImpl(
         client,
         UUID.randomUUID().toString(),
