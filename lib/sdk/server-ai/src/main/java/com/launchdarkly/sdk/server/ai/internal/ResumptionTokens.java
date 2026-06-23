@@ -150,10 +150,10 @@ final class ResumptionTokens {
       }
     }
 
-    if (runId == null) {
+    if (runId == null || runId.isEmpty()) {
       throw new IllegalArgumentException("Resumption token missing required field 'runId'");
     }
-    if (configKey == null) {
+    if (configKey == null || configKey.isEmpty()) {
       throw new IllegalArgumentException("Resumption token missing required field 'configKey'");
     }
     if (version == null) {
