@@ -502,6 +502,23 @@ public class LDAIConfigTrackerImplTest {
   }
 
   @Test
+  public void trackMetricsOfWallClockDurationExcludesSlowExtractor() throws Exception {
+    // Operation returns immediately; extractor sleeps. Recorded duration must reflect only the
+    // operation, not the extractor work.
+    long extractorSleepMs = 200L;
+    AIMetrics metrics = AIMetrics.builder().success(true).build();
+    tracker.trackMetricsOf(
+        r -> { try { Thread.sleep(extractorSleepMs); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); } return metrics; },
+        () -> "ok");
+    ArgumentCaptor<Double> durationCaptor = ArgumentCaptor.forClass(Double.class);
+    verify(client).trackMetric(eq("$ld:ai:duration:total"), any(), any(), durationCaptor.capture());
+    assertThat(
+        "wall-clock duration must not include extractor time",
+        durationCaptor.getValue() < (double) extractorSleepMs / 2,
+        is(true));
+  }
+
+  @Test
   public void trackMetricsOfTracksErrorAndRethrowsOnOperationException() {
     try {
       tracker.trackMetricsOf(
