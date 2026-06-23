@@ -30,8 +30,9 @@ public final class AIAgentConfig extends AIConfig {
       String instructions,
       JudgeConfiguration judgeConfiguration,
       Map<String, Tool> tools,
-      Supplier<LDAIConfigTracker> trackerFactory) {
-    super(key, enabled, Mode.AGENT, model, provider, trackerFactory);
+      Supplier<LDAIConfigTracker> trackerFactory,
+      Evaluator evaluator) {
+    super(key, enabled, Mode.AGENT, model, provider, trackerFactory, evaluator);
     this.instructions = instructions;
     this.judgeConfiguration = judgeConfiguration;
     this.tools = tools == null ? null : Collections.unmodifiableMap(tools);

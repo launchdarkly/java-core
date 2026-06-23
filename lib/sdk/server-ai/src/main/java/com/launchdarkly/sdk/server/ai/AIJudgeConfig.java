@@ -29,7 +29,7 @@ public final class AIJudgeConfig extends AIConfig {
       List<Message> messages,
       String evaluationMetricKey,
       Supplier<LDAIConfigTracker> trackerFactory) {
-    super(key, enabled, Mode.JUDGE, model, provider, trackerFactory);
+    super(key, enabled, Mode.JUDGE, model, provider, trackerFactory, Evaluator.noop());
     this.messages = messages == null ? null : Collections.unmodifiableList(messages);
     this.evaluationMetricKey = evaluationMetricKey;
   }
