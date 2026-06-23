@@ -428,7 +428,7 @@ public final class LDAITrackingTypes {
        * @throws IllegalArgumentException if {@code metricKey} is non-null and blank
        */
       public Builder metricKey(String metricKey) {
-        if (metricKey != null && metricKey.isBlank()) {
+        if (metricKey != null && metricKey.trim().isEmpty()) {
           throw new IllegalArgumentException("metricKey must not be blank");
         }
         this.metricKey = metricKey;
