@@ -318,7 +318,7 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
 
     // Extractor exceptions propagate to the caller — do NOT catch them here.
     // Do NOT call trackError() on extractor failure; the AI operation itself succeeded.
-    AIMetrics metrics = metricsExtractor.apply(result);
+    AIMetrics metrics = Objects.requireNonNull(metricsExtractor.apply(result), "metricsExtractor returned null");
 
     // Duration: prefer runner-reported value (§1.1.13.2), fall back to wall-clock.
     if (metrics.getDurationMs() != null) {
