@@ -13,8 +13,9 @@ import java.util.Base64;
  * <p>
  * This class is an internal implementation detail and is not part of the supported API.
  */
+
 public final class ResumptionTokens {
-  private static final int MAX_TOKEN_BYTES = 4096;
+  private static final int MAX_TOKEN_LENGTH = 4096;
   private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
   private static final Base64.Decoder DECODER = Base64.getUrlDecoder();
 
@@ -61,8 +62,8 @@ public final class ResumptionTokens {
     if (token == null) {
       throw new IllegalArgumentException("Resumption token must not be null");
     }
-    if (token.length() > MAX_TOKEN_BYTES) {
-      throw new IllegalArgumentException("Resumption token exceeds maximum length of " + MAX_TOKEN_BYTES + " bytes");
+    if (token.length() > MAX_TOKEN_LENGTH) {
+      throw new IllegalArgumentException("Resumption token exceeds maximum length of " + MAX_TOKEN_LENGTH + " characters");
     }
 
     String json;
@@ -150,10 +151,10 @@ public final class ResumptionTokens {
       }
     }
 
-    if (runId == null) {
+    if (runId == null || runId.isEmpty()) {
       throw new IllegalArgumentException("Resumption token missing required field 'runId'");
     }
-    if (configKey == null) {
+    if (configKey == null || configKey.isEmpty()) {
       throw new IllegalArgumentException("Resumption token missing required field 'configKey'");
     }
     if (version == null) {

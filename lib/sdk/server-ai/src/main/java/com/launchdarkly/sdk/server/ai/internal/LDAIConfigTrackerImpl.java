@@ -155,7 +155,7 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
   @Override
   public void trackDuration(Duration duration) {
     if (duration == null) {
-      logger.warn("Skipping trackDuration: duration was null.");
+      logger.debug("Skipping trackDuration: duration was null.");
       return;
     }
     long ms = Math.max(0L, duration.toMillis());
@@ -181,7 +181,7 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
   @Override
   public void trackTimeToFirstToken(Duration duration) {
     if (duration == null) {
-      logger.warn("Skipping trackTimeToFirstToken: duration was null.");
+      logger.debug("Skipping trackTimeToFirstToken: duration was null.");
       return;
     }
     long ms = Math.max(0L, duration.toMillis());
@@ -213,7 +213,7 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
   @Override
   public void trackFeedback(FeedbackKind kind) {
     if (kind == null) {
-      logger.warn("Skipping trackFeedback: kind was null.");
+      logger.debug("Skipping trackFeedback: kind was null.");
       return;
     }
     // Resolve event name BEFORE claiming the guard — an exception here must not burn the slot.
@@ -228,7 +228,7 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
   @Override
   public void trackTokens(TokenUsage tokens) {
     if (tokens == null) {
-      logger.warn("Skipping trackTokens: tokens was null.");
+      logger.debug("Skipping trackTokens: tokens was null.");
       return;
     }
     boolean hasPositive = tokens.getTotal() > 0 || tokens.getInput() > 0 || tokens.getOutput() > 0;
@@ -254,7 +254,7 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
   @Override
   public void trackToolCall(String toolKey) {
     if (toolKey == null) {
-      logger.warn("Skipping trackToolCall: toolKey was null.");
+      logger.debug("Skipping trackToolCall: toolKey was null.");
       return;
     }
     toolCalls.add(toolKey);
@@ -275,7 +275,7 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
   @Override
   public void trackJudgeResult(JudgeResult result) {
     if (result == null) {
-      logger.warn("Skipping trackJudgeResult: result was null.");
+      logger.debug("Skipping trackJudgeResult: result was null.");
       return;
     }
     if (!result.isSampled()) {
@@ -284,10 +284,10 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
     if (!result.isSuccess()) {
       return;
     }
-    if (result.getMetricKey() == null) {
+    if (result.getMetricKey() == null || result.getMetricKey().trim().isEmpty()) {
       return;
     }
-    if (result.getScore() == null) {
+    if (result.getScore() == null || !Double.isFinite(result.getScore())) {
       return;
     }
     ObjectBuilder data = baseData();
@@ -315,17 +315,25 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
       trackError();
       throw e;
     }
+    // Capture operation duration immediately so a slow extractor does not inflate the metric.
+    long operationElapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
 
-    // Extractor exceptions propagate to the caller — do NOT catch them here.
-    // Do NOT call trackError() on extractor failure; the AI operation itself succeeded.
-    AIMetrics metrics = metricsExtractor.apply(result);
+    // Extractor exceptions propagate to the caller, but the operation's duration must still be
+    // recorded — the AI operation itself succeeded, only the user-supplied extractor failed.
+    // Do NOT call trackError(); that signals the operation failed, which is not what happened.
+    AIMetrics metrics;
+    try {
+      metrics = Objects.requireNonNull(metricsExtractor.apply(result), "metricsExtractor returned null");
+    } catch (RuntimeException e) {
+      trackDuration(Duration.ofMillis(operationElapsedMs));
+      throw e;
+    }
 
     // Duration: prefer runner-reported value (§1.1.13.2), fall back to wall-clock.
     if (metrics.getDurationMs() != null) {
       trackDuration(Duration.ofMillis(metrics.getDurationMs()));
     } else {
-      long elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
-      trackDuration(Duration.ofMillis(elapsed));
+      trackDuration(Duration.ofMillis(operationElapsedMs));
     }
 
     if (metrics.isSuccess()) {
