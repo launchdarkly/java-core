@@ -284,10 +284,10 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
     if (!result.isSuccess()) {
       return;
     }
-    if (result.getMetricKey() == null) {
+    if (result.getMetricKey() == null || result.getMetricKey().isBlank()) {
       return;
     }
-    if (result.getScore() == null) {
+    if (result.getScore() == null || !Double.isFinite(result.getScore())) {
       return;
     }
     ObjectBuilder data = baseData();

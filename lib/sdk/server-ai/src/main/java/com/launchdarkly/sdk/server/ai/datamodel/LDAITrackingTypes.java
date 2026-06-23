@@ -423,10 +423,14 @@ public final class LDAITrackingTypes {
       /**
        * Sets the metric key.
        *
-       * @param metricKey the metric key; may be {@code null}
+       * @param metricKey the metric key; may be {@code null}, but must not be blank if non-null
        * @return this builder
+       * @throws IllegalArgumentException if {@code metricKey} is non-null and blank
        */
       public Builder metricKey(String metricKey) {
+        if (metricKey != null && metricKey.isBlank()) {
+          throw new IllegalArgumentException("metricKey must not be blank");
+        }
         this.metricKey = metricKey;
         return this;
       }
@@ -434,10 +438,14 @@ public final class LDAITrackingTypes {
       /**
        * Sets the judge score.
        *
-       * @param score the score; may be {@code null}
+       * @param score the score; may be {@code null}, but must be finite if non-null
        * @return this builder
+       * @throws IllegalArgumentException if {@code score} is non-null and non-finite (NaN or infinite)
        */
       public Builder score(Double score) {
+        if (score != null && !Double.isFinite(score)) {
+          throw new IllegalArgumentException("score must be finite");
+        }
         this.score = score;
         return this;
       }
