@@ -168,7 +168,9 @@ public final class AIGraphTracker {
       logger.warn("Skipping trackTotalTokens: token usage already recorded on this graph tracker.");
       return;
     }
-    client.trackMetric(GRAPH_TOTAL_TOKENS, context, baseData().build(), tokens.getTotal());
+    if (tokens.getTotal() > 0) {
+      client.trackMetric(GRAPH_TOTAL_TOKENS, context, baseData().build(), tokens.getTotal());
+    }
   }
 
   /**
