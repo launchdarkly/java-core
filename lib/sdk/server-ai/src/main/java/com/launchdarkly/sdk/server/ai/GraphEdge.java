@@ -3,6 +3,7 @@ package com.launchdarkly.sdk.server.ai;
 import com.launchdarkly.sdk.LDValue;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -17,7 +18,9 @@ public final class GraphEdge {
 
   public GraphEdge(String key, Map<String, LDValue> handoff) {
     this.key = key;
-    this.handoff = handoff;
+    this.handoff = handoff != null
+        ? Collections.unmodifiableMap(new LinkedHashMap<>(handoff))
+        : null;
   }
 
   /**
