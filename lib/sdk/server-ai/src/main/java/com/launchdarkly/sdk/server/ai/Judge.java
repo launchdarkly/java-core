@@ -4,6 +4,9 @@ import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Message;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.JudgeResult;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -26,12 +29,25 @@ public final class Judge {
    * JSON-Schema fragment sent to the runner as the {@code outputType}, requesting structured
    * {@code {score, reasoning}} output.
    */
-  private static final Map<String, Object> EVALUATION_SCHEMA = Map.of(
-      "type", "object",
-      "properties", Map.of(
-          "score", Map.of("type", "number"),
-          "reasoning", Map.of("type", "string")),
-      "required", List.of("score", "reasoning"));
+  private static final Map<String, Object> EVALUATION_SCHEMA;
+  static {
+    Map<String, Object> scoreSchema = new HashMap<>();
+    scoreSchema.put("type", "number");
+
+    Map<String, Object> reasoningSchema = new HashMap<>();
+    reasoningSchema.put("type", "string");
+
+    Map<String, Object> properties = new HashMap<>();
+    properties.put("score", Collections.unmodifiableMap(scoreSchema));
+    properties.put("reasoning", Collections.unmodifiableMap(reasoningSchema));
+
+    Map<String, Object> schema = new HashMap<>();
+    schema.put("type", "object");
+    schema.put("properties", Collections.unmodifiableMap(properties));
+    schema.put("required", Arrays.asList("score", "reasoning"));
+
+    EVALUATION_SCHEMA = Collections.unmodifiableMap(schema);
+  }
 
   private final AIJudgeConfig config;
   private final Runner runner;
