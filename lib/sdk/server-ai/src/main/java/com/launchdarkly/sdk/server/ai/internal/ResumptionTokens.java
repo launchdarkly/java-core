@@ -13,9 +13,7 @@ import java.util.Base64;
  * <p>
  * This class is an internal implementation detail and is not part of the supported API.
  */
-
 public final class ResumptionTokens {
-  private static final int MAX_TOKEN_LENGTH = 4096;
   private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
   private static final Base64.Decoder DECODER = Base64.getUrlDecoder();
 
@@ -56,14 +54,11 @@ public final class ResumptionTokens {
    *
    * @param token the URL-safe Base64 token
    * @return the decoded fields
-   * @throws IllegalArgumentException if the token is malformed, oversized, or missing required fields
+   * @throws IllegalArgumentException if the token is malformed or missing required fields
    */
   static Decoded decode(String token) {
     if (token == null) {
       throw new IllegalArgumentException("Resumption token must not be null");
-    }
-    if (token.length() > MAX_TOKEN_LENGTH) {
-      throw new IllegalArgumentException("Resumption token exceeds maximum length of " + MAX_TOKEN_LENGTH + " characters");
     }
 
     String json;
