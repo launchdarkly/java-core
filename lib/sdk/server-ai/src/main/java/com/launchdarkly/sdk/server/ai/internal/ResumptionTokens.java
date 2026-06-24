@@ -146,10 +146,10 @@ public final class ResumptionTokens {
       }
     }
 
-    if (runId == null || runId.isEmpty()) {
+    if (runId == null || runId.trim().isEmpty()) {
       throw new IllegalArgumentException("Resumption token missing required field 'runId'");
     }
-    if (configKey == null || configKey.isEmpty()) {
+    if (configKey == null || configKey.trim().isEmpty()) {
       throw new IllegalArgumentException("Resumption token missing required field 'configKey'");
     }
     if (version == null) {
@@ -360,10 +360,10 @@ public final class ResumptionTokens {
       }
     }
 
-    if (runId == null) {
+    if (runId == null || runId.trim().isEmpty()) {
       throw new IllegalArgumentException("Graph resumption token missing required field 'runId'");
     }
-    if (graphKey == null) {
+    if (graphKey == null || graphKey.trim().isEmpty()) {
       throw new IllegalArgumentException("Graph resumption token missing required field 'graphKey'");
     }
     if (version == null) {
