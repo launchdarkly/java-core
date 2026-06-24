@@ -383,6 +383,24 @@ public class AIGraphTrackerTest {
   }
 
   @Test
+  public void fromResumptionTokenWithLoggerRoutesWarningsThroughIt() {
+    LogCapture captureForResumed = Logs.capture();
+    LDLogger resumedLogger = LDLogger.withAdapter(captureForResumed, "test");
+    String token = tracker.getResumptionToken();
+    AIGraphTracker reconstructed = AIGraphTracker.fromResumptionToken(token, client, CONTEXT, resumedLogger);
+
+    reconstructed.trackInvocationSuccess();
+    reconstructed.trackInvocationSuccess(); // duplicate — should warn on resumedLogger, not the base logCapture
+
+    List<String> resumedWarnings = captureForResumed.getMessages().stream()
+        .filter(m -> m.getLevel() == LDLogLevel.WARN)
+        .map(LogCapture.Message::getText)
+        .collect(Collectors.toList());
+    assertThat(resumedWarnings.stream().anyMatch(w -> w.contains("invocation already recorded")), is(true));
+    assertThat(logCapture.getMessages(), is(org.hamcrest.Matchers.empty()));
+  }
+
+  @Test
   public void fromResumptionTokenClampsVersionLessThanOne() {
     AIGraphTracker t = new AIGraphTracker(client, RUN_ID, GRAPH_KEY, null, 0, CONTEXT, logger);
     // Version 0 → token contains 0, but fromResumptionToken should clamp to 1

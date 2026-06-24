@@ -444,7 +444,7 @@ public final class LDAIClientImpl implements LDAIClient {
 
   @Override
   public AIGraphTracker createGraphTracker(String resumptionToken, LDContext context) {
-    return AIGraphTracker.fromResumptionToken(resumptionToken, client, context);
+    return AIGraphTracker.fromResumptionToken(resumptionToken, client, context, logger);
   }
 
   @Override

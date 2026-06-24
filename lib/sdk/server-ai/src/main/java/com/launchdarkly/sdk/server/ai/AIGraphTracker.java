@@ -92,6 +92,22 @@ public final class AIGraphTracker {
    */
   public static AIGraphTracker fromResumptionToken(
       String token, LDClientInterface client, LDContext context) {
+    return fromResumptionToken(token, client, context, defaultLogger());
+  }
+
+  /**
+   * Reconstructs a graph tracker from a resumption token, preserving the original run identity,
+   * and logging through the supplied logger.
+   *
+   * @param token the resumption token produced by {@link #getResumptionToken()}
+   * @param client the LaunchDarkly client; must not be {@code null}
+   * @param context the evaluation context; must not be {@code null}
+   * @param logger the logger to use for at-most-once warnings; must not be {@code null}
+   * @return a new tracker with the decoded run identity
+   * @throws IllegalArgumentException if the token is malformed
+   */
+  public static AIGraphTracker fromResumptionToken(
+      String token, LDClientInterface client, LDContext context, LDLogger logger) {
     ResumptionTokens.DecodedGraph d = ResumptionTokens.decodeGraph(token);
     int version = Math.max(1, d.getVersion());
     return new AIGraphTracker(
@@ -101,7 +117,7 @@ public final class AIGraphTracker {
         d.getVariationKey(),
         version,
         context,
-        defaultLogger());
+        logger);
   }
 
   /**
