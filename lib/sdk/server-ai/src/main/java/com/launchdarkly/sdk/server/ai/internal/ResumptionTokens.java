@@ -284,10 +284,6 @@ public final class ResumptionTokens {
     if (token == null) {
       throw new IllegalArgumentException("Graph resumption token must not be null");
     }
-    if (token.length() > MAX_TOKEN_BYTES) {
-      throw new IllegalArgumentException("Graph resumption token exceeds maximum length of " + MAX_TOKEN_BYTES + " bytes");
-    }
-
     String json;
     try {
       byte[] bytes = DECODER.decode(token);

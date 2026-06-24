@@ -12,6 +12,7 @@ import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.TokenUsage;
 import com.launchdarkly.sdk.server.ai.internal.ResumptionTokens;
 import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -156,7 +157,7 @@ public final class AIGraphTracker {
    */
   public void trackTotalTokens(TokenUsage tokens) {
     if (tokens == null) {
-      logger.warn("Skipping trackTotalTokens: tokens was null.");
+      logger.debug("Skipping trackTotalTokens: tokens was null.");
       return;
     }
     boolean hasPositive = tokens.getTotal() > 0 || tokens.getInput() > 0 || tokens.getOutput() > 0;
@@ -179,10 +180,10 @@ public final class AIGraphTracker {
    */
   public void trackPath(List<String> path) {
     if (path == null || path.isEmpty()) {
-      logger.warn("Skipping trackPath: path was null or empty.");
+      logger.debug("Skipping trackPath: path was null or empty.");
       return;
     }
-    List<String> snapshot = Collections.unmodifiableList(path);
+    List<String> snapshot = Collections.unmodifiableList(new ArrayList<>(path));
     if (!pathRecorded.compareAndSet(null, snapshot)) {
       logger.warn("Skipping trackPath: path already recorded on this graph tracker.");
       return;
