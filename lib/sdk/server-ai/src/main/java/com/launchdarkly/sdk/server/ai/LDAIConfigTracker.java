@@ -41,6 +41,10 @@ public interface LDAIConfigTracker {
    * The resumption token encodes the run's identity and can be passed to
    * {@link LDAIClient#createTracker(String, com.launchdarkly.sdk.LDContext)} to reconstruct a
    * tracker on a subsequent request (for example, in a streaming scenario).
+   * <p>
+   * <strong>Security note:</strong> resumption tokens embed flag-evaluation details such as the
+   * variation key and config version. Keep tokens server-side and do not round-trip them through
+   * untrusted clients where they could leak flag-targeting information.
    *
    * @return the resumption token, or {@code null} if not available
    */
