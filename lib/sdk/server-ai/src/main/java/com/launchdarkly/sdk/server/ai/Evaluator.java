@@ -6,6 +6,7 @@ import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.JudgeResult;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -44,7 +45,7 @@ public final class Evaluator {
    * @param logger the logger; must not be {@code null}
    */
   public Evaluator(Map<String, Judge> judges, JudgeConfiguration judgeConfiguration, LDLogger logger) {
-    this.judges = Objects.requireNonNull(judges, "judges");
+    this.judges = Collections.unmodifiableMap(new HashMap<>(Objects.requireNonNull(judges, "judges")));
     this.judgeConfiguration = Objects.requireNonNull(judgeConfiguration, "judgeConfiguration");
     this.logger = Objects.requireNonNull(logger, "logger");
     this.isNoop = false;
