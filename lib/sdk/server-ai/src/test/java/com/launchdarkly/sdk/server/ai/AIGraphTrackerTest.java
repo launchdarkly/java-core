@@ -66,6 +66,13 @@ public class AIGraphTrackerTest {
         .collect(Collectors.toList());
   }
 
+  private List<String> debugs() {
+    return logCapture.getMessages().stream()
+        .filter(m -> m.getLevel() == LDLogLevel.DEBUG)
+        .map(LogCapture.Message::getText)
+        .collect(Collectors.toList());
+  }
+
   private LDValue baseExpectedData() {
     return LDValue.buildObject()
         .put("runId", RUN_ID)
