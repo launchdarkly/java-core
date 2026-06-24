@@ -118,7 +118,7 @@ public final class Judge {
           .build();
     }
     double score = ((Number) scoreRaw).doubleValue();
-    if (score < 0.0 || score > 1.0) {
+    if (!Double.isFinite(score) || score < 0.0 || score > 1.0) {
       logger.warn("Judge {}: score {} is outside [0.0, 1.0]", config.getKey(), score);
       return JudgeResult.builder()
           .sampled(true)
