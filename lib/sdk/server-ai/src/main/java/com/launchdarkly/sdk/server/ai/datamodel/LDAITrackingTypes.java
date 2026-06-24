@@ -575,6 +575,10 @@ public final class LDAITrackingTypes {
 
     /**
      * Returns the resumption token for this tracker.
+     * <p>
+     * <strong>Security note:</strong> resumption tokens embed flag-evaluation details such as the
+     * variation key and config version. Keep tokens server-side and do not round-trip them through
+     * untrusted clients where they could leak flag-targeting information.
      *
      * @return the resumption token, or {@code null} if not available
      */
