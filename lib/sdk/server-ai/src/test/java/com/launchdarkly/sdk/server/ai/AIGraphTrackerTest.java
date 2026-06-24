@@ -184,7 +184,7 @@ public class AIGraphTrackerTest {
     tracker.trackTotalTokens(null);
     verify(client, never()).trackMetric(
         eq("$ld:ai:graph:total_tokens"), any(), any(), anyDouble());
-    assertThat(warnings().stream().anyMatch(w -> w.contains("tokens was null")), is(true));
+    assertThat(debugs().stream().anyMatch(w -> w.contains("tokens was null")), is(true));
   }
 
   // ---- trackPath ------------------------------------------------------------
