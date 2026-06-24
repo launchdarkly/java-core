@@ -4,7 +4,6 @@ import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Message;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.JudgeResult;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -44,7 +43,7 @@ public final class Judge {
     Map<String, Object> schema = new HashMap<>();
     schema.put("type", "object");
     schema.put("properties", Collections.unmodifiableMap(properties));
-    schema.put("required", Arrays.asList("score", "reasoning"));
+    schema.put("required", Collections.singletonList("score"));
 
     EVALUATION_SCHEMA = Collections.unmodifiableMap(schema);
   }
