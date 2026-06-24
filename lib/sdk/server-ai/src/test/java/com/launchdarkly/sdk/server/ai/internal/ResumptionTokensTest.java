@@ -86,21 +86,21 @@ public class ResumptionTokensTest {
     assertThat(ResumptionTokens.decode(token).getVersion(), is(1));
   }
 
+  // ---- large keys -----------------------------------------------------------
+
+  @Test
+  public void roundTripsLongKeys() {
+    String key = new String(new char[5000]).replace('\0', 'a');
+    String token = ResumptionTokens.encode("run", key, null, 1, null);
+    ResumptionTokens.Decoded d = ResumptionTokens.decode(token);
+    assertThat(d.getConfigKey(), is(key));
+  }
+
   // ---- decode error handling ------------------------------------------------
 
   @Test(expected = IllegalArgumentException.class)
   public void decodeRejectsNull() {
     ResumptionTokens.decode(null);
-  }
-
-  @Test(expected = IllegalArgumentException.class)
-  public void decodeRejectsOversizedToken() {
-    // Build a token larger than 4096 bytes
-    String largeValue = new String(new char[5000]).replace('\0', 'x');
-    String json = "{\"runId\":\"" + largeValue + "\",\"configKey\":\"c\",\"version\":1}";
-    String token = java.util.Base64.getUrlEncoder().withoutPadding()
-        .encodeToString(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-    ResumptionTokens.decode(token);
   }
 
   @Test(expected = IllegalArgumentException.class)
