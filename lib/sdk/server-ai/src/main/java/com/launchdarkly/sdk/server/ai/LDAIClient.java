@@ -81,4 +81,23 @@ public interface LDAIClient {
       LDContext context,
       AIJudgeConfigDefault defaultValue,
       Map<String, Object> variables);
+
+  /**
+   * Reconstructs a tracker from a resumption token, preserving the original run's identity.
+   * <p>
+   * Use this when a multi-turn or streaming AI interaction spans multiple requests. The caller
+   * stores the resumption token from a previous tracker (via
+   * {@link LDAIConfigTracker#getResumptionToken()}) and passes it back here to continue tracking
+   * against the same run.
+   * <p>
+   * <strong>Security note:</strong> resumption tokens embed flag-evaluation details such as the
+   * variation key and config version. Keep tokens server-side and do not round-trip them through
+   * untrusted clients where they could leak flag-targeting information.
+   *
+   * @param resumptionToken the token returned by a previous tracker; must not be {@code null}
+   * @param context the evaluation context for the new request; must not be {@code null}
+   * @return a tracker with the decoded run identity, never {@code null}
+   * @throws IllegalArgumentException if the token is malformed
+   */
+  LDAIConfigTracker createTracker(String resumptionToken, LDContext context);
 }
