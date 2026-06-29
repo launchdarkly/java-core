@@ -40,6 +40,7 @@ abstract class RedisStoreImplBase implements Closeable {
     this.prefix = (builder.prefix == null || builder.prefix.isEmpty()) ?
         RedisStoreBuilder.DEFAULT_PREFIX :
         builder.prefix;
+
     this.pool = new JedisPool(poolConfig,
         host,
         port,
@@ -50,9 +51,9 @@ abstract class RedisStoreImplBase implements Closeable {
         database,
         null, // clientName
         tls,
-        null, // sslSocketFactory
-        null, // sslParameters
-        null  // hostnameVerifier
+        builder.sslSocketFactory,
+        builder.sslParameters,
+        builder.hostnameVerifier
     );
   }
 
