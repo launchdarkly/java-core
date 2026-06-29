@@ -11,6 +11,10 @@ import com.launchdarkly.sdk.server.subsystems.PersistentDataStore;
 import java.net.URI;
 import java.time.Duration;
 
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSocketFactory;
+
 import redis.clients.jedis.JedisPoolConfig;
 import redis.clients.jedis.Protocol;
 
@@ -56,7 +60,7 @@ import redis.clients.jedis.Protocol;
  *         .build();
  * </code></pre>
  * 
- * @param <T> the component type that this builder is being used for 
+ * @param <T> the component type that this builder is being used for
  *
  * @since 5.0.0
  */
@@ -80,6 +84,9 @@ public abstract class RedisStoreBuilder<T> implements ComponentConfigurer<T>, Di
   String password = null;
   boolean tls = false;
   JedisPoolConfig poolConfig = null;
+  SSLSocketFactory sslSocketFactory = null;
+  SSLParameters sslParameters = null;
+  HostnameVerifier hostnameVerifier = null;
 
   // These constructors are called only from Implementations
   RedisStoreBuilder() {
@@ -146,7 +153,52 @@ public abstract class RedisStoreBuilder<T> implements ComponentConfigurer<T>, Di
     this.tls = tls;
     return this;
   }
-  
+
+  /**
+   * Optionally specifies a custom {@link SSLSocketFactory} for TLS connections.
+   * <p>
+   * This is only used when TLS is enabled (either via {@link #tls(boolean)} or by using a
+   * {@code rediss:} URI). If TLS is not enabled this value is silently ignored. If not set,
+   * the JVM default SSL socket factory is used.
+   *
+   * @param sslSocketFactory the SSL socket factory, or null to use the default
+   * @return the builder
+   */
+  public RedisStoreBuilder<T> sslSocketFactory(SSLSocketFactory sslSocketFactory) {
+    this.sslSocketFactory = sslSocketFactory;
+    return this;
+  }
+
+  /**
+   * Optionally specifies {@link SSLParameters} for TLS connections.
+   * <p>
+   * This is only used when TLS is enabled (either via {@link #tls(boolean)} or by using a
+   * {@code rediss:} URI). If TLS is not enabled this value is silently ignored. If not set,
+   * the JVM default SSL parameters are used.
+   *
+   * @param sslParameters the SSL parameters, or null to use the default
+   * @return the builder
+   */
+  public RedisStoreBuilder<T> sslParameters(SSLParameters sslParameters) {
+    this.sslParameters = sslParameters;
+    return this;
+  }
+
+  /**
+   * Optionally specifies a {@link HostnameVerifier} for TLS connections.
+   * <p>
+   * This is only used when TLS is enabled (either via {@link #tls(boolean)} or by using a
+   * {@code rediss:} URI). If TLS is not enabled this value is silently ignored. If not set,
+   * the JVM default hostname verifier is used.
+   *
+   * @param hostnameVerifier the hostname verifier, or null to use the default
+   * @return the builder
+   */
+  public RedisStoreBuilder<T> hostnameVerifier(HostnameVerifier hostnameVerifier) {
+    this.hostnameVerifier = hostnameVerifier;
+    return this;
+  }
+
   /**
    * Specifies a Redis host URI other than {@link #DEFAULT_URI}.
    * 
