@@ -401,18 +401,14 @@ public class AIGraphTrackerTest {
   }
 
   @Test
-  public void fromResumptionTokenClampsVersionLessThanOne() {
-    AIGraphTracker t = new AIGraphTracker(client, RUN_ID, GRAPH_KEY, null, 0, CONTEXT, logger);
-    // Version 0 → token contains 0, but fromResumptionToken should clamp to 1
-    // Actually: the tracker stores version as-is, but fromResumptionToken clamps
-    // Encode a token with version = 0 manually:
+  public void fromResumptionTokenPreservesVersionZero() {
     String token = com.launchdarkly.sdk.server.ai.internal.ResumptionTokens.encodeGraph(
         RUN_ID, GRAPH_KEY, null, 0);
     AIGraphTracker reconstructed = AIGraphTracker.fromResumptionToken(token, client, CONTEXT);
     reconstructed.trackInvocationSuccess();
     ArgumentCaptor<LDValue> captor = ArgumentCaptor.forClass(LDValue.class);
     verify(client).trackMetric(eq("$ld:ai:graph:invocation_success"), any(), captor.capture(), anyDouble());
-    assertThat(captor.getValue().get("version").intValue(), is(1));
+    assertThat(captor.getValue().get("version").intValue(), is(0));
   }
 
   // ---- constructor null checks ---------------------------------------------

@@ -109,7 +109,7 @@ public final class AIGraphTracker {
   public static AIGraphTracker fromResumptionToken(
       String token, LDClientInterface client, LDContext context, LDLogger logger) {
     ResumptionTokens.DecodedGraph d = ResumptionTokens.decodeGraph(token);
-    int version = Math.max(1, d.getVersion());
+    int version = d.getVersion();
     return new AIGraphTracker(
         client,
         d.getRunId(),
