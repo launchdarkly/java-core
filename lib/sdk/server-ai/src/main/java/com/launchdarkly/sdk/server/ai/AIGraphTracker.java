@@ -151,11 +151,17 @@ public final class AIGraphTracker {
   /**
    * Records the total wall-clock duration of the graph invocation.
    * <p>
-   * At-most-once: subsequent calls on the same tracker are silently dropped.
+   * At-most-once: subsequent calls on the same tracker are silently dropped. Non-finite values
+   * ({@link Double#NaN}, positive/negative infinity) are ignored without consuming the
+   * at-most-once slot.
    *
-   * @param durationMs the duration in milliseconds
+   * @param durationMs the duration in milliseconds; must be finite
    */
   public void trackDuration(double durationMs) {
+    if (!Double.isFinite(durationMs)) {
+      logger.debug("Skipping trackDuration: durationMs is not finite ({}).", durationMs);
+      return;
+    }
     if (!durationRecorded.compareAndSet(null, durationMs)) {
       logger.warn("Skipping trackDuration: duration already recorded on this graph tracker.");
       return;
