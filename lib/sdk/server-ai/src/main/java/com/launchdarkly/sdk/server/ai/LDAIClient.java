@@ -83,6 +83,52 @@ public interface LDAIClient {
       Map<String, Object> variables);
 
   /**
+   * Retrieves a completion (chat/prompt) AI Config with Mustache placeholders left intact
+   * (no interpolation). Useful for displaying prompt previews or storing templates for later
+   * rendering.
+   *
+   * @param key the AI Config key
+   * @param context the context to evaluate the configuration in
+   * @param defaultValue the default returned when the flag is absent or cannot be evaluated; when
+   *     {@code null}, a disabled default is used
+   * @return the completion config with raw (non-interpolated) message content, never {@code null}
+   */
+  AICompletionConfig completionConfigTemplate(
+      String key,
+      LDContext context,
+      AICompletionConfigDefault defaultValue);
+
+  /**
+   * Retrieves an agent AI Config with Mustache placeholders left intact (no interpolation). Useful
+   * for auditing instruction templates or building UI previews.
+   *
+   * @param key the AI Config key
+   * @param context the context to evaluate the configuration in
+   * @param defaultValue the default returned when the flag is absent or cannot be evaluated; when
+   *     {@code null}, a disabled default is used
+   * @return the agent config with raw (non-interpolated) instructions, never {@code null}
+   */
+  AIAgentConfig agentConfigTemplate(
+      String key,
+      LDContext context,
+      AIAgentConfigDefault defaultValue);
+
+  /**
+   * Retrieves a judge AI Config with Mustache placeholders left intact (no interpolation). Useful
+   * for auditing judge prompt templates.
+   *
+   * @param key the AI Config key
+   * @param context the context to evaluate the configuration in
+   * @param defaultValue the default returned when the flag is absent or cannot be evaluated; when
+   *     {@code null}, a disabled default is used
+   * @return the judge config with raw (non-interpolated) message content, never {@code null}
+   */
+  AIJudgeConfig judgeConfigTemplate(
+      String key,
+      LDContext context,
+      AIJudgeConfigDefault defaultValue);
+
+  /**
    * Reconstructs a tracker from a resumption token, preserving the original run's identity.
    * <p>
    * Use this when a multi-turn or streaming AI interaction spans multiple requests. The caller
