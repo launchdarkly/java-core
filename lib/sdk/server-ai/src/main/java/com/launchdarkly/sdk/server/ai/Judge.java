@@ -8,7 +8,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
@@ -55,14 +54,14 @@ public final class Judge {
   /**
    * Constructs a judge.
    *
-   * @param config the judge AI Config; must not be {@code null}
-   * @param runner the runner to invoke; must not be {@code null}
-   * @param logger the logger; must not be {@code null}
+   * @param config the judge AI Config
+   * @param runner the runner to invoke
+   * @param logger the logger
    */
   public Judge(AIJudgeConfig config, Runner runner, LDLogger logger) {
-    this.config = Objects.requireNonNull(config, "config");
-    this.runner = Objects.requireNonNull(runner, "runner");
-    this.logger = Objects.requireNonNull(logger, "logger");
+    this.config = config;
+    this.runner = runner;
+    this.logger = logger;
   }
 
   /**
@@ -193,7 +192,7 @@ public final class Judge {
   /**
    * Returns the judge AI Config this instance was constructed with.
    *
-   * @return the judge config, never {@code null}
+   * @return the judge config
    */
   public AIJudgeConfig getConfig() {
     return config;
@@ -202,7 +201,7 @@ public final class Judge {
   /**
    * Returns the runner this instance was constructed with.
    *
-   * @return the runner, never {@code null}
+   * @return the runner
    */
   public Runner getRunner() {
     return runner;

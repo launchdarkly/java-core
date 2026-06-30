@@ -9,7 +9,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -39,15 +38,18 @@ public final class Evaluator {
   /**
    * Constructs an evaluator with the given judges and configuration.
    *
-   * @param judges a map from judge config key to {@link Judge} instance; must not be {@code null}
+   * @param judges a map from judge config key to {@link Judge} instance; a {@code null} value is
+   *     treated as an empty map
    * @param judgeConfiguration the judge configuration listing which judges to run and their sampling
-   *     rates; must not be {@code null}
-   * @param logger the logger; must not be {@code null}
+   *     rates
+   * @param logger the logger
    */
   public Evaluator(Map<String, Judge> judges, JudgeConfiguration judgeConfiguration, LDLogger logger) {
-    this.judges = Collections.unmodifiableMap(new HashMap<>(Objects.requireNonNull(judges, "judges")));
-    this.judgeConfiguration = Objects.requireNonNull(judgeConfiguration, "judgeConfiguration");
-    this.logger = Objects.requireNonNull(logger, "logger");
+    this.judges = judges != null
+        ? Collections.unmodifiableMap(new HashMap<>(judges))
+        : Collections.emptyMap();
+    this.judgeConfiguration = judgeConfiguration;
+    this.logger = logger;
     this.isNoop = false;
   }
 
@@ -80,11 +82,15 @@ public final class Evaluator {
       return CompletableFuture.completedFuture(Collections.emptyList());
     }
 
+    if (judgeConfiguration == null) {
+      return CompletableFuture.completedFuture(Collections.emptyList());
+    }
+
     List<JudgeResult> results = new ArrayList<>();
     for (JudgeConfiguration.Judge entry : judgeConfiguration.getJudges()) {
       Judge judge = judges.get(entry.getKey());
       if (judge == null) {
-        logger.warn("Evaluator: no judge found for key '{}', skipping", entry.getKey());
+        if (logger != null) logger.warn("Evaluator: no judge found for key '{}', skipping", entry.getKey());
         continue;
       }
       results.add(judge.evaluate(input, output, entry.getSamplingRate()));
