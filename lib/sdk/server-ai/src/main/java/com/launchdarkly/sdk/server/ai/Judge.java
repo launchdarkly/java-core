@@ -85,12 +85,10 @@ public final class Judge {
    * @return the evaluation result; never {@code null}
    */
   public JudgeResult evaluate(String input, String output, double samplingRate) {
-    if (ThreadLocalRandom.current().nextDouble() >= samplingRate) {
+    if (ThreadLocalRandom.current().nextDouble() > samplingRate) {
       return JudgeResult.builder()
           .sampled(false)
           .success(false)
-          .judgeConfigKey(config.getKey())
-          .metricKey(config.getEvaluationMetricKey())
           .build();
     }
 
