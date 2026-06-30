@@ -104,69 +104,66 @@ public final class Judge {
           .build();
     }
 
-    String formatted = "MESSAGE HISTORY:\n" + input + "\n\nRESPONSE TO EVALUATE:\n" + output;
-    LDAIConfigTracker tracker = config.createTracker();
-
-    RunnerResult result;
     try {
-      result = tracker.trackMetricsOf(RunnerResult::getMetrics, () -> runner.run(formatted, EVALUATION_SCHEMA));
+      String formatted = "MESSAGE HISTORY:\n" + input + "\n\nRESPONSE TO EVALUATE:\n" + output;
+      LDAIConfigTracker tracker = config.createTracker();
+
+      RunnerResult result = tracker.trackMetricsOf(RunnerResult::getMetrics, () -> runner.run(formatted, EVALUATION_SCHEMA));
+
+      Map<String, Object> parsed = result.getParsed();
+      if (parsed == null) {
+        if (logger != null) logger.warn("Judge {}: runner returned null parsed output", config.getKey());
+        return JudgeResult.builder()
+            .sampled(true)
+            .success(false)
+            .judgeConfigKey(config.getKey())
+            .metricKey(config.getEvaluationMetricKey())
+            .build();
+      }
+
+      Object scoreRaw = parsed.get("score");
+      if (!(scoreRaw instanceof Number)) {
+        if (logger != null) logger.warn("Judge {}: parsed output missing numeric score", config.getKey());
+        return JudgeResult.builder()
+            .sampled(true)
+            .success(false)
+            .judgeConfigKey(config.getKey())
+            .metricKey(config.getEvaluationMetricKey())
+            .build();
+      }
+      double score = ((Number) scoreRaw).doubleValue();
+      if (!Double.isFinite(score) || score < 0.0 || score > 1.0) {
+        if (logger != null) logger.warn("Judge {}: score {} is outside [0.0, 1.0]", config.getKey(), score);
+        return JudgeResult.builder()
+            .sampled(true)
+            .success(false)
+            .judgeConfigKey(config.getKey())
+            .metricKey(config.getEvaluationMetricKey())
+            .build();
+      }
+
+      JudgeResult.Builder resultBuilder = JudgeResult.builder()
+          .sampled(true)
+          .success(true)
+          .judgeConfigKey(config.getKey())
+          .metricKey(config.getEvaluationMetricKey())
+          .score(score);
+
+      Object reasoningRaw = parsed.get("reasoning");
+      if (reasoningRaw instanceof String) {
+        resultBuilder.reasoning((String) reasoningRaw);
+      } else if (reasoningRaw != null) {
+        if (logger != null) logger.warn("Judge {}: reasoning is not a string, ignoring", config.getKey());
+      }
+
+      return resultBuilder.build();
     } catch (Exception ex) {
       return JudgeResult.builder()
           .sampled(true)
           .success(false)
-          .judgeConfigKey(config.getKey())
-          .metricKey(config.getEvaluationMetricKey())
           .errorMessage(ex.getMessage())
           .build();
     }
-
-    Map<String, Object> parsed = result.getParsed();
-    if (parsed == null) {
-      if (logger != null) logger.warn("Judge {}: runner returned null parsed output", config.getKey());
-      return JudgeResult.builder()
-          .sampled(true)
-          .success(false)
-          .judgeConfigKey(config.getKey())
-          .metricKey(config.getEvaluationMetricKey())
-          .build();
-    }
-
-    Object scoreRaw = parsed.get("score");
-    if (!(scoreRaw instanceof Number)) {
-      if (logger != null) logger.warn("Judge {}: parsed output missing numeric score", config.getKey());
-      return JudgeResult.builder()
-          .sampled(true)
-          .success(false)
-          .judgeConfigKey(config.getKey())
-          .metricKey(config.getEvaluationMetricKey())
-          .build();
-    }
-    double score = ((Number) scoreRaw).doubleValue();
-    if (!Double.isFinite(score) || score < 0.0 || score > 1.0) {
-      if (logger != null) logger.warn("Judge {}: score {} is outside [0.0, 1.0]", config.getKey(), score);
-      return JudgeResult.builder()
-          .sampled(true)
-          .success(false)
-          .judgeConfigKey(config.getKey())
-          .metricKey(config.getEvaluationMetricKey())
-          .build();
-    }
-
-    JudgeResult.Builder resultBuilder = JudgeResult.builder()
-        .sampled(true)
-        .success(true)
-        .judgeConfigKey(config.getKey())
-        .metricKey(config.getEvaluationMetricKey())
-        .score(score);
-
-    Object reasoningRaw = parsed.get("reasoning");
-    if (reasoningRaw instanceof String) {
-      resultBuilder.reasoning((String) reasoningRaw);
-    } else if (reasoningRaw != null) {
-      if (logger != null) logger.warn("Judge {}: reasoning is not a string, ignoring", config.getKey());
-    }
-
-    return resultBuilder.build();
   }
 
   /**
