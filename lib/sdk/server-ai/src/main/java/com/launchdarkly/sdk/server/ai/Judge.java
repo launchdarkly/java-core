@@ -4,6 +4,7 @@ import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Message;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.JudgeResult;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -31,9 +32,13 @@ public final class Judge {
   static {
     Map<String, Object> scoreSchema = new HashMap<>();
     scoreSchema.put("type", "number");
+    scoreSchema.put("minimum", 0);
+    scoreSchema.put("maximum", 1);
+    scoreSchema.put("description", "Score between 0.0 and 1.0.");
 
     Map<String, Object> reasoningSchema = new HashMap<>();
     reasoningSchema.put("type", "string");
+    reasoningSchema.put("description", "Reasoning behind the score.");
 
     Map<String, Object> properties = new HashMap<>();
     properties.put("score", Collections.unmodifiableMap(scoreSchema));
@@ -42,7 +47,8 @@ public final class Judge {
     Map<String, Object> schema = new HashMap<>();
     schema.put("type", "object");
     schema.put("properties", Collections.unmodifiableMap(properties));
-    schema.put("required", Collections.singletonList("score"));
+    schema.put("required", Arrays.asList("score", "reasoning"));
+    schema.put("additionalProperties", false);
 
     EVALUATION_SCHEMA = Collections.unmodifiableMap(schema);
   }
@@ -85,6 +91,12 @@ public final class Judge {
    * @return the evaluation result; never {@code null}
    */
   public JudgeResult evaluate(String input, String output, double samplingRate) {
+    if (samplingRate <= 0.0) {
+      return JudgeResult.builder()
+          .sampled(false)
+          .success(false)
+          .build();
+    }
     if (ThreadLocalRandom.current().nextDouble() > samplingRate) {
       return JudgeResult.builder()
           .sampled(false)
@@ -110,7 +122,7 @@ public final class Judge {
 
     Map<String, Object> parsed = result.getParsed();
     if (parsed == null) {
-      logger.warn("Judge {}: runner returned null parsed output", config.getKey());
+      if (logger != null) logger.warn("Judge {}: runner returned null parsed output", config.getKey());
       return JudgeResult.builder()
           .sampled(true)
           .success(false)
@@ -121,7 +133,7 @@ public final class Judge {
 
     Object scoreRaw = parsed.get("score");
     if (!(scoreRaw instanceof Number)) {
-      logger.warn("Judge {}: parsed output missing numeric score", config.getKey());
+      if (logger != null) logger.warn("Judge {}: parsed output missing numeric score", config.getKey());
       return JudgeResult.builder()
           .sampled(true)
           .success(false)
@@ -131,7 +143,7 @@ public final class Judge {
     }
     double score = ((Number) scoreRaw).doubleValue();
     if (!Double.isFinite(score) || score < 0.0 || score > 1.0) {
-      logger.warn("Judge {}: score {} is outside [0.0, 1.0]", config.getKey(), score);
+      if (logger != null) logger.warn("Judge {}: score {} is outside [0.0, 1.0]", config.getKey(), score);
       return JudgeResult.builder()
           .sampled(true)
           .success(false)
@@ -151,7 +163,7 @@ public final class Judge {
     if (reasoningRaw instanceof String) {
       resultBuilder.reasoning((String) reasoningRaw);
     } else if (reasoningRaw != null) {
-      logger.warn("Judge {}: reasoning is not a string, ignoring", config.getKey());
+      if (logger != null) logger.warn("Judge {}: reasoning is not a string, ignoring", config.getKey());
     }
 
     return resultBuilder.build();
