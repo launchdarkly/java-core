@@ -72,7 +72,11 @@ public final class AIGraphTracker {
       LDLogger logger) {
     this.client = Objects.requireNonNull(client, "client");
     this.runId = Objects.requireNonNull(runId, "runId");
-    this.graphKey = Objects.requireNonNull(graphKey, "graphKey");
+    Objects.requireNonNull(graphKey, "graphKey");
+    if (graphKey.trim().isEmpty()) {
+      throw new IllegalArgumentException("graphKey must not be blank");
+    }
+    this.graphKey = graphKey;
     this.variationKey = variationKey;
     this.version = version;
     this.context = Objects.requireNonNull(context, "context");
