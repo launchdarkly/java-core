@@ -19,7 +19,9 @@ import java.util.function.Supplier;
  * <p>
  * An {@code AgentGraphDefinition} is obtained from {@link LDAIClient#agentGraph}. When
  * {@link #isEnabled()} returns {@code false}, the graph definition was not fetchable or failed
- * validation; in that case all node collections are empty and traversal methods are no-ops.
+ * validation; in that case all node collections are empty and traversal methods are no-ops. Only
+ * {@link #getConfig()} and {@link #createTracker()} remain meaningful, so callers can still inspect
+ * the raw flag value and fire graph-level usage events for a disabled graph.
  * <p>
  * Traversal methods ({@link #traverse} and {@link #reverseTraverse}) are BFS-based and
  * cycle-safe: each node is visited at most once.
@@ -142,13 +144,14 @@ public final class AgentGraphDefinition {
   /**
    * Creates a new {@link AIGraphTracker} for this graph invocation.
    * <p>
-   * Each call produces a fresh tracker with a new run ID. Returns {@code null} if the graph is
-   * disabled.
+   * Each call produces a fresh tracker with a new run ID. A tracker is returned even when the
+   * graph is disabled, so callers can still fire graph-level usage events (e.g. invocation
+   * failure) when the graph's configuration could not be resolved.
    *
-   * @return a new tracker, or {@code null} if disabled
+   * @return a new tracker, or {@code null} if no tracker factory was provided
    */
   public AIGraphTracker createTracker() {
-    if (!enabled || trackerFactory == null) {
+    if (trackerFactory == null) {
       return null;
     }
     return trackerFactory.get();

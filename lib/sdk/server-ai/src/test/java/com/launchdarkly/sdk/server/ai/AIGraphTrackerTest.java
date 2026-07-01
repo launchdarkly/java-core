@@ -176,22 +176,29 @@ public class AIGraphTrackerTest {
   }
 
   @Test
-  public void trackTotalTokensAllZeroDoesNotBurnSlot() {
-    tracker.trackTotalTokens(new TokenUsage(0, 0, 0));
-    verify(client, never()).trackMetric(
-        eq("$ld:ai:graph:total_tokens"), any(), any(), anyDouble());
-    // Slot not consumed — a subsequent non-zero call should fire
-    tracker.trackTotalTokens(new TokenUsage(5, 5, 0));
-    verify(client, times(1)).trackMetric(
-        eq("$ld:ai:graph:total_tokens"), any(), any(), anyDouble());
-  }
-
-  @Test
   public void trackTotalTokensNullIsIgnored() {
     tracker.trackTotalTokens(null);
     verify(client, never()).trackMetric(
         eq("$ld:ai:graph:total_tokens"), any(), any(), anyDouble());
     assertThat(debugs().stream().anyMatch(w -> w.contains("tokens was null")), is(true));
+  }
+
+  @Test
+  public void trackTotalTokensEmitsRawTotalIgnoringInputOutput() {
+    // total=0 with positive input/output: emits 0, not input+output
+    tracker.trackTotalTokens(new TokenUsage(0, 5, 3));
+    verify(client).trackMetric(
+        eq("$ld:ai:graph:total_tokens"), eq(CONTEXT), eq(baseExpectedData()), eq(0.0));
+  }
+
+  @Test
+  public void trackTotalTokensSlotConsumedEvenForZeroTotal() {
+    tracker.trackTotalTokens(new TokenUsage(0, 0, 0));
+    // slot already consumed; second call should be dropped with a warning
+    tracker.trackTotalTokens(new TokenUsage(10, 5, 5));
+    verify(client, times(1)).trackMetric(
+        eq("$ld:ai:graph:total_tokens"), any(), any(), anyDouble());
+    assertThat(warnings().stream().anyMatch(w -> w.contains("token usage already recorded")), is(true));
   }
 
   // ---- trackPath ------------------------------------------------------------
@@ -366,14 +373,14 @@ public class AIGraphTrackerTest {
   @Test
   public void fromResumptionTokenRoundTrips() {
     String token = tracker.getResumptionToken();
-    AIGraphTracker reconstructed = AIGraphTracker.fromResumptionToken(token, client, CONTEXT);
+    AIGraphTracker reconstructed = AIGraphTracker.fromResumptionToken(token, client, CONTEXT, logger);
     assertThat(reconstructed.getResumptionToken(), is(token));
   }
 
   @Test
   public void fromResumptionTokenPreservesRunId() {
     String token = tracker.getResumptionToken();
-    AIGraphTracker reconstructed = AIGraphTracker.fromResumptionToken(token, client, CONTEXT);
+    AIGraphTracker reconstructed = AIGraphTracker.fromResumptionToken(token, client, CONTEXT, logger);
     // Verify same events are emitted by the reconstructed tracker
     reconstructed.trackInvocationSuccess();
     ArgumentCaptor<LDValue> captor = ArgumentCaptor.forClass(LDValue.class);
@@ -404,7 +411,7 @@ public class AIGraphTrackerTest {
   public void fromResumptionTokenPreservesVersionZero() {
     String token = com.launchdarkly.sdk.server.ai.internal.ResumptionTokens.encodeGraph(
         RUN_ID, GRAPH_KEY, null, 0);
-    AIGraphTracker reconstructed = AIGraphTracker.fromResumptionToken(token, client, CONTEXT);
+    AIGraphTracker reconstructed = AIGraphTracker.fromResumptionToken(token, client, CONTEXT, logger);
     reconstructed.trackInvocationSuccess();
     ArgumentCaptor<LDValue> captor = ArgumentCaptor.forClass(LDValue.class);
     verify(client).trackMetric(eq("$ld:ai:graph:invocation_success"), any(), captor.capture(), anyDouble());

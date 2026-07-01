@@ -333,6 +333,16 @@ public class LDAIClientImplTest {
         + "\"instructions\":\"test instructions\"}");
   }
 
+  @Test(expected = NullPointerException.class)
+  public void agentGraphThrowsOnNullGraphKey() {
+    ai.agentGraph(null, context, null);
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void agentGraphThrowsOnBlankGraphKey() {
+    ai.agentGraph("  ", context, null);
+  }
+
   @Test
   public void agentGraphFiresUsageEvent() {
     when(client.jsonValueVariation(eq("g"), any(), any()))

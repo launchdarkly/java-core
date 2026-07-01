@@ -368,6 +368,10 @@ public final class LDAIClientImpl implements LDAIClient {
   @Override
   public AgentGraphDefinition agentGraph(
       String graphKey, LDContext context, Map<String, Object> variables) {
+    Objects.requireNonNull(graphKey, "graphKey");
+    if (graphKey.trim().isEmpty()) {
+      throw new IllegalArgumentException("graphKey must not be blank");
+    }
     client.trackMetric(TRACK_USAGE_AGENT_GRAPH, context, LDValue.of(graphKey), 1);
 
     LDValue flagValue = client.jsonValueVariation(graphKey, context, LDValue.ofNull());

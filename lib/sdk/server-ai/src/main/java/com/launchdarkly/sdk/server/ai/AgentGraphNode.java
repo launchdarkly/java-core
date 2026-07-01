@@ -1,5 +1,6 @@
 package com.launchdarkly.sdk.server.ai;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -18,7 +19,9 @@ public final class AgentGraphNode {
   AgentGraphNode(String key, AIAgentConfig config, List<GraphEdge> edges) {
     this.key = key;
     this.config = config;
-    this.edges = edges == null ? Collections.<GraphEdge>emptyList() : edges;
+    this.edges = edges == null
+        ? Collections.<GraphEdge>emptyList()
+        : Collections.unmodifiableList(new ArrayList<>(edges));
   }
 
   /**

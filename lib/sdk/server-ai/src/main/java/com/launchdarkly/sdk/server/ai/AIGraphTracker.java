@@ -6,7 +6,6 @@ import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.ObjectBuilder;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.TokenUsage;
-import com.launchdarkly.sdk.server.ai.internal.Loggers;
 import com.launchdarkly.sdk.server.ai.internal.ResumptionTokens;
 import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
 
@@ -84,31 +83,14 @@ public final class AIGraphTracker {
   }
 
   /**
-   * Reconstructs a graph tracker from a resumption token, preserving the original run identity.
-   *
-   * @param token the resumption token produced by {@link #getResumptionToken()}
-   * @param client the LaunchDarkly client; must not be {@code null}
-   * @param context the evaluation context; must not be {@code null}
-   * @return a new tracker with the decoded run identity
-   * @throws IllegalArgumentException if the token is malformed
-   */
-  public static AIGraphTracker fromResumptionToken(
-      String token, LDClientInterface client, LDContext context) {
-    return fromResumptionToken(token, client, context, Loggers.defaultLogger());
-  }
-
-  /**
    * Reconstructs a graph tracker from a resumption token, preserving the original run identity,
    * and logging through the supplied logger.
-   *
-   * @param token the resumption token produced by {@link #getResumptionToken()}
-   * @param client the LaunchDarkly client; must not be {@code null}
-   * @param context the evaluation context; must not be {@code null}
-   * @param logger the logger to use for at-most-once warnings; must not be {@code null}
-   * @return a new tracker with the decoded run identity
-   * @throws IllegalArgumentException if the token is malformed
+   * <p>
+   * This method is package-private. External callers should use
+   * {@link LDAIClient#createGraphTracker(String, LDContext)} instead, which correctly pipes the
+   * configured logger through from the top.
    */
-  public static AIGraphTracker fromResumptionToken(
+  static AIGraphTracker fromResumptionToken(
       String token, LDClientInterface client, LDContext context, LDLogger logger) {
     ResumptionTokens.DecodedGraph d = ResumptionTokens.decodeGraph(token);
     int version = d.getVersion();
@@ -174,8 +156,7 @@ public final class AIGraphTracker {
   /**
    * Records the total token usage for the graph invocation.
    * <p>
-   * At-most-once: subsequent calls are silently dropped. Calls where all counts are zero do not
-   * consume the at-most-once slot.
+   * At-most-once: subsequent calls are silently dropped.
    *
    * @param tokens the token usage; ignored if {@code null}
    */
@@ -184,17 +165,11 @@ public final class AIGraphTracker {
       logger.debug("Skipping trackTotalTokens: tokens was null.");
       return;
     }
-    boolean hasPositive = tokens.getTotal() > 0 || tokens.getInput() > 0 || tokens.getOutput() > 0;
-    if (!hasPositive) {
-      return;
-    }
     if (!tokensRecorded.compareAndSet(null, tokens)) {
       logger.warn("Skipping trackTotalTokens: token usage already recorded on this graph tracker.");
       return;
     }
-    if (tokens.getTotal() > 0) {
-      client.trackMetric(GRAPH_TOTAL_TOKENS, context, baseData().build(), tokens.getTotal());
-    }
+    client.trackMetric(GRAPH_TOTAL_TOKENS, context, baseData().build(), tokens.getTotal());
   }
 
   /**

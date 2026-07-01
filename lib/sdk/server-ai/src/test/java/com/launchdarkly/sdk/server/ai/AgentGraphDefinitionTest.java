@@ -63,7 +63,8 @@ public class AgentGraphDefinitionTest {
 
   private static AIAgentConfig makeConfig(String key, boolean enabled) {
     return new AIAgentConfig(key, enabled, null, null, null, null, null,
-        () -> mock(com.launchdarkly.sdk.server.ai.LDAIConfigTracker.class));
+        () -> mock(com.launchdarkly.sdk.server.ai.LDAIConfigTracker.class),
+        Evaluator.noop());
   }
 
   private static Map<String, AIAgentConfig> configs(String... keys) {
@@ -264,9 +265,24 @@ public class AgentGraphDefinitionTest {
 
   @Test
   public void createTrackerReturnsNullWhenDisabled() {
+    // A null factory is the only case that returns null (defensive guard).
     AgentGraphDefinition graph = new AgentGraphDefinition(
         AgentGraphFlagValue.disabled(), Collections.emptyMap(), false, null);
     assertThat(graph.createTracker(), is(nullValue()));
+  }
+
+  @Test
+  public void createTrackerReturnsTrackerEvenWhenDisabled() {
+    // Disabled graphs still produce a tracker so callers can fire graph-level usage events
+    // (e.g. invocation failure) when the graph's configuration could not be resolved.
+    LDClientInterface client = mock(LDClientInterface.class);
+    AgentGraphDefinition graph = new AgentGraphDefinition(
+        AgentGraphFlagValue.disabled(), Collections.emptyMap(), false,
+        () -> new AIGraphTracker(client, "run-id", "graph-key", null, 1,
+            com.launchdarkly.sdk.LDContext.create("user"),
+            com.launchdarkly.logging.LDLogger.withAdapter(
+                com.launchdarkly.logging.Logs.none(), "")));
+    assertThat(graph.createTracker(), is(notNullValue()));
   }
 
   @Test
