@@ -1,9 +1,6 @@
 package com.launchdarkly.sdk.server.ai;
 
-import com.launchdarkly.logging.LDLogAdapter;
 import com.launchdarkly.logging.LDLogger;
-import com.launchdarkly.logging.LDSLF4J;
-import com.launchdarkly.logging.Logs;
 import com.launchdarkly.sdk.ContextKind;
 import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
@@ -16,6 +13,7 @@ import com.launchdarkly.sdk.server.ai.internal.AIConfigParser;
 import com.launchdarkly.sdk.server.ai.internal.AISdkInfo;
 import com.launchdarkly.sdk.server.ai.internal.Interpolator;
 import com.launchdarkly.sdk.server.ai.internal.LDAIConfigTrackerImpl;
+import com.launchdarkly.sdk.server.ai.internal.Loggers;
 import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
 
 import java.util.ArrayList;
@@ -71,7 +69,7 @@ public final class LDAIClientImpl implements LDAIClient {
    * @param client an initialized server-side {@code LDClient}; must not be {@code null}
    */
   public LDAIClientImpl(LDClientInterface client) {
-    this(client, defaultLogger());
+    this(client, Loggers.defaultLogger());
   }
 
   /**
@@ -472,14 +470,4 @@ public final class LDAIClientImpl implements LDAIClient {
     return interpolator.interpolate(template, variables, context);
   }
 
-  private static LDLogger defaultLogger() {
-    LDLogAdapter adapter;
-    try {
-      Class.forName("org.slf4j.LoggerFactory");
-      adapter = LDSLF4J.adapter();
-    } catch (ClassNotFoundException e) {
-      adapter = Logs.toConsole();
-    }
-    return LDLogger.withAdapter(adapter, "LaunchDarkly.AI");
-  }
 }

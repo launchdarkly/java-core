@@ -1,14 +1,12 @@
 package com.launchdarkly.sdk.server.ai;
 
-import com.launchdarkly.logging.LDLogAdapter;
 import com.launchdarkly.logging.LDLogger;
-import com.launchdarkly.logging.LDSLF4J;
-import com.launchdarkly.logging.Logs;
 import com.launchdarkly.sdk.ArrayBuilder;
 import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.ObjectBuilder;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAITrackingTypes.TokenUsage;
+import com.launchdarkly.sdk.server.ai.internal.Loggers;
 import com.launchdarkly.sdk.server.ai.internal.ResumptionTokens;
 import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
 
@@ -96,7 +94,7 @@ public final class AIGraphTracker {
    */
   public static AIGraphTracker fromResumptionToken(
       String token, LDClientInterface client, LDContext context) {
-    return fromResumptionToken(token, client, context, defaultLogger());
+    return fromResumptionToken(token, client, context, Loggers.defaultLogger());
   }
 
   /**
@@ -311,14 +309,4 @@ public final class AIGraphTracker {
     return b;
   }
 
-  private static LDLogger defaultLogger() {
-    LDLogAdapter adapter;
-    try {
-      Class.forName("org.slf4j.LoggerFactory");
-      adapter = LDSLF4J.adapter();
-    } catch (ClassNotFoundException e) {
-      adapter = Logs.toConsole();
-    }
-    return LDLogger.withAdapter(adapter, "LaunchDarkly.AI");
-  }
 }
