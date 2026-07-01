@@ -95,12 +95,16 @@ public final class Judge {
       return JudgeResult.builder()
           .sampled(false)
           .success(false)
+          .judgeConfigKey(config.getKey())
+          .metricKey(config.getEvaluationMetricKey())
           .build();
     }
     if (ThreadLocalRandom.current().nextDouble() > samplingRate) {
       return JudgeResult.builder()
           .sampled(false)
           .success(false)
+          .judgeConfigKey(config.getKey())
+          .metricKey(config.getEvaluationMetricKey())
           .build();
     }
 

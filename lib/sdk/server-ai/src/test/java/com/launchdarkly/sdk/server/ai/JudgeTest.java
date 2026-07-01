@@ -174,6 +174,8 @@ public class JudgeTest {
 
     assertThat(result.isSampled(), is(false));
     assertThat(result.isSuccess(), is(false));
+    assertThat(result.getJudgeConfigKey(), is("judge-key"));
+    assertThat(result.getMetricKey(), is("my.metric"));
     verify(runner, never()).run(any(), any());
   }
 

@@ -26,13 +26,11 @@ public final class Evaluator {
   private final Map<String, Judge> judges;
   private final JudgeConfiguration judgeConfiguration;
   private final LDLogger logger;
-  private final boolean isNoop;
 
   private Evaluator() {
     this.judges = Collections.emptyMap();
     this.judgeConfiguration = null;
     this.logger = null;
-    this.isNoop = true;
   }
 
   /**
@@ -50,7 +48,6 @@ public final class Evaluator {
         : Collections.emptyMap();
     this.judgeConfiguration = judgeConfiguration;
     this.logger = logger;
-    this.isNoop = false;
   }
 
   /**
@@ -66,8 +63,8 @@ public final class Evaluator {
   /**
    * Runs all configured judges against the given input/output pair and returns their results.
    * <p>
-   * When this is the noop evaluator, returns a completed future holding an empty list immediately.
-   * Otherwise, judges are run sequentially in the order specified by the {@link JudgeConfiguration}.
+   * Judges are run sequentially in the order specified by the {@link JudgeConfiguration}.
+   * Returns an empty list immediately when no judge configuration is present.
    * Judges referenced in the configuration but absent from the judges map are skipped with a
    * warning; this is not an error.
    * <p>
@@ -78,10 +75,6 @@ public final class Evaluator {
    * @return a completed future holding the list of judge results; never {@code null}
    */
   public CompletableFuture<List<JudgeResult>> evaluate(String input, String output) {
-    if (isNoop) {
-      return CompletableFuture.completedFuture(Collections.emptyList());
-    }
-
     if (judgeConfiguration == null) {
       return CompletableFuture.completedFuture(Collections.emptyList());
     }
