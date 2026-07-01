@@ -238,7 +238,8 @@ public final class LDAIClientImpl implements LDAIClient {
                         : parsed.getInstructions(),
             parsed.getJudgeConfiguration(),
             parsed.getTools(),
-            factory);
+            factory,
+            Evaluator.noop());
       case JUDGE:
         return new AIJudgeConfig(
             key,
@@ -260,7 +261,8 @@ public final class LDAIClientImpl implements LDAIClient {
                         : parsed.getMessages(),
             parsed.getJudgeConfiguration(),
             parsed.getTools(),
-            factory);
+            factory,
+            Evaluator.noop());
     }
   }
 
@@ -291,7 +293,8 @@ public final class LDAIClientImpl implements LDAIClient {
                         : agent.getInstructions(),
             agent.getJudgeConfiguration(),
             agent.getTools(),
-            factory);
+            factory,
+            Evaluator.noop());
       }
       case JUDGE: {
         AIJudgeConfigDefault judge = (AIJudgeConfigDefault) defaultValue;
@@ -317,7 +320,8 @@ public final class LDAIClientImpl implements LDAIClient {
                         : completion.getMessages(),
             completion.getJudgeConfiguration(),
             completion.getTools(),
-            factory);
+            factory,
+            Evaluator.noop());
       }
     }
   }
