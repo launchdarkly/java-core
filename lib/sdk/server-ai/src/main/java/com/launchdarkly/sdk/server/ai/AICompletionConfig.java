@@ -32,8 +32,9 @@ public final class AICompletionConfig extends AIConfig {
       List<Message> messages,
       JudgeConfiguration judgeConfiguration,
       Map<String, Tool> tools,
-      Supplier<LDAIConfigTracker> trackerFactory) {
-    super(key, enabled, Mode.COMPLETION, model, provider, trackerFactory);
+      Supplier<LDAIConfigTracker> trackerFactory,
+      Evaluator evaluator) {
+    super(key, enabled, Mode.COMPLETION, model, provider, trackerFactory, evaluator);
     this.messages = messages == null ? null : Collections.unmodifiableList(messages);
     this.judgeConfiguration = judgeConfiguration;
     this.tools = tools == null ? null : Collections.unmodifiableMap(tools);
