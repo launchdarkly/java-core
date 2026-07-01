@@ -265,6 +265,17 @@ public class AIGraphTrackerTest {
         eq("$ld:ai:graph:redirect"), any(), any(), anyDouble());
   }
 
+  @Test
+  public void trackRedirectSkipsWhenKeyBlankOrNull() {
+    tracker.trackRedirect(null, "target-b");
+    tracker.trackRedirect("source-a", "  ");
+    tracker.trackRedirect("", "target-b");
+    verify(client, never()).trackMetric(
+        eq("$ld:ai:graph:redirect"), any(), any(), anyDouble());
+    assertThat(debugs().stream().anyMatch(
+        w -> w.contains("Skipping trackRedirect")), is(true));
+  }
+
   // ---- trackHandoffSuccess --------------------------------------------------
 
   @Test
@@ -288,6 +299,17 @@ public class AIGraphTrackerTest {
         eq("$ld:ai:graph:handoff_success"), any(), any(), anyDouble());
   }
 
+  @Test
+  public void trackHandoffSuccessSkipsWhenKeyBlankOrNull() {
+    tracker.trackHandoffSuccess(null, "target-b");
+    tracker.trackHandoffSuccess("source-a", "  ");
+    tracker.trackHandoffSuccess("source-a", "");
+    verify(client, never()).trackMetric(
+        eq("$ld:ai:graph:handoff_success"), any(), any(), anyDouble());
+    assertThat(debugs().stream().anyMatch(
+        w -> w.contains("Skipping trackHandoffSuccess")), is(true));
+  }
+
   // ---- trackHandoffFailure --------------------------------------------------
 
   @Test
@@ -309,6 +331,17 @@ public class AIGraphTrackerTest {
     tracker.trackHandoffFailure("source-c", "target-d");
     verify(client, times(2)).trackMetric(
         eq("$ld:ai:graph:handoff_failure"), any(), any(), anyDouble());
+  }
+
+  @Test
+  public void trackHandoffFailureSkipsWhenKeyBlankOrNull() {
+    tracker.trackHandoffFailure(null, "target-b");
+    tracker.trackHandoffFailure("source-a", "  ");
+    tracker.trackHandoffFailure("source-a", "");
+    verify(client, never()).trackMetric(
+        eq("$ld:ai:graph:handoff_failure"), any(), any(), anyDouble());
+    assertThat(debugs().stream().anyMatch(
+        w -> w.contains("Skipping trackHandoffFailure")), is(true));
   }
 
   // ---- getSummary -----------------------------------------------------------

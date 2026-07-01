@@ -207,6 +207,10 @@ public final class AIGraphTracker {
    * @param redirectedTarget the key of the node that was actually used
    */
   public void trackRedirect(String sourceKey, String redirectedTarget) {
+    if (isNullOrBlank(sourceKey) || isNullOrBlank(redirectedTarget)) {
+      logger.debug("Skipping trackRedirect: sourceKey or redirectedTarget was null or blank.");
+      return;
+    }
     LDValue data = baseData()
         .put("sourceKey", sourceKey)
         .put("redirectedTarget", redirectedTarget)
@@ -223,6 +227,10 @@ public final class AIGraphTracker {
    * @param targetKey the key of the target node
    */
   public void trackHandoffSuccess(String sourceKey, String targetKey) {
+    if (isNullOrBlank(sourceKey) || isNullOrBlank(targetKey)) {
+      logger.debug("Skipping trackHandoffSuccess: sourceKey or targetKey was null or blank.");
+      return;
+    }
     LDValue data = baseData()
         .put("sourceKey", sourceKey)
         .put("targetKey", targetKey)
@@ -239,6 +247,10 @@ public final class AIGraphTracker {
    * @param targetKey the key of the target node
    */
   public void trackHandoffFailure(String sourceKey, String targetKey) {
+    if (isNullOrBlank(sourceKey) || isNullOrBlank(targetKey)) {
+      logger.debug("Skipping trackHandoffFailure: sourceKey or targetKey was null or blank.");
+      return;
+    }
     LDValue data = baseData()
         .put("sourceKey", sourceKey)
         .put("targetKey", targetKey)
@@ -282,6 +294,10 @@ public final class AIGraphTracker {
       b.put("variationKey", variationKey);
     }
     return b;
+  }
+
+  private static boolean isNullOrBlank(String value) {
+    return value == null || value.trim().isEmpty();
   }
 
 }
