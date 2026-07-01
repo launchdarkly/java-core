@@ -199,7 +199,8 @@ public final class LDAIClientImpl implements LDAIClient {
             interpolate(parsed.getInstructions(), variables, context),
             parsed.getJudgeConfiguration(),
             parsed.getTools(),
-            factory);
+            factory,
+            Evaluator.noop());
       case JUDGE:
         return new AIJudgeConfig(
             key,
@@ -219,7 +220,8 @@ public final class LDAIClientImpl implements LDAIClient {
             interpolateMessages(parsed.getMessages(), variables, context),
             parsed.getJudgeConfiguration(),
             parsed.getTools(),
-            factory);
+            factory,
+            Evaluator.noop());
     }
   }
 
@@ -247,7 +249,8 @@ public final class LDAIClientImpl implements LDAIClient {
             interpolate(agent.getInstructions(), variables, context),
             agent.getJudgeConfiguration(),
             agent.getTools(),
-            factory);
+            factory,
+            Evaluator.noop());
       }
       case JUDGE: {
         AIJudgeConfigDefault judge = (AIJudgeConfigDefault) defaultValue;
@@ -271,7 +274,8 @@ public final class LDAIClientImpl implements LDAIClient {
             interpolateMessages(completion.getMessages(), variables, context),
             completion.getJudgeConfiguration(),
             completion.getTools(),
-            factory);
+            factory,
+            Evaluator.noop());
       }
     }
   }
