@@ -123,6 +123,8 @@ public class JudgeTest {
     assertThat(result.isSampled(), is(true));
     assertThat(result.isSuccess(), is(false));
     assertThat(result.getErrorMessage(), is("boom"));
+    assertThat(result.getJudgeConfigKey(), is("judge-key"));
+    assertThat(result.getMetricKey(), is("my.metric"));
   }
 
   @Test

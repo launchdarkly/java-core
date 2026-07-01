@@ -161,6 +161,8 @@ public final class Judge {
       return JudgeResult.builder()
           .sampled(true)
           .success(false)
+          .judgeConfigKey(config.getKey())
+          .metricKey(config.getEvaluationMetricKey())
           .errorMessage(ex.getMessage())
           .build();
     }
