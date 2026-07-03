@@ -24,7 +24,7 @@ abstract class RedisStoreImplBase implements Closeable {
     String username = builder.username == null ? RedisURIComponents.getUsername(builder.uri) : builder.username;
     String password = builder.password == null ? RedisURIComponents.getPassword(builder.uri) : builder.password;
     int database = builder.database == null ? RedisURIComponents.getDBIndex(builder.uri) : builder.database;
-    boolean tls = builder.tls || builder.uri.getScheme().equals("rediss");
+    boolean tls = builder.tls || "rediss".equals(builder.uri.getScheme());
 
     String extra = tls ? " with TLS" : "";
     if (username != null) {
