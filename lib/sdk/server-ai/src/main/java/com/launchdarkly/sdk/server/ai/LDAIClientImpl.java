@@ -5,6 +5,7 @@ import com.launchdarkly.sdk.ContextKind;
 import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.LDValueType;
+import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.JudgeConfiguration;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Message;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Mode;
 import com.launchdarkly.sdk.server.ai.internal.AgentGraphFlagValue;
@@ -62,6 +63,7 @@ public final class LDAIClientImpl implements LDAIClient {
   private final LDClientInterface client;
   private final LDLogger logger;
   private final Interpolator interpolator;
+  private final AIRunnerProvider runnerProvider;
 
   /**
    * Creates an AI client wrapping the given base client, using a default logger.
@@ -69,7 +71,7 @@ public final class LDAIClientImpl implements LDAIClient {
    * @param client an initialized server-side {@code LDClient}; must not be {@code null}
    */
   public LDAIClientImpl(LDClientInterface client) {
-    this(client, Loggers.defaultLogger());
+    this(client, Loggers.defaultLogger(), null);
   }
 
   /**
@@ -79,9 +81,25 @@ public final class LDAIClientImpl implements LDAIClient {
    * @param logger the logger to use for warnings; must not be {@code null}
    */
   public LDAIClientImpl(LDClientInterface client, LDLogger logger) {
+    this(client, logger, null);
+  }
+
+  /**
+   * Creates an AI client wrapping the given base client, logger, and runner provider.
+   * <p>
+   * The {@code runnerProvider} is called once per judge key when building an {@link Evaluator} for
+   * a completion or agent config that carries a {@code judgeConfiguration}. Pass {@code null} to
+   * disable online evaluation (equivalent to the two-argument constructor).
+   *
+   * @param client an initialized server-side {@code LDClient}; must not be {@code null}
+   * @param logger the logger to use for warnings; must not be {@code null}
+   * @param runnerProvider supplies a {@link Runner} per judge config; may be {@code null}
+   */
+  public LDAIClientImpl(LDClientInterface client, LDLogger logger, AIRunnerProvider runnerProvider) {
     this.client = Objects.requireNonNull(client, "client");
     this.logger = Objects.requireNonNull(logger, "logger");
     this.interpolator = new Interpolator();
+    this.runnerProvider = runnerProvider;
 
     LDValue info = LDValue.buildObject()
         .put("aiSdkName", AISdkInfo.NAME)
@@ -237,7 +255,7 @@ public final class LDAIClientImpl implements LDAIClient {
             parsed.getJudgeConfiguration(),
             parsed.getTools(),
             factory,
-            Evaluator.noop());
+            buildEvaluator(parsed.getJudgeConfiguration(), context, variables));
       case JUDGE:
         return new AIJudgeConfig(
             key,
@@ -258,7 +276,7 @@ public final class LDAIClientImpl implements LDAIClient {
             parsed.getJudgeConfiguration(),
             parsed.getTools(),
             factory,
-            Evaluator.noop());
+            buildEvaluator(parsed.getJudgeConfiguration(), context, variables));
     }
   }
 
@@ -297,7 +315,7 @@ public final class LDAIClientImpl implements LDAIClient {
             agent.getJudgeConfiguration(),
             agent.getTools(),
             factory,
-            Evaluator.noop());
+            buildEvaluator(agent.getJudgeConfiguration(), context, variables));
       }
       case JUDGE: {
         AIJudgeConfigDefault judge = (AIJudgeConfigDefault) defaultValue;
@@ -322,7 +340,7 @@ public final class LDAIClientImpl implements LDAIClient {
             completion.getJudgeConfiguration(),
             completion.getTools(),
             factory,
-            Evaluator.noop());
+            buildEvaluator(completion.getJudgeConfiguration(), context, variables));
       }
     }
   }
@@ -456,6 +474,52 @@ public final class LDAIClientImpl implements LDAIClient {
   @Override
   public LDAIConfigTracker createTracker(String resumptionToken, LDContext context) {
     return LDAIConfigTrackerImpl.fromResumptionToken(resumptionToken, client, context, logger);
+  }
+
+  /**
+   * Builds a real {@link Evaluator} from the judge configuration, or returns {@link Evaluator#noop()}
+   * when no runner provider is configured, the judge configuration is absent/empty, or all judge
+   * instances fail to construct.
+   */
+  private Evaluator buildEvaluator(
+      JudgeConfiguration judgeConfig, LDContext context, Map<String, Object> variables) {
+    if (runnerProvider == null || judgeConfig == null || judgeConfig.getJudges().isEmpty()) {
+      return Evaluator.noop();
+    }
+    Map<String, Judge> judges = new LinkedHashMap<>();
+    for (JudgeConfiguration.Judge entry : judgeConfig.getJudges()) {
+      Judge judge = createJudgeInstance(entry.getKey(), context, variables);
+      if (judge != null) {
+        judges.put(entry.getKey(), judge);
+      }
+    }
+    return judges.isEmpty() ? Evaluator.noop() : new Evaluator(judges, judgeConfig, logger);
+  }
+
+  /**
+   * Fetches the judge AI Config for the given key and constructs a {@link Judge} using the
+   * configured runner provider. Returns {@code null} (and logs) when the judge config is disabled,
+   * the runner provider returns {@code null}, or any exception is thrown — so one bad judge never
+   * prevents the parent config from being built.
+   */
+  private Judge createJudgeInstance(String key, LDContext context, Map<String, Object> variables) {
+    try {
+      AIJudgeConfig cfg = (AIJudgeConfig) evaluate(
+          key, context, AIJudgeConfigDefault.disabled(), Mode.JUDGE, variables);
+      if (!cfg.isEnabled()) {
+        logger.info("Judge configuration is disabled: {}", key);
+        return null;
+      }
+      Runner runner = runnerProvider.create(cfg);
+      if (runner == null) {
+        logger.warn("Runner provider returned null for judge: {}", key);
+        return null;
+      }
+      return new Judge(cfg, runner, logger);
+    } catch (Exception e) {
+      logger.warn("Failed to create judge instance for key {}: {}", key, e.getMessage());
+      return null;
+    }
   }
 
   private List<Message> interpolateMessages(
