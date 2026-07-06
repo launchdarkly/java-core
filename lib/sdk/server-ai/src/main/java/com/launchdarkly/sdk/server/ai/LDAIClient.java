@@ -2,6 +2,7 @@ package com.launchdarkly.sdk.server.ai;
 
 import com.launchdarkly.sdk.LDContext;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -146,4 +147,45 @@ public interface LDAIClient {
    * @throws IllegalArgumentException if the token is malformed
    */
   LDAIConfigTracker createTracker(String resumptionToken, LDContext context);
+
+  /**
+   * Fetches and validates an agent graph definition identified by {@code graphKey}.
+   * <p>
+   * Evaluates the graph flag, fetches all referenced node configs, and validates the graph
+   * structure. If validation fails (disabled flag, empty root, unreachable nodes, or any
+   * non-enabled child config) the returned definition has {@link AgentGraphDefinition#isEnabled()}
+   * {@code == false} and an empty node map.
+   * <p>
+   * Also emits a {@code $ld:ai:usage:agent-graph} usage event.
+   *
+   * @param graphKey the flag key identifying the agent graph
+   * @param context the evaluation context
+   * @param variables Mustache template variables applied to each node's instructions
+   * @return the resolved graph definition; never {@code null}
+   */
+  AgentGraphDefinition agentGraph(String graphKey, LDContext context, Map<String, Object> variables);
+
+  /**
+   * Fetches and validates an agent graph definition with no template variables.
+   *
+   * @param graphKey the flag key identifying the agent graph
+   * @param context the evaluation context
+   * @return the resolved graph definition; never {@code null}
+   */
+  default AgentGraphDefinition agentGraph(String graphKey, LDContext context) {
+    return agentGraph(graphKey, context, Collections.emptyMap());
+  }
+
+  /**
+   * Reconstructs an {@link AIGraphTracker} from a resumption token.
+   * <p>
+   * Use this to continue tracking a graph run across requests by passing the token produced by
+   * {@link AIGraphTracker#getResumptionToken()}.
+   *
+   * @param resumptionToken the token produced by a prior {@link AIGraphTracker}
+   * @param context the evaluation context
+   * @return a reconstructed tracker with the original run identity
+   * @throws IllegalArgumentException if the token is malformed
+   */
+  AIGraphTracker createGraphTracker(String resumptionToken, LDContext context);
 }
