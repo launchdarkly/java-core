@@ -1,27 +1,32 @@
 package com.launchdarkly.sdk.server.ai;
 
-import com.launchdarkly.logging.LDLogAdapter;
 import com.launchdarkly.logging.LDLogger;
-import com.launchdarkly.logging.LDSLF4J;
-import com.launchdarkly.logging.Logs;
 import com.launchdarkly.sdk.ContextKind;
 import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.LDValueType;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Message;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Mode;
+import com.launchdarkly.sdk.server.ai.internal.AgentGraphFlagValue;
 import com.launchdarkly.sdk.server.ai.internal.AIConfigFlagValue;
 import com.launchdarkly.sdk.server.ai.internal.AIConfigParser;
 import com.launchdarkly.sdk.server.ai.internal.AISdkInfo;
 import com.launchdarkly.sdk.server.ai.internal.Interpolator;
 import com.launchdarkly.sdk.server.ai.internal.LDAIConfigTrackerImpl;
+import com.launchdarkly.sdk.server.ai.internal.Loggers;
 import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Queue;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -45,6 +50,7 @@ public final class LDAIClientImpl implements LDAIClient {
   private static final String TRACK_USAGE_AGENT_CONFIG = "$ld:ai:usage:agent-config";
   private static final String TRACK_USAGE_AGENT_CONFIGS = "$ld:ai:usage:agent-configs";
   private static final String TRACK_USAGE_JUDGE_CONFIG = "$ld:ai:usage:judge-config";
+  private static final String TRACK_USAGE_AGENT_GRAPH = "$ld:ai:usage:agent-graph";
 
   private static final LDContext INIT_TRACK_CONTEXT = LDContext
       .builder("ld-internal-tracking")
@@ -63,7 +69,7 @@ public final class LDAIClientImpl implements LDAIClient {
    * @param client an initialized server-side {@code LDClient}; must not be {@code null}
    */
   public LDAIClientImpl(LDClientInterface client) {
-    this(client, defaultLogger());
+    this(client, Loggers.defaultLogger());
   }
 
   /**
@@ -110,21 +116,26 @@ public final class LDAIClientImpl implements LDAIClient {
   @Override
   public Map<String, AIAgentConfig> agentConfigs(
       List<AIAgentConfigRequest> agentConfigs, LDContext context) {
-    Map<String, AIAgentConfig> result = new LinkedHashMap<>();
     int count = 0;
     if (agentConfigs != null) {
       for (AIAgentConfigRequest request : agentConfigs) {
-        if (request == null) {
-          continue;
+        if (request != null) {
+          count++;
         }
-        count++;
-        result.put(
-            request.getKey(),
-            evaluateAgent(request.getKey(), context, request.getDefaultValue(), request.getVariables()));
       }
     }
     client.trackMetric(TRACK_USAGE_AGENT_CONFIGS, context, LDValue.of(count), count);
 
+    Map<String, AIAgentConfig> result = new LinkedHashMap<>();
+    if (agentConfigs != null) {
+      for (AIAgentConfigRequest request : agentConfigs) {
+        if (request != null) {
+          result.put(
+              request.getKey(),
+              evaluateAgent(request.getKey(), context, request.getDefaultValue(), request.getVariables()));
+        }
+      }
+    }
     return result;
   }
 
@@ -142,9 +153,15 @@ public final class LDAIClientImpl implements LDAIClient {
 
   private AIAgentConfig evaluateAgent(
       String key, LDContext context, AIAgentConfigDefault defaultValue, Map<String, Object> variables) {
+    return evaluateAgent(key, context, defaultValue, variables, null);
+  }
+
+  private AIAgentConfig evaluateAgent(
+      String key, LDContext context, AIAgentConfigDefault defaultValue,
+      Map<String, Object> variables, String graphKey) {
     AIAgentConfigDefault effectiveDefault =
         defaultValue != null ? defaultValue : AIAgentConfigDefault.disabled();
-    return (AIAgentConfig) evaluate(key, context, effectiveDefault, Mode.AGENT, variables);
+    return (AIAgentConfig) evaluate(key, context, effectiveDefault, Mode.AGENT, variables, graphKey);
   }
 
   /**
@@ -158,13 +175,23 @@ public final class LDAIClientImpl implements LDAIClient {
       AIConfigDefault defaultValue,
       Mode mode,
       Map<String, Object> variables) {
+    return evaluate(key, context, defaultValue, mode, variables, null);
+  }
+
+  private AIConfig evaluate(
+      String key,
+      LDContext context,
+      AIConfigDefault defaultValue,
+      Mode mode,
+      Map<String, Object> variables,
+      String graphKey) {
     LDValue value = client.jsonValueVariation(key, context, LDValue.ofNull());
 
     // A valid AI Config variation is always a JSON object (it carries the _ldMeta block). When the
     // flag is absent or cannot be evaluated the base SDK hands back our null sentinel; in that case
     // we return the caller's typed default directly rather than serializing it and parsing it back.
     if (value == null || value.getType() != LDValueType.OBJECT) {
-      return buildConfigFromDefault(key, mode, defaultValue, context, variables);
+      return buildConfigFromDefault(key, mode, defaultValue, context, variables, graphKey);
     }
 
     AIConfigFlagValue parsed = AIConfigParser.parse(value);
@@ -174,10 +201,10 @@ public final class LDAIClientImpl implements LDAIClient {
       logger.warn(
           "AI Config mode mismatch for {}: expected {}, got {}. Returning default config.",
           key, mode.getWireValue(), flagMode.getWireValue());
-      return buildConfigFromDefault(key, mode, defaultValue, context, variables);
+      return buildConfigFromDefault(key, mode, defaultValue, context, variables, graphKey);
     }
 
-    return buildConfig(key, mode, parsed, context, variables);
+    return buildConfig(key, mode, parsed, context, variables, graphKey);
   }
 
   private AIConfig buildConfig(
@@ -186,9 +213,19 @@ public final class LDAIClientImpl implements LDAIClient {
       AIConfigFlagValue parsed,
       LDContext context,
       Map<String, Object> variables) {
+    return buildConfig(key, mode, parsed, context, variables, null);
+  }
+
+  private AIConfig buildConfig(
+      String key,
+      Mode mode,
+      AIConfigFlagValue parsed,
+      LDContext context,
+      Map<String, Object> variables,
+      String graphKey) {
     Supplier<LDAIConfigTracker> factory = trackerFactory(
         key, parsed.getVariationKey(), parsed.getVersion(),
-        parsed.getModel(), parsed.getProvider(), context);
+        parsed.getModel(), parsed.getProvider(), context, graphKey);
     switch (mode) {
       case AGENT:
         return new AIAgentConfig(
@@ -235,9 +272,19 @@ public final class LDAIClientImpl implements LDAIClient {
       AIConfigDefault defaultValue,
       LDContext context,
       Map<String, Object> variables) {
+    return buildConfigFromDefault(key, mode, defaultValue, context, variables, null);
+  }
+
+  private AIConfig buildConfigFromDefault(
+      String key,
+      Mode mode,
+      AIConfigDefault defaultValue,
+      LDContext context,
+      Map<String, Object> variables,
+      String graphKey) {
     // Default configs still get real trackers — the configKey was requested even if no flag was found.
     // variationKey is null because no flag evaluation occurred.
-    Supplier<LDAIConfigTracker> factory = trackerFactory(key, null, null, null, null, context);
+    Supplier<LDAIConfigTracker> factory = trackerFactory(key, null, null, null, null, context, graphKey);
     switch (mode) {
       case AGENT: {
         AIAgentConfigDefault agent = (AIAgentConfigDefault) defaultValue;
@@ -291,6 +338,17 @@ public final class LDAIClientImpl implements LDAIClient {
       com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Model model,
       com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Provider provider,
       LDContext context) {
+    return trackerFactory(configKey, variationKey, version, model, provider, context, null);
+  }
+
+  private Supplier<LDAIConfigTracker> trackerFactory(
+      String configKey,
+      String variationKey,
+      Integer version,
+      com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Model model,
+      com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Provider provider,
+      LDContext context,
+      String graphKey) {
     String modelName = model != null && model.getName() != null ? model.getName() : "";
     String providerName = provider != null && provider.getName() != null ? provider.getName() : "";
     int ver = version != null ? version : 1;
@@ -303,8 +361,96 @@ public final class LDAIClientImpl implements LDAIClient {
         modelName,
         providerName,
         context,
-        null, // graphKey — set by agentGraph() in Plan 3
+        graphKey,
         logger);
+  }
+
+  @Override
+  public AgentGraphDefinition agentGraph(
+      String graphKey, LDContext context, Map<String, Object> variables) {
+    Objects.requireNonNull(graphKey, "graphKey");
+    if (graphKey.trim().isEmpty()) {
+      throw new IllegalArgumentException("graphKey must not be blank");
+    }
+    client.trackMetric(TRACK_USAGE_AGENT_GRAPH, context, LDValue.of(graphKey), 1);
+
+    LDValue flagValue = client.jsonValueVariation(graphKey, context, LDValue.ofNull());
+    AgentGraphFlagValue parsed = AgentGraphFlagValue.parse(
+        (flagValue != null && flagValue.getType() == LDValueType.OBJECT) ? flagValue : null);
+
+    Map<String, Object> effectiveVars = variables != null ? variables : Collections.emptyMap();
+    Supplier<AIGraphTracker> trackerFactory = () -> new AIGraphTracker(
+        client,
+        UUID.randomUUID().toString(),
+        graphKey,
+        parsed.getVariationKey(),
+        parsed.getVersion(),
+        context,
+        logger);
+
+    AgentGraphDefinition disabled = new AgentGraphDefinition(
+        parsed, Collections.<String, AgentGraphNode>emptyMap(), false, trackerFactory);
+
+    // Validation step 1: _ldMeta.enabled
+    if (!parsed.isEnabled()) {
+      return disabled;
+    }
+
+    // Validation step 2: root must be non-empty
+    String root = parsed.getRoot();
+    if (root == null || root.isEmpty()) {
+      return disabled;
+    }
+
+    // Validation step 3: all keys reachable from root (no unconnected nodes)
+    Set<String> allKeys = AgentGraphDefinition.collectAllKeys(parsed);
+    Set<String> reachableKeys = collectReachableKeys(parsed);
+    for (String key : allKeys) {
+      if (!reachableKeys.contains(key)) {
+        return disabled;
+      }
+    }
+
+    // Validation step 4: fetch each child config (without emitting usage events)
+    Map<String, AIAgentConfig> configs = new HashMap<>();
+    for (String key : allKeys) {
+      AIAgentConfig config = evaluateAgent(key, context, null, effectiveVars, graphKey);
+      if (!config.isEnabled()) {
+        return disabled;
+      }
+      configs.put(key, config);
+    }
+
+    Map<String, AgentGraphNode> nodes = AgentGraphDefinition.buildNodes(parsed, configs);
+    return new AgentGraphDefinition(parsed, nodes, true, trackerFactory);
+  }
+
+  private static Set<String> collectReachableKeys(AgentGraphFlagValue flagValue) {
+    Set<String> visited = new HashSet<>();
+    Queue<String> queue = new LinkedList<>();
+    String root = flagValue.getRoot();
+    if (root == null || root.isEmpty()) {
+      return visited;
+    }
+    visited.add(root);
+    queue.add(root);
+    while (!queue.isEmpty()) {
+      String key = queue.poll();
+      List<GraphEdge> edges = flagValue.getEdges().get(key);
+      if (edges != null) {
+        for (GraphEdge edge : edges) {
+          if (visited.add(edge.getKey())) {
+            queue.add(edge.getKey());
+          }
+        }
+      }
+    }
+    return visited;
+  }
+
+  @Override
+  public AIGraphTracker createGraphTracker(String resumptionToken, LDContext context) {
+    return AIGraphTracker.fromResumptionToken(resumptionToken, client, context, logger);
   }
 
   @Override
@@ -328,14 +474,4 @@ public final class LDAIClientImpl implements LDAIClient {
     return interpolator.interpolate(template, variables, context);
   }
 
-  private static LDLogger defaultLogger() {
-    LDLogAdapter adapter;
-    try {
-      Class.forName("org.slf4j.LoggerFactory");
-      adapter = LDSLF4J.adapter();
-    } catch (ClassNotFoundException e) {
-      adapter = Logs.toConsole();
-    }
-    return LDLogger.withAdapter(adapter, "LaunchDarkly.AI");
-  }
 }
