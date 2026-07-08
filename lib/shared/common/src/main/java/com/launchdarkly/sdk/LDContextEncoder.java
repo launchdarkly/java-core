@@ -37,7 +37,6 @@ public final class LDContextEncoder {
     if (context.isMultiple()) {
       Map<String, Object> map = new HashMap<>();
       map.put("kind", "multi");
-      map.put("key", context.getFullyQualifiedKey());
       int count = context.getIndividualContextCount();
       for (int i = 0; i < count; i++) {
         LDContext individual = context.getIndividualContext(i);
@@ -47,6 +46,8 @@ public final class LDContextEncoder {
           map.put(individual.getKind().toString(), encodeSingle(individual, false));
         }
       }
+      // Written after the loop so it always wins, even if a member kind is named "key".
+      map.put("key", context.getFullyQualifiedKey());
       return map;
     }
     return encodeSingle(context, true);

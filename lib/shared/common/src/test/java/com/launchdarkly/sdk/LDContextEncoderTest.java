@@ -2,6 +2,7 @@ package com.launchdarkly.sdk;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasEntry;
+import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
@@ -186,6 +187,39 @@ public class LDContextEncoderTest extends BaseTest {
     Map<String, Object> result = LDContextEncoder.encode(context);
     assertThat(result.get("kind"), is((Object) "device"));
     assertThat(result.get("key"), is((Object) "device-123"));
+  }
+
+  @Test
+  public void multiKindWithKeyKindContextPreservesFQK() {
+    // "key"-kind member is last in the loop — FQK write after loop must still win.
+    LDContext multi = LDContext.createMulti(
+        LDContext.builder("user-key").build(),
+        LDContext.builder(ContextKind.of("key"), "key-key").build());
+    Map<String, Object> result = LDContextEncoder.encode(multi);
+    assertThat(result.get("key"), instanceOf(String.class));
+    assertThat(result.get("key"), is((Object) multi.getFullyQualifiedKey()));
+  }
+
+  @Test
+  public void multiKindWithKeyKindFirstPreservesFQK() {
+    // "key"-kind member is first in the loop — ordering must not affect the outcome.
+    LDContext multi = LDContext.createMulti(
+        LDContext.builder(ContextKind.of("key"), "key-key").build(),
+        LDContext.builder("user-key").build());
+    Map<String, Object> result = LDContextEncoder.encode(multi);
+    assertThat(result.get("key"), instanceOf(String.class));
+    assertThat(result.get("key"), is((Object) multi.getFullyQualifiedKey()));
+  }
+
+  @Test
+  public void multiKindWithKeyKindMemberDataIsOverwrittenByFQK() {
+    // Documents the known trade-off: the "key"-kind nested context is not accessible in the
+    // output because its map entry is overwritten by the FQK string.
+    LDContext multi = LDContext.createMulti(
+        LDContext.builder("user-key").build(),
+        LDContext.builder(ContextKind.of("key"), "key-key").name("ShouldNotAppear").build());
+    Map<String, Object> result = LDContextEncoder.encode(multi);
+    assertThat(result.get("key"), instanceOf(String.class));
   }
 
   @Test
