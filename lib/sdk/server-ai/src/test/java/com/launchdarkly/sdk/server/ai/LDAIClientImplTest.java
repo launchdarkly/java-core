@@ -29,6 +29,7 @@ import com.launchdarkly.sdk.ObjectBuilder;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Mode;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Message;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Model;
+import com.launchdarkly.sdk.server.ai.internal.AISdkInfo;
 import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
 
 import java.util.ArrayList;
@@ -70,9 +71,9 @@ public class LDAIClientImplTest {
   @Test
   public void constructorEmitsSdkInfoEvent() {
     LDValue expected = LDValue.buildObject()
-        .put("aiSdkName", "launchdarkly-java-server-sdk-ai")
-        .put("aiSdkVersion", "0.1.0")
-        .put("aiSdkLanguage", "java")
+        .put("aiSdkName", AISdkInfo.NAME)
+        .put("aiSdkVersion", AISdkInfo.VERSION)
+        .put("aiSdkLanguage", AISdkInfo.LANGUAGE)
         .build();
     verify(client).trackMetric(eq("$ld:ai:sdk:info"), any(LDContext.class), eq(expected), eq(1.0));
   }
