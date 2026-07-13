@@ -2,6 +2,13 @@
 
 All notable changes to the project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [2.5.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-common-2.4.0...launchdarkly-java-sdk-common-2.5.0) (2026-07-13)
+
+
+### Features
+
+* add LDValueConverter and LDContextEncoder to common ([#187](https://github.com/launchdarkly/java-core/issues/187)) ([9173763](https://github.com/launchdarkly/java-core/commit/9173763fbff89fb25051542c992afdecb65775e2))
+
 ## [2.4.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-common-2.3.0...launchdarkly-java-sdk-common-2.4.0) (2026-02-26)
 
 
