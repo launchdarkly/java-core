@@ -26,7 +26,7 @@ public final class AISdkInfo {
    * packaged jar.
    */
   // x-release-please-start-version
-  public static final String VERSION = "0.1.0";
+  public static final String VERSION = "0.2.0";
   // x-release-please-end
 
   private AISdkInfo() {
