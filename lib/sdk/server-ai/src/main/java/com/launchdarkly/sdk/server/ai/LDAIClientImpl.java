@@ -51,6 +51,9 @@ public final class LDAIClientImpl implements LDAIClient {
   private static final String TRACK_USAGE_AGENT_CONFIG = "$ld:ai:usage:agent-config";
   private static final String TRACK_USAGE_AGENT_CONFIGS = "$ld:ai:usage:agent-configs";
   private static final String TRACK_USAGE_JUDGE_CONFIG = "$ld:ai:usage:judge-config";
+  private static final String TRACK_USAGE_COMPLETION_CONFIG_TEMPLATE = "$ld:ai:usage:completion-config-template";
+  private static final String TRACK_USAGE_AGENT_CONFIG_TEMPLATE = "$ld:ai:usage:agent-config-template";
+  private static final String TRACK_USAGE_JUDGE_CONFIG_TEMPLATE = "$ld:ai:usage:judge-config-template";
   private static final String TRACK_USAGE_AGENT_GRAPH = "$ld:ai:usage:agent-graph";
 
   private static final LDContext INIT_TRACK_CONTEXT = LDContext
@@ -118,7 +121,7 @@ public final class LDAIClientImpl implements LDAIClient {
     client.trackMetric(TRACK_USAGE_COMPLETION_CONFIG, context, LDValue.of(key), 1);
     AICompletionConfigDefault effectiveDefault =
         defaultValue != null ? defaultValue : AICompletionConfigDefault.disabled();
-    return (AICompletionConfig) evaluate(key, context, effectiveDefault, Mode.COMPLETION, variables);
+    return (AICompletionConfig) evaluate(key, context, effectiveDefault, Mode.COMPLETION, variables, true);
   }
 
   @Override
@@ -166,7 +169,40 @@ public final class LDAIClientImpl implements LDAIClient {
     client.trackMetric(TRACK_USAGE_JUDGE_CONFIG, context, LDValue.of(key), 1);
     AIJudgeConfigDefault effectiveDefault =
         defaultValue != null ? defaultValue : AIJudgeConfigDefault.disabled();
-    return (AIJudgeConfig) evaluate(key, context, effectiveDefault, Mode.JUDGE, variables);
+    return (AIJudgeConfig) evaluate(key, context, effectiveDefault, Mode.JUDGE, variables, true);
+  }
+
+  @Override
+  public AICompletionConfig completionConfigTemplate(
+      String key,
+      LDContext context,
+      AICompletionConfigDefault defaultValue) {
+    client.trackMetric(TRACK_USAGE_COMPLETION_CONFIG_TEMPLATE, context, LDValue.of(key), 1);
+    AICompletionConfigDefault effectiveDefault =
+        defaultValue != null ? defaultValue : AICompletionConfigDefault.disabled();
+    return (AICompletionConfig) evaluate(key, context, effectiveDefault, Mode.COMPLETION, null, false);
+  }
+
+  @Override
+  public AIAgentConfig agentConfigTemplate(
+      String key,
+      LDContext context,
+      AIAgentConfigDefault defaultValue) {
+    client.trackMetric(TRACK_USAGE_AGENT_CONFIG_TEMPLATE, context, LDValue.of(key), 1);
+    AIAgentConfigDefault effectiveDefault =
+        defaultValue != null ? defaultValue : AIAgentConfigDefault.disabled();
+    return (AIAgentConfig) evaluate(key, context, effectiveDefault, Mode.AGENT, null, false);
+  }
+
+  @Override
+  public AIJudgeConfig judgeConfigTemplate(
+      String key,
+      LDContext context,
+      AIJudgeConfigDefault defaultValue) {
+    client.trackMetric(TRACK_USAGE_JUDGE_CONFIG_TEMPLATE, context, LDValue.of(key), 1);
+    AIJudgeConfigDefault effectiveDefault =
+        defaultValue != null ? defaultValue : AIJudgeConfigDefault.disabled();
+    return (AIJudgeConfig) evaluate(key, context, effectiveDefault, Mode.JUDGE, null, false);
   }
 
   private AIAgentConfig evaluateAgent(
@@ -179,7 +215,7 @@ public final class LDAIClientImpl implements LDAIClient {
       Map<String, Object> variables, String graphKey) {
     AIAgentConfigDefault effectiveDefault =
         defaultValue != null ? defaultValue : AIAgentConfigDefault.disabled();
-    return (AIAgentConfig) evaluate(key, context, effectiveDefault, Mode.AGENT, variables, graphKey);
+    return (AIAgentConfig) evaluate(key, context, effectiveDefault, Mode.AGENT, variables, true, graphKey);
   }
 
   /**
@@ -192,8 +228,9 @@ public final class LDAIClientImpl implements LDAIClient {
       LDContext context,
       AIConfigDefault defaultValue,
       Mode mode,
-      Map<String, Object> variables) {
-    return evaluate(key, context, defaultValue, mode, variables, null);
+      Map<String, Object> variables,
+      boolean interpolate) {
+    return evaluate(key, context, defaultValue, mode, variables, interpolate, null);
   }
 
   private AIConfig evaluate(
@@ -202,6 +239,7 @@ public final class LDAIClientImpl implements LDAIClient {
       AIConfigDefault defaultValue,
       Mode mode,
       Map<String, Object> variables,
+      boolean interpolate,
       String graphKey) {
     LDValue value = client.jsonValueVariation(key, context, LDValue.ofNull());
 
@@ -209,7 +247,7 @@ public final class LDAIClientImpl implements LDAIClient {
     // flag is absent or cannot be evaluated the base SDK hands back our null sentinel; in that case
     // we return the caller's typed default directly rather than serializing it and parsing it back.
     if (value == null || value.getType() != LDValueType.OBJECT) {
-      return buildConfigFromDefault(key, mode, defaultValue, context, variables, graphKey);
+      return buildConfigFromDefault(key, mode, defaultValue, context, variables, interpolate, graphKey);
     }
 
     AIConfigFlagValue parsed = AIConfigParser.parse(value);
@@ -219,19 +257,10 @@ public final class LDAIClientImpl implements LDAIClient {
       logger.warn(
           "AI Config mode mismatch for {}: expected {}, got {}. Returning default config.",
           key, mode.getWireValue(), flagMode.getWireValue());
-      return buildConfigFromDefault(key, mode, defaultValue, context, variables, graphKey);
+      return buildConfigFromDefault(key, mode, defaultValue, context, variables, interpolate, graphKey);
     }
 
-    return buildConfig(key, mode, parsed, context, variables, graphKey);
-  }
-
-  private AIConfig buildConfig(
-      String key,
-      Mode mode,
-      AIConfigFlagValue parsed,
-      LDContext context,
-      Map<String, Object> variables) {
-    return buildConfig(key, mode, parsed, context, variables, null);
+    return buildConfig(key, mode, parsed, context, variables, interpolate, graphKey);
   }
 
   private AIConfig buildConfig(
@@ -240,6 +269,17 @@ public final class LDAIClientImpl implements LDAIClient {
       AIConfigFlagValue parsed,
       LDContext context,
       Map<String, Object> variables,
+      boolean interpolate) {
+    return buildConfig(key, mode, parsed, context, variables, interpolate, null);
+  }
+
+  private AIConfig buildConfig(
+      String key,
+      Mode mode,
+      AIConfigFlagValue parsed,
+      LDContext context,
+      Map<String, Object> variables,
+      boolean interpolate,
       String graphKey) {
     Supplier<LDAIConfigTracker> factory = trackerFactory(
         key, parsed.getVariationKey(), parsed.getVersion(),
@@ -251,7 +291,8 @@ public final class LDAIClientImpl implements LDAIClient {
             parsed.isEnabled(),
             parsed.getModel(),
             parsed.getProvider(),
-            interpolate(parsed.getInstructions(), variables, context),
+            interpolate ? interpolate(parsed.getInstructions(), variables, context)
+                        : parsed.getInstructions(),
             parsed.getJudgeConfiguration(),
             parsed.getTools(),
             factory,
@@ -262,7 +303,8 @@ public final class LDAIClientImpl implements LDAIClient {
             parsed.isEnabled(),
             parsed.getModel(),
             parsed.getProvider(),
-            interpolateMessages(parsed.getMessages(), variables, context),
+            interpolate ? interpolateMessages(parsed.getMessages(), variables, context)
+                        : parsed.getMessages(),
             parsed.getEvaluationMetricKey(),
             factory);
       case COMPLETION:
@@ -272,7 +314,8 @@ public final class LDAIClientImpl implements LDAIClient {
             parsed.isEnabled(),
             parsed.getModel(),
             parsed.getProvider(),
-            interpolateMessages(parsed.getMessages(), variables, context),
+            interpolate ? interpolateMessages(parsed.getMessages(), variables, context)
+                        : parsed.getMessages(),
             parsed.getJudgeConfiguration(),
             parsed.getTools(),
             factory,
@@ -282,15 +325,17 @@ public final class LDAIClientImpl implements LDAIClient {
 
   /**
    * Builds the typed config straight from the caller-supplied default, used when the flag is absent
-   * or cannot be evaluated. Prompt content is interpolated exactly as it is for an evaluated flag.
+   * or cannot be evaluated. Prompt content is interpolated exactly as it is for an evaluated flag,
+   * unless {@code interpolate} is {@code false} (template mode).
    */
   private AIConfig buildConfigFromDefault(
       String key,
       Mode mode,
       AIConfigDefault defaultValue,
       LDContext context,
-      Map<String, Object> variables) {
-    return buildConfigFromDefault(key, mode, defaultValue, context, variables, null);
+      Map<String, Object> variables,
+      boolean interpolate) {
+    return buildConfigFromDefault(key, mode, defaultValue, context, variables, interpolate, null);
   }
 
   private AIConfig buildConfigFromDefault(
@@ -299,6 +344,7 @@ public final class LDAIClientImpl implements LDAIClient {
       AIConfigDefault defaultValue,
       LDContext context,
       Map<String, Object> variables,
+      boolean interpolate,
       String graphKey) {
     // Default configs still get real trackers — the configKey was requested even if no flag was found.
     // variationKey is null because no flag evaluation occurred.
@@ -311,7 +357,8 @@ public final class LDAIClientImpl implements LDAIClient {
             agent.isEnabled(),
             agent.getModel(),
             agent.getProvider(),
-            interpolate(agent.getInstructions(), variables, context),
+            interpolate ? interpolate(agent.getInstructions(), variables, context)
+                        : agent.getInstructions(),
             agent.getJudgeConfiguration(),
             agent.getTools(),
             factory,
@@ -324,7 +371,8 @@ public final class LDAIClientImpl implements LDAIClient {
             judge.isEnabled(),
             judge.getModel(),
             judge.getProvider(),
-            interpolateMessages(judge.getMessages(), variables, context),
+            interpolate ? interpolateMessages(judge.getMessages(), variables, context)
+                        : judge.getMessages(),
             judge.getEvaluationMetricKey(),
             factory);
       }
@@ -336,7 +384,8 @@ public final class LDAIClientImpl implements LDAIClient {
             completion.isEnabled(),
             completion.getModel(),
             completion.getProvider(),
-            interpolateMessages(completion.getMessages(), variables, context),
+            interpolate ? interpolateMessages(completion.getMessages(), variables, context)
+                        : completion.getMessages(),
             completion.getJudgeConfiguration(),
             completion.getTools(),
             factory,

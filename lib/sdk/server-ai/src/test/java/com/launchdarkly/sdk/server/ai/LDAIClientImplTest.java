@@ -31,6 +31,7 @@ import com.launchdarkly.sdk.ObjectBuilder;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Mode;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Message;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Model;
+import com.launchdarkly.sdk.server.ai.internal.AISdkInfo;
 import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
 
 import java.util.ArrayList;
@@ -72,9 +73,9 @@ public class LDAIClientImplTest {
   @Test
   public void constructorEmitsSdkInfoEvent() {
     LDValue expected = LDValue.buildObject()
-        .put("aiSdkName", "launchdarkly-java-server-sdk-ai")
-        .put("aiSdkVersion", "0.1.0")
-        .put("aiSdkLanguage", "java")
+        .put("aiSdkName", AISdkInfo.NAME)
+        .put("aiSdkVersion", AISdkInfo.VERSION)
+        .put("aiSdkLanguage", AISdkInfo.LANGUAGE)
         .build();
     verify(client).trackMetric(eq("$ld:ai:sdk:info"), any(LDContext.class), eq(expected), eq(1.0));
   }
@@ -294,6 +295,156 @@ public class LDAIClientImplTest {
 
     assertThat(agents.keySet(), containsInAnyOrder("a", "b"));
     verify(client).trackMetric(eq("$ld:ai:usage:agent-configs"), eq(context), eq(LDValue.of(2)), eq(2.0));
+  }
+
+  // ---- Template config methods ----------------------------------------------
+
+  // Tracking events
+
+  @Test
+  public void completionConfigTemplateFiresTemplateUsageEvent() {
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.ofNull());
+    ai.completionConfigTemplate("my-key", context, null);
+    verify(client).trackMetric(
+        eq("$ld:ai:usage:completion-config-template"), eq(context), eq(LDValue.of("my-key")), eq(1.0));
+  }
+
+  @Test
+  public void agentConfigTemplateFiresTemplateUsageEvent() {
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.ofNull());
+    ai.agentConfigTemplate("agent-key", context, null);
+    verify(client).trackMetric(
+        eq("$ld:ai:usage:agent-config-template"), eq(context), eq(LDValue.of("agent-key")), eq(1.0));
+  }
+
+  @Test
+  public void judgeConfigTemplateFiresTemplateUsageEvent() {
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.ofNull());
+    ai.judgeConfigTemplate("judge-key", context, null);
+    verify(client).trackMetric(
+        eq("$ld:ai:usage:judge-config-template"), eq(context), eq(LDValue.of("judge-key")), eq(1.0));
+  }
+
+  // Placeholder preservation
+
+  @Test
+  public void completionConfigTemplatePreservesPlaceholders() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"completion\"},"
+        + "\"messages\":[{\"role\":\"system\",\"content\":\"Hello {{name}}\"}]}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AICompletionConfig config = ai.completionConfigTemplate("key", context, null);
+    assertThat(config.getMessages().get(0).getContent(), is("Hello {{name}}"));
+  }
+
+  @Test
+  public void agentConfigTemplatePreservesPlaceholders() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"agent\"},"
+        + "\"instructions\":\"You research {{topic}}\"}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AIAgentConfig config = ai.agentConfigTemplate("key", context, null);
+    assertThat(config.getInstructions(), is("You research {{topic}}"));
+  }
+
+  @Test
+  public void judgeConfigTemplatePreservesPlaceholders() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"judge\"},"
+        + "\"messages\":[{\"role\":\"user\",\"content\":\"Rate {{response}}\"}]}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AIJudgeConfig config = ai.judgeConfigTemplate("key", context, null);
+    assertThat(config.getMessages().get(0).getContent(), is("Rate {{response}}"));
+  }
+
+  // ldctx non-interpolation
+
+  @Test
+  public void completionConfigTemplateDoesNotInterpolateLdctx() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"completion\"},"
+        + "\"messages\":[{\"role\":\"user\",\"content\":\"{{ldctx.key}}\"}]}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AICompletionConfig config = ai.completionConfigTemplate("key", LDContext.create("ctx-123"), null);
+    assertThat(config.getMessages().get(0).getContent(), is("{{ldctx.key}}"));
+  }
+
+  @Test
+  public void agentConfigTemplateDoesNotInterpolateLdctx() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"agent\"},"
+        + "\"instructions\":\"Hello {{ldctx.key}}\"}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AIAgentConfig config = ai.agentConfigTemplate("key", LDContext.create("ctx-123"), null);
+    assertThat(config.getInstructions(), is("Hello {{ldctx.key}}"));
+  }
+
+  @Test
+  public void judgeConfigTemplateDoesNotInterpolateLdctx() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"judge\"},"
+        + "\"messages\":[{\"role\":\"user\",\"content\":\"{{ldctx.key}}\"}]}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AIJudgeConfig config = ai.judgeConfigTemplate("key", LDContext.create("ctx-123"), null);
+    assertThat(config.getMessages().get(0).getContent(), is("{{ldctx.key}}"));
+  }
+
+  // Null default yields disabled config
+
+  @Test
+  public void completionConfigTemplateNullDefaultYieldsDisabled() {
+    when(client.jsonValueVariation(anyString(), any(), any()))
+        .thenAnswer(inv -> inv.getArgument(2, LDValue.class));
+    AICompletionConfig config = ai.completionConfigTemplate("key", context, null);
+    assertThat(config.isEnabled(), is(false));
+  }
+
+  @Test
+  public void agentConfigTemplateNullDefaultYieldsDisabled() {
+    when(client.jsonValueVariation(anyString(), any(), any()))
+        .thenAnswer(inv -> inv.getArgument(2, LDValue.class));
+    AIAgentConfig config = ai.agentConfigTemplate("key", context, null);
+    assertThat(config.isEnabled(), is(false));
+  }
+
+  @Test
+  public void judgeConfigTemplateNullDefaultYieldsDisabled() {
+    when(client.jsonValueVariation(anyString(), any(), any()))
+        .thenAnswer(inv -> inv.getArgument(2, LDValue.class));
+    AIJudgeConfig config = ai.judgeConfigTemplate("key", context, null);
+    assertThat(config.isEnabled(), is(false));
+  }
+
+  // Tracker non-null
+
+  @Test
+  public void completionConfigTemplateHasTracker() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"completion\"},"
+        + "\"messages\":[{\"role\":\"system\",\"content\":\"Hello {{name}}\"}]}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AICompletionConfig config = ai.completionConfigTemplate("key", context, null);
+    assertThat(config.createTracker(), is(notNullValue()));
+  }
+
+  @Test
+  public void agentConfigTemplateHasTracker() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"agent\"},"
+        + "\"instructions\":\"You research {{topic}}\"}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AIAgentConfig config = ai.agentConfigTemplate("key", context, null);
+    assertThat(config.createTracker(), is(notNullValue()));
+  }
+
+  @Test
+  public void judgeConfigTemplateHasTracker() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"judge\"},"
+        + "\"messages\":[{\"role\":\"user\",\"content\":\"Rate {{response}}\"}]}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AIJudgeConfig config = ai.judgeConfigTemplate("key", context, null);
+    assertThat(config.createTracker(), is(notNullValue()));
   }
 
   private static Map<String, Object> variables() {
