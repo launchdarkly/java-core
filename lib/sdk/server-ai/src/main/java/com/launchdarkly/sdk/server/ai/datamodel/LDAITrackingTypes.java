@@ -599,6 +599,8 @@ public final class LDAITrackingTypes {
     private final int version;
     private final String modelName;
     private final String providerName;
+    private final String modelKey;
+    private final int modelVersion;
     private final String graphKey;
 
     /**
@@ -610,6 +612,8 @@ public final class LDAITrackingTypes {
      * @param version the config version
      * @param modelName the model name, or empty string when unknown
      * @param providerName the provider name, or empty string when unknown
+     * @param modelKey the stable model key, or {@code null} when unknown
+     * @param modelVersion the model version
      * @param graphKey the agent graph key, or {@code null} when not part of a graph
      */
     public TrackData(
@@ -619,6 +623,8 @@ public final class LDAITrackingTypes {
         int version,
         String modelName,
         String providerName,
+        String modelKey,
+        int modelVersion,
         String graphKey) {
       this.runId = Objects.requireNonNull(runId, "runId");
       this.configKey = Objects.requireNonNull(configKey, "configKey");
@@ -626,6 +632,8 @@ public final class LDAITrackingTypes {
       this.version = version;
       this.modelName = modelName == null ? "" : modelName;
       this.providerName = providerName == null ? "" : providerName;
+      this.modelKey = modelKey == null || modelKey.trim().isEmpty() ? null : modelKey;
+      this.modelVersion = modelVersion;
       this.graphKey = graphKey;
     }
 
@@ -684,6 +692,24 @@ public final class LDAITrackingTypes {
     }
 
     /**
+     * Returns the stable model key.
+     *
+     * @return the model key, or {@code null} when unknown
+     */
+    public String getModelKey() {
+      return modelKey;
+    }
+
+    /**
+     * Returns the model version.
+     *
+     * @return the model version
+     */
+    public int getModelVersion() {
+      return modelVersion;
+    }
+
+    /**
      * Returns the agent graph key.
      *
      * @return the graph key, or {@code null} when not part of a graph
@@ -695,7 +721,7 @@ public final class LDAITrackingTypes {
     /**
      * Builds an {@link LDValue} representation of this track data using camelCase keys.
      * <p>
-     * {@code variationKey} and {@code graphKey} are omitted when {@code null}.
+     * {@code variationKey}, {@code modelKey}, and {@code graphKey} are omitted when {@code null}.
      *
      * @return an {@link LDValue} object containing all non-null fields
      */
@@ -705,9 +731,13 @@ public final class LDAITrackingTypes {
           .put("configKey", configKey)
           .put("version", version)
           .put("modelName", modelName)
-          .put("providerName", providerName);
+          .put("providerName", providerName)
+          .put("modelVersion", modelVersion);
       if (variationKey != null) {
         b.put("variationKey", variationKey);
+      }
+      if (modelKey != null) {
+        b.put("modelKey", modelKey);
       }
       if (graphKey != null) {
         b.put("graphKey", graphKey);

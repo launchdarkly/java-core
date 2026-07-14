@@ -214,11 +214,20 @@ public final class LDAIConfigTypes {
    */
   public static final class Model {
     private final String name;
+    private final String modelKey;
+    private final int modelVersion;
     private final Map<String, Object> parameters;
     private final Map<String, Object> custom;
 
-    private Model(String name, Map<String, Object> parameters, Map<String, Object> custom) {
+    private Model(
+        String name,
+        String modelKey,
+        int modelVersion,
+        Map<String, Object> parameters,
+        Map<String, Object> custom) {
       this.name = name;
+      this.modelKey = modelKey;
+      this.modelVersion = modelVersion;
       this.parameters = parameters;
       this.custom = custom;
     }
@@ -230,6 +239,24 @@ public final class LDAIConfigTypes {
      */
     public String getName() {
       return name;
+    }
+
+    /**
+     * Returns the stable key of the model configuration.
+     *
+     * @return the model key, or {@code null} if none was specified
+     */
+    public String getModelKey() {
+      return modelKey;
+    }
+
+    /**
+     * Returns the version of the model configuration.
+     *
+     * @return the model version; defaults to {@code 1}
+     */
+    public int getModelVersion() {
+      return modelVersion;
     }
 
     /**
@@ -290,18 +317,21 @@ public final class LDAIConfigTypes {
       }
       Model other = (Model) o;
       return Objects.equals(name, other.name)
+          && Objects.equals(modelKey, other.modelKey)
+          && modelVersion == other.modelVersion
           && parameters.equals(other.parameters)
           && custom.equals(other.custom);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(name, parameters, custom);
+      return Objects.hash(name, modelKey, modelVersion, parameters, custom);
     }
 
     @Override
     public String toString() {
-      return "Model{name=" + name + ", parameters=" + parameters + ", custom=" + custom + '}';
+      return "Model{name=" + name + ", modelKey=" + modelKey + ", modelVersion=" + modelVersion
+          + ", parameters=" + parameters + ", custom=" + custom + '}';
     }
 
     /**
@@ -309,11 +339,35 @@ public final class LDAIConfigTypes {
      */
     public static final class Builder {
       private final String name;
+      private String modelKey;
+      private int modelVersion = 1;
       private Map<String, Object> parameters;
       private Map<String, Object> custom;
 
       private Builder(String name) {
         this.name = name;
+      }
+
+      /**
+       * Sets the stable key of the model configuration.
+       *
+       * @param modelKey the model key; may be {@code null}
+       * @return this builder
+       */
+      public Builder modelKey(String modelKey) {
+        this.modelKey = modelKey;
+        return this;
+      }
+
+      /**
+       * Sets the version of the model configuration.
+       *
+       * @param modelVersion the model version
+       * @return this builder
+       */
+      public Builder modelVersion(int modelVersion) {
+        this.modelVersion = modelVersion;
+        return this;
       }
 
       /**
@@ -350,7 +404,7 @@ public final class LDAIConfigTypes {
         Map<String, Object> cust = custom == null
             ? Collections.<String, Object>emptyMap()
             : Collections.unmodifiableMap(new HashMap<>(custom));
-        return new Model(name, params, cust);
+        return new Model(name, modelKey, modelVersion, params, cust);
       }
     }
   }

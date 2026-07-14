@@ -80,7 +80,11 @@ public final class AIConfigParser {
     if (model == null || model.getType() != LDValueType.OBJECT) {
       return null;
     }
+    LDValue modelVersion = model.get("modelVersion");
+    int version = modelVersion.getType() == LDValueType.NUMBER ? modelVersion.intValue() : 1;
     return Model.builder(asStringOrNull(model.get("name")))
+        .modelKey(asStringOrNull(model.get("modelKey")))
+        .modelVersion(version)
         .parameters(LDValueConverter.toMap(model.get("parameters")))
         .custom(LDValueConverter.toMap(model.get("custom")))
         .build();

@@ -400,6 +400,8 @@ public final class LDAIClientImpl implements LDAIClient {
       String graphKey) {
     String modelName = model != null && model.getName() != null ? model.getName() : "";
     String providerName = provider != null && provider.getName() != null ? provider.getName() : "";
+    String modelKey = model != null ? model.getModelKey() : null;
+    int modelVersion = model != null ? model.getModelVersion() : 1;
     int ver = version != null ? version : 1;
     return () -> new LDAIConfigTrackerImpl(
         client,
@@ -409,6 +411,8 @@ public final class LDAIClientImpl implements LDAIClient {
         ver,
         modelName,
         providerName,
+        modelKey,
+        modelVersion,
         context,
         graphKey,
         logger);
