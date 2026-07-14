@@ -685,10 +685,14 @@ public class LDAIConfigTrackerImplTest {
 
   @Test
   public void blankModelKeyOmittedFromTrackDataAndPayload() {
-    LDAIConfigTrackerImpl t = makeTracker(VARIATION_KEY, "   ", MODEL_VERSION);
-    assertThat(t.getTrackData().getModelKey(), is(nullValue()));
-    assertThat(t.getTrackData().toLDValue().get("modelKey").isNull(), is(true));
+    for (String blankModelKey : Arrays.asList(null, "", "   ")) {
+      LDAIConfigTrackerImpl blankTracker =
+          makeTracker(VARIATION_KEY, blankModelKey, MODEL_VERSION);
+      assertThat(blankTracker.getTrackData().getModelKey(), is(nullValue()));
+      assertThat(blankTracker.getTrackData().toLDValue().get("modelKey").isNull(), is(true));
+    }
 
+    LDAIConfigTrackerImpl t = makeTracker(VARIATION_KEY, "   ", MODEL_VERSION);
     t.trackSuccess();
     ArgumentCaptor<LDValue> dataCaptor = ArgumentCaptor.forClass(LDValue.class);
     verify(client).trackMetric(eq("$ld:ai:generation:success"), any(), dataCaptor.capture(), anyDouble());
