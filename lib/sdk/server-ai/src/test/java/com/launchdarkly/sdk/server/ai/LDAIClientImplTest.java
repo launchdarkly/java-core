@@ -135,6 +135,34 @@ public class LDAIClientImplTest {
   }
 
   @Test
+  public void completionConfigPropagatesModelMetadataToTracker() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"completion\"},"
+        + "\"model\":{\"name\":\"gpt-4\",\"modelKey\":\"custom-gpt\",\"modelVersion\":7}}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AICompletionConfig config = ai.completionConfig("key", context, null, null);
+
+    assertThat(config.getModel().getModelKey(), is("custom-gpt"));
+    assertThat(config.getModel().getModelVersion(), is(7));
+    assertThat(config.createTracker().getTrackData().getModelKey(), is("custom-gpt"));
+    assertThat(config.createTracker().getTrackData().getModelVersion(), is(7));
+  }
+
+  @Test
+  public void completionConfigDefaultsMissingModelMetadata() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"completion\"},"
+        + "\"model\":{\"name\":\"gpt-4\"}}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AICompletionConfig config = ai.completionConfig("key", context, null, null);
+
+    assertThat(config.getModel().getModelKey(), is(nullValue()));
+    assertThat(config.getModel().getModelVersion(), is(1));
+    assertThat(config.createTracker().getTrackData().getModelKey(), is(nullValue()));
+    assertThat(config.createTracker().getTrackData().getModelVersion(), is(1));
+  }
+
+  @Test
   public void interpolationExposesContextAsLdctx() {
     String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"completion\"},"
         + "\"messages\":[{\"role\":\"user\",\"content\":\"{{ldctx.key}}\"}]}";
