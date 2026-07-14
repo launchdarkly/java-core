@@ -6,6 +6,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
@@ -152,8 +153,16 @@ public class LDAIConfigTrackerImplTest {
 
   @Test
   public void resumptionTokenExcludesModelMetadata() {
+    String token = tracker.getResumptionToken();
+    String decodedJson = new String(
+        java.util.Base64.getUrlDecoder().decode(token), java.nio.charset.StandardCharsets.UTF_8);
+    assertThat(decodedJson, not(containsString("modelKey")));
+    assertThat(decodedJson, not(containsString("modelVersion")));
+
+    // Changing only model metadata must not change the encoded token, since decode() has no
+    // model fields to carry it and encode() never receives them.
     LDAIConfigTrackerImpl other = makeTracker(VARIATION_KEY, "different-model", 99);
-    assertThat(other.getResumptionToken(), is(tracker.getResumptionToken()));
+    assertThat(other.getResumptionToken(), is(token));
   }
 
   @Test

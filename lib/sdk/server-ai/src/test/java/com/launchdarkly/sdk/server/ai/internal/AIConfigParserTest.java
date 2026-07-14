@@ -67,6 +67,10 @@ public class AIConfigParserTest {
         LDValue.parse("{\"model\":{\"modelKey\":3,\"modelVersion\":\"two\"}}"));
     assertThat(wrongType.getModel().getModelKey(), is(nullValue()));
     assertThat(wrongType.getModel().getModelVersion(), is(1));
+
+    AIConfigFlagValue blankKey = AIConfigParser.parse(
+        LDValue.parse("{\"model\":{\"modelKey\":\"   \"}}"));
+    assertThat(blankKey.getModel().getModelKey(), is(nullValue()));
   }
 
   @Test
