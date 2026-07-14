@@ -387,6 +387,7 @@ public class LDAIConfigTrackerImplTest {
         .put("runId", RUN_ID).put("configKey", CONFIG_KEY)
         .put("variationKey", VARIATION_KEY).put("version", VERSION)
         .put("modelName", MODEL_NAME).put("providerName", PROVIDER_NAME)
+        .put("modelKey", MODEL_KEY).put("modelVersion", MODEL_VERSION)
         .put("toolKey", "search")
         .build();
 
@@ -400,6 +401,7 @@ public class LDAIConfigTrackerImplTest {
         .put("runId", RUN_ID).put("configKey", CONFIG_KEY)
         .put("variationKey", VARIATION_KEY).put("version", VERSION)
         .put("modelName", MODEL_NAME).put("providerName", PROVIDER_NAME)
+        .put("modelKey", MODEL_KEY).put("modelVersion", MODEL_VERSION)
         .put("toolKey", "fetch")
         .build();
     verify(client, times(1)).trackMetric(
@@ -434,6 +436,7 @@ public class LDAIConfigTrackerImplTest {
         .put("runId", RUN_ID).put("configKey", CONFIG_KEY)
         .put("variationKey", VARIATION_KEY).put("version", VERSION)
         .put("modelName", MODEL_NAME).put("providerName", PROVIDER_NAME)
+        .put("modelKey", MODEL_KEY).put("modelVersion", MODEL_VERSION)
         .put("judgeConfigKey", "my-judge")
         .build();
 
