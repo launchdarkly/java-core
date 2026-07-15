@@ -21,8 +21,9 @@ public class AIConfigParserTest {
   @Test
   public void parsesFullCompletionConfig() {
     LDValue value = LDValue.parse("{"
-        + "\"_ldMeta\":{\"variationKey\":\"v1\",\"enabled\":true,\"version\":3,\"mode\":\"completion\"},"
-        + "\"model\":{\"name\":\"gpt-4\",\"modelKey\":\"custom-gpt\",\"modelVersion\":7,"
+        + "\"_ldMeta\":{\"variationKey\":\"v1\",\"enabled\":true,\"version\":3,\"mode\":\"completion\","
+        + "\"modelKey\":\"custom-gpt\",\"modelVersion\":7},"
+        + "\"model\":{\"name\":\"gpt-4\","
         + "\"parameters\":{\"temperature\":0.7,\"maxTokens\":100},"
         + "\"custom\":{\"team\":\"core\"}},"
         + "\"provider\":{\"name\":\"openai\"},"
@@ -64,12 +65,12 @@ public class AIConfigParserTest {
     assertThat(missing.getModel().getModelVersion(), is(1));
 
     AIConfigFlagValue wrongType = AIConfigParser.parse(
-        LDValue.parse("{\"model\":{\"modelKey\":3,\"modelVersion\":\"two\"}}"));
+        LDValue.parse("{\"_ldMeta\":{\"modelKey\":3,\"modelVersion\":\"two\"},\"model\":{}}"));
     assertThat(wrongType.getModel().getModelKey(), is(nullValue()));
     assertThat(wrongType.getModel().getModelVersion(), is(1));
 
     AIConfigFlagValue blankKey = AIConfigParser.parse(
-        LDValue.parse("{\"model\":{\"modelKey\":\"   \"}}"));
+        LDValue.parse("{\"_ldMeta\":{\"modelKey\":\"   \"},\"model\":{}}"));
     assertThat(blankKey.getModel().getModelKey(), is(nullValue()));
   }
 

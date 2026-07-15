@@ -42,8 +42,9 @@ public final class AIConfigParser {
       return builder.build();
     }
 
-    parseMeta(value.get("_ldMeta"), builder);
-    builder.model(parseModel(value.get("model")));
+    LDValue meta = value.get("_ldMeta");
+    parseMeta(meta, builder);
+    builder.model(parseModel(value.get("model"), meta));
     builder.provider(parseProvider(value.get("provider")));
     builder.messages(parseMessages(value.get("messages")));
     builder.instructions(asStringOrNull(value.get("instructions")));
@@ -71,19 +72,24 @@ public final class AIConfigParser {
   }
 
   /**
-   * Parses a {@code model} object.
+   * Parses a {@code model} object. {@code modelKey}/{@code modelVersion} live under
+   * {@code _ldMeta} rather than {@code model} itself, to avoid reading as the underlying LLM's
+   * own version (e.g. "GPT-5.4").
    *
    * @param model the model value
+   * @param meta the {@code _ldMeta} value, for modelKey/modelVersion
    * @return a {@link Model}, or {@code null} if the value is not an object
    */
-  static Model parseModel(LDValue model) {
+  static Model parseModel(LDValue model, LDValue meta) {
     if (model == null || model.getType() != LDValueType.OBJECT) {
       return null;
     }
-    LDValue modelVersion = model.get("modelVersion");
+    boolean hasMeta = meta != null && meta.getType() == LDValueType.OBJECT;
+    LDValue modelVersion = hasMeta ? meta.get("modelVersion") : LDValue.ofNull();
     int version = modelVersion.getType() == LDValueType.NUMBER ? modelVersion.intValue() : 1;
+    String modelKey = hasMeta ? asStringOrNull(meta.get("modelKey")) : null;
     return Model.builder(asStringOrNull(model.get("name")))
-        .modelKey(trimToNull(asStringOrNull(model.get("modelKey"))))
+        .modelKey(trimToNull(modelKey))
         .modelVersion(version)
         .parameters(LDValueConverter.toMap(model.get("parameters")))
         .custom(LDValueConverter.toMap(model.get("custom")))

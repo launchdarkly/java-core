@@ -136,8 +136,9 @@ public class LDAIClientImplTest {
 
   @Test
   public void completionConfigPropagatesModelMetadataToTracker() {
-    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"completion\"},"
-        + "\"model\":{\"name\":\"gpt-4\",\"modelKey\":\"custom-gpt\",\"modelVersion\":7}}";
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"completion\","
+        + "\"modelKey\":\"custom-gpt\",\"modelVersion\":7},"
+        + "\"model\":{\"name\":\"gpt-4\"}}";
     when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
 
     AICompletionConfig config = ai.completionConfig("key", context, null, null);
