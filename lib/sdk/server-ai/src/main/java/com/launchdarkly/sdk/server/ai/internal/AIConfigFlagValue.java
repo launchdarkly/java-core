@@ -37,6 +37,8 @@ public final class AIConfigFlagValue {
   private final Map<String, Tool> tools;
   private final JudgeConfiguration judgeConfiguration;
   private final String evaluationMetricKey;
+  private final String modelKey;
+  private final Integer modelVersion;
 
   private AIConfigFlagValue(Builder b) {
     this.enabled = b.enabled;
@@ -50,6 +52,8 @@ public final class AIConfigFlagValue {
     this.tools = b.tools == null ? null : Collections.unmodifiableMap(b.tools);
     this.judgeConfiguration = b.judgeConfiguration;
     this.evaluationMetricKey = b.evaluationMetricKey;
+    this.modelKey = b.modelKey;
+    this.modelVersion = b.modelVersion;
   }
 
   /**
@@ -95,6 +99,26 @@ public final class AIConfigFlagValue {
    */
   public Mode getMode() {
     return mode;
+  }
+
+  /**
+   * Returns the {@code _ldMeta.modelKey}. Lives under {@code _ldMeta} rather than {@code model}
+   * itself, to avoid {@code modelVersion} reading as the underlying LLM's own version
+   * (e.g. "GPT-5.4").
+   *
+   * @return the model key, or {@code null} if absent
+   */
+  public String getModelKey() {
+    return modelKey;
+  }
+
+  /**
+   * Returns the {@code _ldMeta.modelVersion}.
+   *
+   * @return the model version, or {@code null} if absent
+   */
+  public Integer getModelVersion() {
+    return modelVersion;
   }
 
   /**
@@ -184,6 +208,8 @@ public final class AIConfigFlagValue {
     private Map<String, Tool> tools;
     private JudgeConfiguration judgeConfiguration;
     private String evaluationMetricKey;
+    private String modelKey;
+    private Integer modelVersion;
 
     private Builder() {
     }
@@ -219,6 +245,48 @@ public final class AIConfigFlagValue {
     public Builder version(Integer v) {
       this.version = v;
       return this;
+    }
+
+    /**
+     * Sets the model key, parsed from {@code _ldMeta.modelKey}.
+     *
+     * @param v the model key
+     * @return this builder
+     */
+    public Builder modelKey(String v) {
+      this.modelKey = v;
+      return this;
+    }
+
+    /**
+     * Sets the model version, parsed from {@code _ldMeta.modelVersion}.
+     *
+     * @param v the model version
+     * @return this builder
+     */
+    public Builder modelVersion(Integer v) {
+      this.modelVersion = v;
+      return this;
+    }
+
+    /**
+     * Returns the model key set so far, for {@link AIConfigParser} to pass into
+     * {@link AIConfigParser#parseModel} alongside the {@code model} value.
+     *
+     * @return the model key, or {@code null} if unset
+     */
+    String getModelKey() {
+      return modelKey;
+    }
+
+    /**
+     * Returns the model version set so far, for {@link AIConfigParser} to pass into
+     * {@link AIConfigParser#parseModel} alongside the {@code model} value.
+     *
+     * @return the model version, or {@code null} if unset
+     */
+    Integer getModelVersion() {
+      return modelVersion;
     }
 
     /**

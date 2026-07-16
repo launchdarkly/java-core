@@ -43,8 +43,9 @@ public final class AIConfigParser {
     }
 
     LDValue meta = value.get("_ldMeta");
-    ModelIdentity modelIdentity = parseMeta(meta, builder);
-    builder.model(parseModel(value.get("model"), modelIdentity.modelKey, modelIdentity.modelVersion));
+    parseMeta(meta, builder);
+    Integer modelVersion = builder.getModelVersion();
+    builder.model(parseModel(value.get("model"), builder.getModelKey(), modelVersion == null ? 1 : modelVersion));
     builder.provider(parseProvider(value.get("provider")));
     builder.messages(parseMessages(value.get("messages")));
     builder.instructions(asStringOrNull(value.get("instructions")));
@@ -55,25 +56,14 @@ public final class AIConfigParser {
     return builder.build();
   }
 
-  /**
-   * Holds {@code modelKey}/{@code modelVersion} as parsed from {@code _ldMeta} by
-   * {@link #parseMeta}, for {@link #parseModel} to attach to the {@link Model} it builds.
-   * These fields live under {@code _ldMeta} rather than {@code model} itself, to avoid
-   * {@code modelVersion} reading as the underlying LLM's own version (e.g. "GPT-5.4").
-   */
-  private static final class ModelIdentity {
-    final String modelKey;
-    final int modelVersion;
-
-    ModelIdentity(String modelKey, int modelVersion) {
-      this.modelKey = modelKey;
-      this.modelVersion = modelVersion;
-    }
-  }
-
-  private static ModelIdentity parseMeta(LDValue meta, AIConfigFlagValue.Builder builder) {
+  // modelKey/modelVersion are parsed here alongside the rest of _ldMeta (enabled, variationKey,
+  // version, mode) rather than inside parseModel, so they're stored the same way as every other
+  // _ldMeta field instead of a one-off path. They also live under _ldMeta rather than model
+  // itself, to avoid modelVersion reading as the underlying LLM's own version (e.g. "GPT-5.4").
+  private static void parseMeta(LDValue meta, AIConfigFlagValue.Builder builder) {
     if (meta == null || meta.getType() != LDValueType.OBJECT) {
-      return new ModelIdentity(null, 1);
+      builder.modelVersion(1);
+      return;
     }
     LDValue enabled = meta.get("enabled");
     if (enabled.getType() == LDValueType.BOOLEAN) {
@@ -87,9 +77,8 @@ public final class AIConfigParser {
     builder.mode(Mode.fromWireValue(asStringOrNull(meta.get("mode"))));
 
     LDValue modelVersion = meta.get("modelVersion");
-    int parsedModelVersion = modelVersion.getType() == LDValueType.NUMBER ? modelVersion.intValue() : 1;
-    String modelKey = trimToNull(asStringOrNull(meta.get("modelKey")));
-    return new ModelIdentity(modelKey, parsedModelVersion);
+    builder.modelVersion(modelVersion.getType() == LDValueType.NUMBER ? modelVersion.intValue() : 1);
+    builder.modelKey(trimToNull(asStringOrNull(meta.get("modelKey"))));
   }
 
   /**
