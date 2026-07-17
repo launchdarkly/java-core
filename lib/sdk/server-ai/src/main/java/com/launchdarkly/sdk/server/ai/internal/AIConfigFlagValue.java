@@ -270,26 +270,6 @@ public final class AIConfigFlagValue {
     }
 
     /**
-     * Returns the model key set so far, for {@link AIConfigParser} to pass into
-     * {@link AIConfigParser#parseModel} alongside the {@code model} value.
-     *
-     * @return the model key, or {@code null} if unset
-     */
-    String getModelKey() {
-      return modelKey;
-    }
-
-    /**
-     * Returns the model version set so far, for {@link AIConfigParser} to pass into
-     * {@link AIConfigParser#parseModel} alongside the {@code model} value.
-     *
-     * @return the model version, or {@code null} if unset
-     */
-    Integer getModelVersion() {
-      return modelVersion;
-    }
-
-    /**
      * Sets the mode.
      *
      * @param v the mode

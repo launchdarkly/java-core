@@ -41,8 +41,8 @@ public class AIConfigParserTest {
     assertThat(parsed.getVersion(), is(3));
     assertThat(parsed.getMode(), is(Mode.COMPLETION));
     assertThat(parsed.getModel().getName(), is("gpt-4"));
-    assertThat(parsed.getModel().getModelKey(), is("custom-gpt"));
-    assertThat(parsed.getModel().getModelVersion(), is(7));
+    assertThat(parsed.getModelKey(), is("custom-gpt"));
+    assertThat(parsed.getModelVersion(), is(7));
     assertThat(parsed.getModel().getParameter("temperature"), is((Object) 0.7));
     assertThat(parsed.getModel().getParameter("maxTokens"), is((Object) 100L));
     assertThat(parsed.getModel().getCustom("team"), is((Object) "core"));
@@ -61,17 +61,17 @@ public class AIConfigParserTest {
   public void modelMetadataDefaultsWhenMissingOrWrongType() {
     AIConfigFlagValue missing = AIConfigParser.parse(
         LDValue.parse("{\"model\":{\"name\":\"gpt-4\"}}"));
-    assertThat(missing.getModel().getModelKey(), is(nullValue()));
-    assertThat(missing.getModel().getModelVersion(), is(1));
+    assertThat(missing.getModelKey(), is(nullValue()));
+    assertThat(missing.getModelVersion(), is(1));
 
     AIConfigFlagValue wrongType = AIConfigParser.parse(
         LDValue.parse("{\"_ldMeta\":{\"modelKey\":3,\"modelVersion\":\"two\"},\"model\":{}}"));
-    assertThat(wrongType.getModel().getModelKey(), is(nullValue()));
-    assertThat(wrongType.getModel().getModelVersion(), is(1));
+    assertThat(wrongType.getModelKey(), is(nullValue()));
+    assertThat(wrongType.getModelVersion(), is(1));
 
     AIConfigFlagValue blankKey = AIConfigParser.parse(
         LDValue.parse("{\"_ldMeta\":{\"modelKey\":\"   \"},\"model\":{}}"));
-    assertThat(blankKey.getModel().getModelKey(), is(nullValue()));
+    assertThat(blankKey.getModelKey(), is(nullValue()));
   }
 
   @Test

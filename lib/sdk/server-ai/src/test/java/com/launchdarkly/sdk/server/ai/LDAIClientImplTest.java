@@ -143,8 +143,8 @@ public class LDAIClientImplTest {
 
     AICompletionConfig config = ai.completionConfig("key", context, null, null);
 
-    assertThat(config.getModel().getModelKey(), is("custom-gpt"));
-    assertThat(config.getModel().getModelVersion(), is(7));
+    // modelKey/modelVersion are intentionally not exposed on Model; they surface only via the
+    // tracker's stamped event data, mirroring variationKey/version.
     assertThat(config.createTracker().getTrackData().getModelKey(), is("custom-gpt"));
     assertThat(config.createTracker().getTrackData().getModelVersion(), is(7));
   }
@@ -157,8 +157,6 @@ public class LDAIClientImplTest {
 
     AICompletionConfig config = ai.completionConfig("key", context, null, null);
 
-    assertThat(config.getModel().getModelKey(), is(nullValue()));
-    assertThat(config.getModel().getModelVersion(), is(1));
     assertThat(config.createTracker().getTrackData().getModelKey(), is(nullValue()));
     assertThat(config.createTracker().getTrackData().getModelVersion(), is(1));
   }

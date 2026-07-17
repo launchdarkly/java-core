@@ -44,8 +44,7 @@ public final class AIConfigParser {
 
     LDValue meta = value.get("_ldMeta");
     parseMeta(meta, builder);
-    Integer modelVersion = builder.getModelVersion();
-    builder.model(parseModel(value.get("model"), builder.getModelKey(), modelVersion == null ? 1 : modelVersion));
+    builder.model(parseModel(value.get("model")));
     builder.provider(parseProvider(value.get("provider")));
     builder.messages(parseMessages(value.get("messages")));
     builder.instructions(asStringOrNull(value.get("instructions")));
@@ -82,21 +81,16 @@ public final class AIConfigParser {
   }
 
   /**
-   * Parses a {@code model} object, attaching the {@code modelKey}/{@code modelVersion} already
-   * parsed from {@code _ldMeta} by {@link #parseMeta}.
+   * Parses a {@code model} object.
    *
    * @param model the model value
-   * @param modelKey the model key parsed from {@code _ldMeta}, or {@code null}
-   * @param modelVersion the model version parsed from {@code _ldMeta}, defaulting to 1
    * @return a {@link Model}, or {@code null} if the value is not an object
    */
-  static Model parseModel(LDValue model, String modelKey, int modelVersion) {
+  static Model parseModel(LDValue model) {
     if (model == null || model.getType() != LDValueType.OBJECT) {
       return null;
     }
     return Model.builder(asStringOrNull(model.get("name")))
-        .modelKey(modelKey)
-        .modelVersion(modelVersion)
         .parameters(LDValueConverter.toMap(model.get("parameters")))
         .custom(LDValueConverter.toMap(model.get("custom")))
         .build();
