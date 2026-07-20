@@ -42,6 +42,7 @@ public class TestService {
     "strongly-typed",
     "tags",
     "server-side-polling",
+    "polling-gzip",
     "fdv1-fallback",
     "instance-id"
   };
