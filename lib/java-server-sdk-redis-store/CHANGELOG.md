@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK Redis integration will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [3.2.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-redis-store-3.1.1...launchdarkly-java-server-sdk-redis-store-3.2.0) (2026-06-29)
+
+
+### Features
+
+* expose sslSocketFactory, sslParameters, and hostnameVerifier on RedisStoreBuilder ([#182](https://github.com/launchdarkly/java-core/issues/182)) ([d4faba1](https://github.com/launchdarkly/java-core/commit/d4faba1874b2cfd231d7ba898017b9bb394a7748))
+
 ## [3.1.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-redis-store-3.1.0...launchdarkly-java-server-sdk-redis-store-3.1.1) (2026-04-24)
 
 

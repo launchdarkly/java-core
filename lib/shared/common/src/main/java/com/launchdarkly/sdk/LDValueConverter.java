@@ -1,7 +1,4 @@
-package com.launchdarkly.sdk.server.ai.internal;
-
-import com.launchdarkly.sdk.LDValue;
-import com.launchdarkly.sdk.LDValueType;
+package com.launchdarkly.sdk;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -14,9 +11,6 @@ import java.util.Map;
  * ({@link String}, {@link Long}, {@link Double}, {@link Boolean}, {@link List}, {@link Map}, or
  * {@code null}).
  * <p>
- * This is used to expose AI Config {@code model.parameters} / {@code model.custom} and tool
- * parameters to callers without leaking the {@link LDValue} type onto the public surface.
- * <p>
  * Conversion is defensive: it never throws on malformed or pathological input. Numbers are decoded
  * to {@link Long} when they are mathematically integral and within the IEEE-754 exact-integer range
  * ({@code |value| <= 2^53}); otherwise they are decoded to {@link Double}. Whole numbers outside
@@ -24,7 +18,8 @@ import java.util.Map;
  * Conversion depth is capped (see {@link #MAX_DEPTH}); values nested more deeply than the cap are
  * dropped (rendered as {@code null}) to bound stack usage on adversarial input.
  * <p>
- * This class is an internal implementation detail and is not part of the supported API.
+ * Object fields are stored in a {@link LinkedHashMap} to preserve insertion order, and all
+ * returned collections are unmodifiable.
  */
 public final class LDValueConverter {
   /**

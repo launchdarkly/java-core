@@ -10,9 +10,11 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -20,16 +22,20 @@ import com.launchdarkly.logging.LDLogLevel;
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.logging.LogCapture;
 import com.launchdarkly.logging.Logs;
+import com.launchdarkly.sdk.ArrayBuilder;
 import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
+import com.launchdarkly.sdk.ObjectBuilder;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Mode;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Message;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Model;
+import com.launchdarkly.sdk.server.ai.internal.AISdkInfo;
 import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -65,9 +71,9 @@ public class LDAIClientImplTest {
   @Test
   public void constructorEmitsSdkInfoEvent() {
     LDValue expected = LDValue.buildObject()
-        .put("aiSdkName", "launchdarkly-java-server-sdk-ai")
-        .put("aiSdkVersion", "0.1.0")
-        .put("aiSdkLanguage", "java")
+        .put("aiSdkName", AISdkInfo.NAME)
+        .put("aiSdkVersion", AISdkInfo.VERSION)
+        .put("aiSdkLanguage", AISdkInfo.LANGUAGE)
         .build();
     verify(client).trackMetric(eq("$ld:ai:sdk:info"), any(LDContext.class), eq(expected), eq(1.0));
   }
@@ -289,7 +295,354 @@ public class LDAIClientImplTest {
     verify(client).trackMetric(eq("$ld:ai:usage:agent-configs"), eq(context), eq(LDValue.of(2)), eq(2.0));
   }
 
+  // ---- Template config methods ----------------------------------------------
+
+  // Tracking events
+
+  @Test
+  public void completionConfigTemplateFiresTemplateUsageEvent() {
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.ofNull());
+    ai.completionConfigTemplate("my-key", context, null);
+    verify(client).trackMetric(
+        eq("$ld:ai:usage:completion-config-template"), eq(context), eq(LDValue.of("my-key")), eq(1.0));
+  }
+
+  @Test
+  public void agentConfigTemplateFiresTemplateUsageEvent() {
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.ofNull());
+    ai.agentConfigTemplate("agent-key", context, null);
+    verify(client).trackMetric(
+        eq("$ld:ai:usage:agent-config-template"), eq(context), eq(LDValue.of("agent-key")), eq(1.0));
+  }
+
+  @Test
+  public void judgeConfigTemplateFiresTemplateUsageEvent() {
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.ofNull());
+    ai.judgeConfigTemplate("judge-key", context, null);
+    verify(client).trackMetric(
+        eq("$ld:ai:usage:judge-config-template"), eq(context), eq(LDValue.of("judge-key")), eq(1.0));
+  }
+
+  // Placeholder preservation
+
+  @Test
+  public void completionConfigTemplatePreservesPlaceholders() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"completion\"},"
+        + "\"messages\":[{\"role\":\"system\",\"content\":\"Hello {{name}}\"}]}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AICompletionConfig config = ai.completionConfigTemplate("key", context, null);
+    assertThat(config.getMessages().get(0).getContent(), is("Hello {{name}}"));
+  }
+
+  @Test
+  public void agentConfigTemplatePreservesPlaceholders() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"agent\"},"
+        + "\"instructions\":\"You research {{topic}}\"}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AIAgentConfig config = ai.agentConfigTemplate("key", context, null);
+    assertThat(config.getInstructions(), is("You research {{topic}}"));
+  }
+
+  @Test
+  public void judgeConfigTemplatePreservesPlaceholders() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"judge\"},"
+        + "\"messages\":[{\"role\":\"user\",\"content\":\"Rate {{response}}\"}]}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AIJudgeConfig config = ai.judgeConfigTemplate("key", context, null);
+    assertThat(config.getMessages().get(0).getContent(), is("Rate {{response}}"));
+  }
+
+  // ldctx non-interpolation
+
+  @Test
+  public void completionConfigTemplateDoesNotInterpolateLdctx() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"completion\"},"
+        + "\"messages\":[{\"role\":\"user\",\"content\":\"{{ldctx.key}}\"}]}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AICompletionConfig config = ai.completionConfigTemplate("key", LDContext.create("ctx-123"), null);
+    assertThat(config.getMessages().get(0).getContent(), is("{{ldctx.key}}"));
+  }
+
+  @Test
+  public void agentConfigTemplateDoesNotInterpolateLdctx() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"agent\"},"
+        + "\"instructions\":\"Hello {{ldctx.key}}\"}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AIAgentConfig config = ai.agentConfigTemplate("key", LDContext.create("ctx-123"), null);
+    assertThat(config.getInstructions(), is("Hello {{ldctx.key}}"));
+  }
+
+  @Test
+  public void judgeConfigTemplateDoesNotInterpolateLdctx() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"judge\"},"
+        + "\"messages\":[{\"role\":\"user\",\"content\":\"{{ldctx.key}}\"}]}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AIJudgeConfig config = ai.judgeConfigTemplate("key", LDContext.create("ctx-123"), null);
+    assertThat(config.getMessages().get(0).getContent(), is("{{ldctx.key}}"));
+  }
+
+  // Null default yields disabled config
+
+  @Test
+  public void completionConfigTemplateNullDefaultYieldsDisabled() {
+    when(client.jsonValueVariation(anyString(), any(), any()))
+        .thenAnswer(inv -> inv.getArgument(2, LDValue.class));
+    AICompletionConfig config = ai.completionConfigTemplate("key", context, null);
+    assertThat(config.isEnabled(), is(false));
+  }
+
+  @Test
+  public void agentConfigTemplateNullDefaultYieldsDisabled() {
+    when(client.jsonValueVariation(anyString(), any(), any()))
+        .thenAnswer(inv -> inv.getArgument(2, LDValue.class));
+    AIAgentConfig config = ai.agentConfigTemplate("key", context, null);
+    assertThat(config.isEnabled(), is(false));
+  }
+
+  @Test
+  public void judgeConfigTemplateNullDefaultYieldsDisabled() {
+    when(client.jsonValueVariation(anyString(), any(), any()))
+        .thenAnswer(inv -> inv.getArgument(2, LDValue.class));
+    AIJudgeConfig config = ai.judgeConfigTemplate("key", context, null);
+    assertThat(config.isEnabled(), is(false));
+  }
+
+  // Tracker non-null
+
+  @Test
+  public void completionConfigTemplateHasTracker() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"completion\"},"
+        + "\"messages\":[{\"role\":\"system\",\"content\":\"Hello {{name}}\"}]}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AICompletionConfig config = ai.completionConfigTemplate("key", context, null);
+    assertThat(config.createTracker(), is(notNullValue()));
+  }
+
+  @Test
+  public void agentConfigTemplateHasTracker() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"agent\"},"
+        + "\"instructions\":\"You research {{topic}}\"}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AIAgentConfig config = ai.agentConfigTemplate("key", context, null);
+    assertThat(config.createTracker(), is(notNullValue()));
+  }
+
+  @Test
+  public void judgeConfigTemplateHasTracker() {
+    String json = "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"judge\"},"
+        + "\"messages\":[{\"role\":\"user\",\"content\":\"Rate {{response}}\"}]}";
+    when(client.jsonValueVariation(anyString(), any(), any())).thenReturn(LDValue.parse(json));
+
+    AIJudgeConfig config = ai.judgeConfigTemplate("key", context, null);
+    assertThat(config.createTracker(), is(notNullValue()));
+  }
+
   private static Map<String, Object> variables() {
     return new HashMap<>();
+  }
+
+  // ---- agentGraph -----------------------------------------------------------
+
+  private static LDValue graphFlagValue(String root, boolean enabled, String variationKey,
+      String... edges) {
+    ObjectBuilder edgesObj = LDValue.buildObject();
+    // edges are pairs: [source, target, source, target, ...]
+    Map<String, ArrayBuilder> edgeMap = new LinkedHashMap<>();
+    for (int i = 0; i + 1 < edges.length; i += 2) {
+      String src = edges[i], tgt = edges[i + 1];
+      if (!edgeMap.containsKey(src)) {
+        edgeMap.put(src, LDValue.buildArray());
+      }
+      edgeMap.get(src).add(LDValue.buildObject().put("key", tgt).build());
+    }
+    for (Map.Entry<String, ArrayBuilder> e : edgeMap.entrySet()) {
+      edgesObj.put(e.getKey(), e.getValue().build());
+    }
+    ObjectBuilder meta = LDValue.buildObject()
+        .put("enabled", enabled)
+        .put("version", 1);
+    if (variationKey != null) {
+      meta.put("variationKey", variationKey);
+    }
+    return LDValue.buildObject()
+        .put("root", root)
+        .put("edges", edgesObj.build())
+        .put("_ldMeta", meta.build())
+        .build();
+  }
+
+  private static LDValue agentFlagValue(boolean enabled) {
+    return LDValue.parse("{\"_ldMeta\":{\"enabled\":" + enabled + ",\"mode\":\"agent\"},"
+        + "\"instructions\":\"test instructions\"}");
+  }
+
+  @Test(expected = NullPointerException.class)
+  public void agentGraphThrowsOnNullGraphKey() {
+    ai.agentGraph(null, context, null);
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void agentGraphThrowsOnBlankGraphKey() {
+    ai.agentGraph("  ", context, null);
+  }
+
+  @Test
+  public void agentGraphFiresUsageEvent() {
+    when(client.jsonValueVariation(eq("g"), any(), any()))
+        .thenReturn(graphFlagValue("node-a", true, "v1", "node-a", "node-b"));
+    when(client.jsonValueVariation(eq("node-a"), any(), any())).thenReturn(agentFlagValue(true));
+    when(client.jsonValueVariation(eq("node-b"), any(), any())).thenReturn(agentFlagValue(true));
+
+    ai.agentGraph("g", context, null);
+
+    verify(client).trackMetric(
+        eq("$ld:ai:usage:agent-graph"), eq(context), eq(LDValue.of("g")), eq(1.0));
+  }
+
+  @Test
+  public void agentGraphDoesNotFireNodeLevelUsageEvents() {
+    when(client.jsonValueVariation(eq("g"), any(), any()))
+        .thenReturn(graphFlagValue("node-a", true, null));
+    when(client.jsonValueVariation(eq("node-a"), any(), any())).thenReturn(agentFlagValue(true));
+
+    ai.agentGraph("g", context, null);
+
+    verify(client, never()).trackMetric(eq("$ld:ai:usage:agent-config"), any(), any(), anyDouble());
+  }
+
+  @Test
+  public void agentGraphReturnsEnabledGraphForValidFlag() {
+    when(client.jsonValueVariation(eq("g"), any(), any()))
+        .thenReturn(graphFlagValue("node-a", true, "v1", "node-a", "node-b"));
+    when(client.jsonValueVariation(eq("node-a"), any(), any())).thenReturn(agentFlagValue(true));
+    when(client.jsonValueVariation(eq("node-b"), any(), any())).thenReturn(agentFlagValue(true));
+
+    AgentGraphDefinition graph = ai.agentGraph("g", context, null);
+
+    assertThat(graph.isEnabled(), is(true));
+    assertThat(graph.rootNode(), is(notNullValue()));
+    assertThat(graph.rootNode().getKey(), is("node-a"));
+    assertThat(graph.getNode("node-b"), is(notNullValue()));
+  }
+
+  @Test
+  public void agentGraphReturnsDisabledWhenFlagDisabled() {
+    when(client.jsonValueVariation(eq("g"), any(), any()))
+        .thenReturn(graphFlagValue("node-a", false, null));
+
+    AgentGraphDefinition graph = ai.agentGraph("g", context, null);
+
+    assertThat(graph.isEnabled(), is(false));
+  }
+
+  @Test
+  public void agentGraphReturnsDisabledWhenRootMissing() {
+    when(client.jsonValueVariation(eq("g"), any(), any()))
+        .thenReturn(graphFlagValue("", true, null));
+
+    AgentGraphDefinition graph = ai.agentGraph("g", context, null);
+
+    assertThat(graph.isEnabled(), is(false));
+  }
+
+  @Test
+  public void agentGraphReturnsDisabledWhenUnreachableNode() {
+    // node-a -> node-b, but flag also declares node-c which is unreachable from root
+    LDValue flag = LDValue.buildObject()
+        .put("root", "node-a")
+        .put("edges", LDValue.buildObject()
+            .put("node-a", LDValue.buildArray()
+                .add(LDValue.buildObject().put("key", "node-b").build())
+                .build())
+            .put("node-c", LDValue.buildArray()  // unreachable source
+                .add(LDValue.buildObject().put("key", "node-d").build())
+                .build())
+            .build())
+        .put("_ldMeta", LDValue.buildObject().put("enabled", true).build())
+        .build();
+    when(client.jsonValueVariation(eq("g"), any(), any())).thenReturn(flag);
+
+    AgentGraphDefinition graph = ai.agentGraph("g", context, null);
+
+    assertThat(graph.isEnabled(), is(false));
+  }
+
+  @Test
+  public void agentGraphReturnsDisabledWhenAnyChildConfigDisabled() {
+    when(client.jsonValueVariation(eq("g"), any(), any()))
+        .thenReturn(graphFlagValue("node-a", true, null, "node-a", "node-b"));
+    when(client.jsonValueVariation(eq("node-a"), any(), any())).thenReturn(agentFlagValue(true));
+    when(client.jsonValueVariation(eq("node-b"), any(), any())).thenReturn(agentFlagValue(false));
+
+    AgentGraphDefinition graph = ai.agentGraph("g", context, null);
+
+    assertThat(graph.isEnabled(), is(false));
+  }
+
+  @Test
+  public void agentGraphReturnsDisabledForNonObjectFlagValue() {
+    when(client.jsonValueVariation(eq("g"), any(), any())).thenReturn(LDValue.ofNull());
+
+    AgentGraphDefinition graph = ai.agentGraph("g", context, null);
+
+    assertThat(graph.isEnabled(), is(false));
+  }
+
+  @Test
+  public void agentGraphNoVariablesOverloadCallsThreeArgVersion() {
+    when(client.jsonValueVariation(eq("g"), any(), any()))
+        .thenReturn(graphFlagValue("node-a", true, null));
+    when(client.jsonValueVariation(eq("node-a"), any(), any())).thenReturn(agentFlagValue(true));
+
+    AgentGraphDefinition graph = ai.agentGraph("g", context);
+    assertThat(graph.isEnabled(), is(true));
+  }
+
+  @Test
+  public void agentGraphChildConfigsIncludeGraphKey() {
+    when(client.jsonValueVariation(eq("g"), any(), any()))
+        .thenReturn(graphFlagValue("node-a", true, "var-1"));
+    when(client.jsonValueVariation(eq("node-a"), any(), any())).thenReturn(agentFlagValue(true));
+
+    AgentGraphDefinition graph = ai.agentGraph("g", context, null);
+    assertThat(graph.isEnabled(), is(true));
+
+    // Verify: when a node tracker is created, graphKey is present in its track data
+    LDAIConfigTracker nodeTracker = graph.getNode("node-a").getConfig().createTracker();
+    assertThat(nodeTracker.getTrackData().getGraphKey(), is("g"));
+  }
+
+  // ---- createGraphTracker --------------------------------------------------
+
+  @Test
+  public void createGraphTrackerRoundTripsToken() {
+    when(client.jsonValueVariation(eq("g"), any(), any()))
+        .thenReturn(graphFlagValue("node-a", true, "var-1"));
+    when(client.jsonValueVariation(eq("node-a"), any(), any())).thenReturn(agentFlagValue(true));
+
+    AgentGraphDefinition graph = ai.agentGraph("g", context, null);
+    AIGraphTracker original = graph.createTracker();
+    assertThat(original, is(notNullValue()));
+
+    String token = original.getResumptionToken();
+    AIGraphTracker reconstructed = ai.createGraphTracker(token, context);
+    assertThat(reconstructed.getResumptionToken(), is(token));
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void createGraphTrackerThrowsForMalformedToken() {
+    ai.createGraphTracker("not-valid-base64!!!", context);
+  }
+
+  private static <K, V> java.util.LinkedHashMap<K, V> newLinkedHashMap() {
+    return new java.util.LinkedHashMap<>();
   }
 }

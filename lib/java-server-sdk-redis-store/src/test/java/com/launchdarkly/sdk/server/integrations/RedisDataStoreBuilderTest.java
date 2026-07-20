@@ -11,6 +11,11 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSocketFactory;
+
 import redis.clients.jedis.JedisPoolConfig;
 import redis.clients.jedis.Protocol;
 
@@ -23,6 +28,9 @@ public class RedisDataStoreBuilderTest {
     assertNull(conf.database);
     assertNull(conf.password);
     assertFalse(conf.tls);
+    assertNull(conf.sslSocketFactory);
+    assertNull(conf.sslParameters);
+    assertNull(conf.hostnameVerifier);
     assertEquals(Duration.ofMillis(Protocol.DEFAULT_TIMEOUT), conf.connectTimeout);
     assertEquals(Duration.ofMillis(Protocol.DEFAULT_TIMEOUT), conf.socketTimeout);
     assertEquals(RedisStoreBuilder.DEFAULT_PREFIX, conf.prefix);
@@ -52,6 +60,27 @@ public class RedisDataStoreBuilderTest {
   public void testTlsConfigured() {
     RedisStoreBuilder<?> conf = Redis.dataStore().tls(true);
     assertTrue(conf.tls);
+  }
+
+  @Test
+  public void testSslSocketFactoryConfigured() {
+    SSLSocketFactory factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
+    RedisStoreBuilder<?> conf = Redis.dataStore().sslSocketFactory(factory);
+    assertEquals(factory, conf.sslSocketFactory);
+  }
+
+  @Test
+  public void testSslParametersConfigured() {
+    SSLParameters params = new SSLParameters();
+    RedisStoreBuilder<?> conf = Redis.dataStore().sslParameters(params);
+    assertEquals(params, conf.sslParameters);
+  }
+
+  @Test
+  public void testHostnameVerifierConfigured() {
+    HostnameVerifier verifier = HttpsURLConnection.getDefaultHostnameVerifier();
+    RedisStoreBuilder<?> conf = Redis.dataStore().hostnameVerifier(verifier);
+    assertEquals(verifier, conf.hostnameVerifier);
   }
   
   @Test

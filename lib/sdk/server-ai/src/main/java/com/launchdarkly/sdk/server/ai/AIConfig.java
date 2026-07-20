@@ -24,6 +24,7 @@ public abstract class AIConfig {
   private final Model model;
   private final Provider provider;
   private final Supplier<LDAIConfigTracker> trackerFactory;
+  private final Evaluator evaluator;
 
   AIConfig(
       String key,
@@ -31,13 +32,15 @@ public abstract class AIConfig {
       Mode mode,
       Model model,
       Provider provider,
-      Supplier<LDAIConfigTracker> trackerFactory) {
+      Supplier<LDAIConfigTracker> trackerFactory,
+      Evaluator evaluator) {
     this.key = key;
     this.enabled = enabled;
     this.mode = mode;
     this.model = model;
     this.provider = provider;
     this.trackerFactory = Objects.requireNonNull(trackerFactory, "trackerFactory");
+    this.evaluator = Objects.requireNonNull(evaluator, "evaluator");
   }
 
   /**
@@ -101,5 +104,18 @@ public abstract class AIConfig {
    */
   public LDAIConfigTracker createTracker() {
     return trackerFactory.get();
+  }
+
+  /**
+   * Returns the evaluator that coordinates judge execution for this configuration.
+   * <p>
+   * For {@link AIJudgeConfig} this is always {@link Evaluator#noop()}. For
+   * {@link AICompletionConfig} and {@link AIAgentConfig} it is the evaluator supplied at
+   * construction time (also {@link Evaluator#noop()} unless a custom one is wired in).
+   *
+   * @return the evaluator, never {@code null}
+   */
+  public Evaluator getEvaluator() {
+    return evaluator;
   }
 }

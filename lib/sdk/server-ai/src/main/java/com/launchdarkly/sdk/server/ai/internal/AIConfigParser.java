@@ -1,6 +1,7 @@
 package com.launchdarkly.sdk.server.ai.internal;
 
 import com.launchdarkly.sdk.LDValue;
+import com.launchdarkly.sdk.LDValueConverter;
 import com.launchdarkly.sdk.LDValueType;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.JudgeConfiguration;
 import com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Message;

@@ -24,7 +24,7 @@ abstract class RedisStoreImplBase implements Closeable {
     String username = builder.username == null ? RedisURIComponents.getUsername(builder.uri) : builder.username;
     String password = builder.password == null ? RedisURIComponents.getPassword(builder.uri) : builder.password;
     int database = builder.database == null ? RedisURIComponents.getDBIndex(builder.uri) : builder.database;
-    boolean tls = builder.tls || builder.uri.getScheme().equals("rediss");
+    boolean tls = builder.tls || "rediss".equals(builder.uri.getScheme());
 
     String extra = tls ? " with TLS" : "";
     if (username != null) {
@@ -40,6 +40,7 @@ abstract class RedisStoreImplBase implements Closeable {
     this.prefix = (builder.prefix == null || builder.prefix.isEmpty()) ?
         RedisStoreBuilder.DEFAULT_PREFIX :
         builder.prefix;
+
     this.pool = new JedisPool(poolConfig,
         host,
         port,
@@ -50,9 +51,9 @@ abstract class RedisStoreImplBase implements Closeable {
         database,
         null, // clientName
         tls,
-        null, // sslSocketFactory
-        null, // sslParameters
-        null  // hostnameVerifier
+        builder.sslSocketFactory,
+        builder.sslParameters,
+        builder.hostnameVerifier
     );
   }
 
