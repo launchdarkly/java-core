@@ -27,11 +27,13 @@ import static com.launchdarkly.sdk.internal.GsonHelpers.gsonInstance;
  */
 final class EventOutputFormatter {
   private final EventContextFormatter contextFormatter;
+  private final boolean redactAnonymousAllEvents;
 
   EventOutputFormatter(EventsConfiguration config) {
     this.contextFormatter = new EventContextFormatter(
         config.allAttributesPrivate,
         config.privateAttributes.toArray(new AttributeRef[config.privateAttributes.size()]));
+    this.redactAnonymousAllEvents = config.redactAnonymousAllEvents;
   }
 
   int writeOutputEvents(Event[] events, List<EventSummarizer.EventSummary> summaries, Writer writer) throws IOException {
@@ -92,7 +94,11 @@ final class EventOutputFormatter {
       jw.beginObject();
       writeKindAndCreationDate(jw, "custom", event.getCreationDate());
       jw.name("key").value(ce.getKey());
-      writeContext(ce.getContext(), jw, false);
+      // Anonymous-context attribute redaction in custom events is server-side SDK behavior
+      // (redactAnonymousAllEvents): server-side SDKs inline the full context and redact, while
+      // client-side SDKs use the current context and do not redact (only feature events redact
+      // anonymous on the client).
+      writeContext(ce.getContext(), jw, redactAnonymousAllEvents);
       writeLDValue("data", ce.getData(), jw);
       if (ce.getMetricValue() != null) {
         jw.name("metricValue");
@@ -107,7 +113,9 @@ final class EventOutputFormatter {
     } else if (event instanceof Event.MigrationOp) {
       jw.beginObject();
       writeKindAndCreationDate(jw, "migration_op", event.getCreationDate());
-      writeContext(event.getContext(), jw, false);
+      // migration_op events are only produced by server-side SDKs, which redact anonymous context
+      // attributes (redactAnonymousAllEvents), consistent with their custom-event handling.
+      writeContext(event.getContext(), jw, redactAnonymousAllEvents);
 
       Event.MigrationOp me = (Event.MigrationOp)event;
       jw.name("operation").value(me.getOperation());

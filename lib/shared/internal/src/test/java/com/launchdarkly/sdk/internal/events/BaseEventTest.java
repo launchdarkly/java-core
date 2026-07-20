@@ -334,6 +334,7 @@ public abstract class BaseEventTest extends BaseTest {
     private boolean initiallyOffline = false;
     private Set<AttributeRef> privateAttributes = new HashSet<>();
     private boolean perContextSummarization = false;
+    private boolean redactAnonymousAllEvents = false;
 
     public EventsConfiguration build() {
       return new EventsConfiguration(
@@ -349,8 +350,14 @@ public abstract class BaseEventTest extends BaseTest {
           initiallyInBackground,
           initiallyOffline,
           privateAttributes,
-          perContextSummarization
+          perContextSummarization,
+          redactAnonymousAllEvents
           );
+    }
+
+    public EventsConfigurationBuilder redactAnonymousAllEvents(boolean redactAnonymousAllEvents) {
+      this.redactAnonymousAllEvents = redactAnonymousAllEvents;
+      return this;
     }
 
     public EventsConfigurationBuilder allAttributesPrivate(boolean allAttributesPrivate) {
