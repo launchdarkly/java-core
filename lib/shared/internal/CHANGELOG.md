@@ -2,6 +2,13 @@
 
 All notable changes to the project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [1.10.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.9.0...launchdarkly-java-sdk-internal-1.10.0) (2026-07-21)
+
+
+### Features
+
+* Support redacting anonymous context attributes in all events ([#194](https://github.com/launchdarkly/java-core/issues/194)) ([a83a628](https://github.com/launchdarkly/java-core/commit/a83a628b07658b335635afad3a1b36524a91a78f))
+
 ## [1.9.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.8.0...launchdarkly-java-sdk-internal-1.9.0) (2026-02-26)
 
 
