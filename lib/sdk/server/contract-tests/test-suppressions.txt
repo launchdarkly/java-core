@@ -1,3 +1,1 @@
-events/custom events/single-kind anonymous context redacts all attributes
-events/custom events/multi-kind with anonymous context redacts attributes appropriately
-migrations/redacts anonymous context attributes
+
