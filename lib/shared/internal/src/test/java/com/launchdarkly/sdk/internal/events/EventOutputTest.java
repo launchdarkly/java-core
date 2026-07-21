@@ -292,6 +292,114 @@ public class EventOutputTest extends BaseEventTest {
   }
 
   @Test
+  public void customEventRedactsAnonymousContextAttributes() throws Exception {
+    // Server-side SDK behavior: redactAnonymousAllEvents is enabled.
+    EventOutputFormatter f = new EventOutputFormatter(
+        new EventsConfigurationBuilder().redactAnonymousAllEvents(true).build());
+
+    // Single-kind anonymous context: every optional attribute is redacted.
+    LDContext userContext = LDContext.builder("userkey").anonymous(true).name("me").set("age", 42).build();
+    Event.Custom singleKind = customEvent(userContext, "customkey").build();
+    LDValue singleContextJson = LDValue.buildObject()
+        .put("kind", "user")
+        .put("key", "userkey")
+        .put("anonymous", true)
+        .put("_meta", LDValue.parse("{\"redactedAttributes\":[\"name\", \"age\"]}"))
+        .build();
+    LDValue singleJson = parseValue("{" +
+        "\"kind\":\"custom\"," +
+        "\"creationDate\":100000," +
+        "\"key\":\"customkey\"," +
+        "\"context\":" + singleContextJson +
+        "}");
+    assertJsonEquals(singleJson, getSingleOutputEvent(f, singleKind));
+
+    // Multi-kind context: only the anonymous kind (user) is redacted; org is untouched.
+    LDContext orgContext = LDContext.builder("orgkey").anonymous(false).kind("org").name("me").set("age", 42).build();
+    LDContext multiContext = LDContext.createMulti(userContext, orgContext);
+    Event.Custom multiKind = customEvent(multiContext, "customkey").build();
+    LDValue userJson = LDValue.buildObject()
+        .put("key", "userkey")
+        .put("anonymous", true)
+        .put("_meta", LDValue.parse("{\"redactedAttributes\":[\"name\", \"age\"]}"))
+        .build();
+    LDValue orgJson = LDValue.buildObject()
+        .put("key", "orgkey")
+        .put("name", "me")
+        .put("age", 42)
+        .build();
+    LDValue multiContextJson = LDValue.buildObject()
+        .put("kind", "multi")
+        .put("user", userJson)
+        .put("org", orgJson)
+        .build();
+    LDValue multiJson = parseValue("{" +
+        "\"kind\":\"custom\"," +
+        "\"creationDate\":100000," +
+        "\"key\":\"customkey\"," +
+        "\"context\":" + multiContextJson +
+        "}");
+    assertJsonEquals(multiJson, getSingleOutputEvent(f, multiKind));
+  }
+
+  @Test
+  public void customEventDoesNotRedactAnonymousContextWhenNotEnabled() throws Exception {
+    // Client-side SDK behavior: with redactAnonymousAllEvents left false (the
+    // default), custom events carry the full anonymous context, including its attributes.
+    EventOutputFormatter f = new EventOutputFormatter(defaultEventsConfig());
+
+    LDContext userContext = LDContext.builder("userkey").anonymous(true).name("me").set("age", 42).build();
+    Event.Custom ce = customEvent(userContext, "customkey").build();
+    LDValue contextJson = LDValue.buildObject()
+        .put("kind", "user")
+        .put("key", "userkey")
+        .put("anonymous", true)
+        .put("name", "me")
+        .put("age", 42)
+        .build();
+    LDValue ceJson = parseValue("{" +
+        "\"kind\":\"custom\"," +
+        "\"creationDate\":100000," +
+        "\"key\":\"customkey\"," +
+        "\"context\":" + contextJson +
+        "}");
+    assertJsonEquals(ceJson, getSingleOutputEvent(f, ce));
+  }
+
+  @Test
+  public void migrationOpEventRedactsAnonymousContextAttributes() throws Exception {
+    // Server-side SDK behavior: redactAnonymousAllEvents is enabled (migration_op events are
+    // only produced server-side).
+    EventOutputFormatter f = new EventOutputFormatter(
+        new EventsConfigurationBuilder().redactAnonymousAllEvents(true).build());
+
+    LDContext userContext = LDContext.builder("userkey").anonymous(true).name("me").set("age", 42).build();
+    Event.MigrationOp migrationEvent = new Event.MigrationOp(
+        100000,
+        userContext,
+        "migration-key",
+        1,
+        2,
+        LDValue.of("live"),
+        LDValue.of("off"),
+        EvaluationReason.fallthrough(false),
+        1,
+        "read",
+        new Event.MigrationOp.InvokedMeasurement(true, false),
+        null,
+        null,
+        null
+    );
+    LDValue expectedContext = LDValue.buildObject()
+        .put("kind", "user")
+        .put("key", "userkey")
+        .put("anonymous", true)
+        .put("_meta", LDValue.parse("{\"redactedAttributes\":[\"name\", \"age\"]}"))
+        .build();
+    assertJsonEquals(expectedContext, getSingleOutputEvent(f, migrationEvent).get("context"));
+  }
+
+  @Test
   public void summaryEventIsSerialized() throws Exception {
     LDValue value1a = LDValue.of("value1a"), value2a = LDValue.of("value2a"), value2b = LDValue.of("value2b"),
         default1 = LDValue.of("default1"), default2 = LDValue.of("default2"), default3 = LDValue.of("default3");

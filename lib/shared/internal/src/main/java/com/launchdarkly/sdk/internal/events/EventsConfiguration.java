@@ -31,7 +31,8 @@ public final class EventsConfiguration {
   final boolean initiallyOffline;
   final List<AttributeRef> privateAttributes;
   final boolean perContextSummarization;
-  
+  final boolean redactAnonymousAllEvents;
+
   /**
    * Creates an instance.
    *
@@ -103,6 +104,49 @@ public final class EventsConfiguration {
       Collection<AttributeRef> privateAttributes,
       boolean perContextSummarization
       ) {
+    this(allAttributesPrivate, capacity, contextDeduplicator, diagnosticRecordingIntervalMillis,
+        diagnosticStore, eventSender, eventSendingThreadPoolSize, eventsUri, flushIntervalMillis,
+        initiallyInBackground, initiallyOffline, privateAttributes, perContextSummarization, false);
+  }
+
+  /**
+   * Creates an instance.
+   *
+   * @param allAttributesPrivate true if all attributes are private
+   * @param capacity event buffer capacity (if zero or negative, a value of 1 is used to prevent errors)
+   * @param contextDeduplicator optional EventContextDeduplicator; null for client-side SDK
+   * @param diagnosticRecordingIntervalMillis diagnostic recording interval
+   * @param diagnosticStore optional DiagnosticStore; null if diagnostics are disabled
+   * @param eventSender event delivery component; must not be null
+   * @param eventSendingThreadPoolSize number of worker threads for event delivery; zero to use the default
+   * @param eventsUri events base URI
+   * @param flushIntervalMillis event flush interval
+   * @param initiallyInBackground true if we should start out in background mode (see
+   *   {@link DefaultEventProcessor#setInBackground(boolean)})
+   * @param initiallyOffline true if we should start out in offline mode (see
+   *   {@link DefaultEventProcessor#setOffline(boolean)})
+   * @param privateAttributes list of private attribute references; may be null
+   * @param perContextSummarization true to generate separate summary events per context
+   * @param redactAnonymousAllEvents true to redact anonymous context attributes across all inlined
+   *   events (custom and migration_op events), in addition to feature events which always redact them.
+   *   Server-side SDKs set this to true; client-side SDKs leave it false (redact only feature events).
+   */
+  public EventsConfiguration(
+      boolean allAttributesPrivate,
+      int capacity,
+      EventContextDeduplicator contextDeduplicator,
+      long diagnosticRecordingIntervalMillis,
+      DiagnosticStore diagnosticStore,
+      EventSender eventSender,
+      int eventSendingThreadPoolSize,
+      URI eventsUri,
+      long flushIntervalMillis,
+      boolean initiallyInBackground,
+      boolean initiallyOffline,
+      Collection<AttributeRef> privateAttributes,
+      boolean perContextSummarization,
+      boolean redactAnonymousAllEvents
+      ) {
     super();
     this.allAttributesPrivate = allAttributesPrivate;
     this.capacity = capacity >= 0 ? capacity : 1;
@@ -118,5 +162,6 @@ public final class EventsConfiguration {
     this.initiallyOffline = initiallyOffline;
     this.privateAttributes = privateAttributes == null ? Collections.emptyList() : new ArrayList<>(privateAttributes);
     this.perContextSummarization = perContextSummarization;
+    this.redactAnonymousAllEvents = redactAnonymousAllEvents;
   }
 }
