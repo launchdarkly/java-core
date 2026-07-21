@@ -2,6 +2,18 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.15.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.14.0...launchdarkly-java-server-sdk-7.15.0) (2026-07-21)
+
+
+### Features
+
+* Support redacting anonymous context attributes in all events ([#194](https://github.com/launchdarkly/java-core/issues/194)) ([a83a628](https://github.com/launchdarkly/java-core/commit/a83a628b07658b335635afad3a1b36524a91a78f))
+
+
+### Bug Fixes
+
+* Enable anonymous context redaction in server custom/migration events ([#195](https://github.com/launchdarkly/java-core/issues/195)) ([19aa714](https://github.com/launchdarkly/java-core/commit/19aa714f4fdfa3fe705622104e3d6943f59165be))
+
 ## [7.14.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.13.4...launchdarkly-java-server-sdk-7.14.0) (2026-05-28)
 
 
