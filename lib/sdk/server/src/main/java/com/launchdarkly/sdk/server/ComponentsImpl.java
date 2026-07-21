@@ -247,7 +247,9 @@ abstract class ComponentsImpl {
           flushInterval.toMillis(),
           false,
           false,
-          privateAttributes);
+          privateAttributes,
+          false, // perContextSummarization: server-side SDKs summarize across contexts
+          true); // redactAnonymousAllEvents: server-side SDKs inline & redact custom/migration-op contexts
       return new DefaultEventProcessorWrapper(context, eventsConfig);
     }
     
