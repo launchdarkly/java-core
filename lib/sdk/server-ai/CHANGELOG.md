@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-ai-0.2.0...launchdarkly-java-server-sdk-ai-0.3.0) (2026-07-22)
+
+
+### Features
+
+* **server-ai:** stamp model metadata on AI usage events ([#192](https://github.com/launchdarkly/java-core/issues/192)) ([58f3c25](https://github.com/launchdarkly/java-core/commit/58f3c25e352bd5e1624bc397c580a5b14549880c))
+
 ## [0.2.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-ai-0.1.0...launchdarkly-java-server-sdk-ai-0.2.0) (2026-07-13)
 
 
