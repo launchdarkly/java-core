@@ -42,7 +42,8 @@ public final class AIConfigParser {
       return builder.build();
     }
 
-    parseMeta(value.get("_ldMeta"), builder);
+    LDValue meta = value.get("_ldMeta");
+    parseMeta(meta, builder);
     builder.model(parseModel(value.get("model")));
     builder.provider(parseProvider(value.get("provider")));
     builder.messages(parseMessages(value.get("messages")));
@@ -54,8 +55,13 @@ public final class AIConfigParser {
     return builder.build();
   }
 
+  // modelKey/modelVersion are parsed here alongside the rest of _ldMeta (enabled, variationKey,
+  // version, mode) rather than inside parseModel, so they're stored the same way as every other
+  // _ldMeta field instead of a one-off path. They also live under _ldMeta rather than model
+  // itself, to avoid modelVersion reading as the underlying LLM's own version (e.g. "GPT-5.4").
   private static void parseMeta(LDValue meta, AIConfigFlagValue.Builder builder) {
     if (meta == null || meta.getType() != LDValueType.OBJECT) {
+      builder.modelVersion(1);
       return;
     }
     LDValue enabled = meta.get("enabled");
@@ -68,6 +74,10 @@ public final class AIConfigParser {
       builder.version(version.intValue());
     }
     builder.mode(Mode.fromWireValue(asStringOrNull(meta.get("mode"))));
+
+    LDValue modelVersion = meta.get("modelVersion");
+    builder.modelVersion(modelVersion.getType() == LDValueType.NUMBER ? modelVersion.intValue() : 1);
+    builder.modelKey(trimToNull(asStringOrNull(meta.get("modelKey"))));
   }
 
   /**

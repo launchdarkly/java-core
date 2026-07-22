@@ -58,6 +58,8 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
   private final int version;
   private final String modelName;   // empty string when unknown
   private final String providerName; // empty string when unknown
+  private final String modelKey;    // nullable
+  private final int modelVersion;
   private final String graphKey;    // nullable
 
   // Computed once at construction
@@ -86,6 +88,8 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
    * @param version the config version
    * @param modelName the model name, or empty string when unknown
    * @param providerName the provider name, or empty string when unknown
+   * @param modelKey the stable model key, or {@code null} when unknown
+   * @param modelVersion the model version
    * @param context the evaluation context; must not be {@code null}
    * @param graphKey the agent graph key, or {@code null} when not part of a graph
    * @param logger the logger; must not be {@code null}
@@ -98,6 +102,8 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
       int version,
       String modelName,
       String providerName,
+      String modelKey,
+      int modelVersion,
       LDContext context,
       String graphKey,
       LDLogger logger) {
@@ -108,6 +114,8 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
     this.version = version;
     this.modelName = modelName == null ? "" : modelName;
     this.providerName = providerName == null ? "" : providerName;
+    this.modelKey = modelKey == null || modelKey.trim().isEmpty() ? null : modelKey;
+    this.modelVersion = modelVersion;
     this.context = Objects.requireNonNull(context, "context");
     this.graphKey = graphKey;
     this.logger = Objects.requireNonNull(logger, "logger");
@@ -137,6 +145,8 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
         d.getVersion(),
         "", // modelName not carried in token
         "", // providerName not carried in token
+        null, // modelKey not carried in token
+        1, // modelVersion not carried in token
         context,
         d.getGraphKey(),
         logger);
@@ -144,7 +154,16 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
 
   @Override
   public TrackData getTrackData() {
-    return new TrackData(runId, configKey, variationKey, version, modelName, providerName, graphKey);
+    return new TrackData(
+        runId,
+        configKey,
+        variationKey,
+        version,
+        modelName,
+        providerName,
+        modelKey,
+        modelVersion,
+        graphKey);
   }
 
   @Override
@@ -377,9 +396,13 @@ public final class LDAIConfigTrackerImpl implements LDAIConfigTracker {
         .put("configKey", configKey)
         .put("version", version)
         .put("modelName", modelName)
-        .put("providerName", providerName);
+        .put("providerName", providerName)
+        .put("modelVersion", modelVersion);
     if (variationKey != null) {
       b.put("variationKey", variationKey);
+    }
+    if (modelKey != null) {
+      b.put("modelKey", modelKey);
     }
     if (graphKey != null) {
       b.put("graphKey", graphKey);

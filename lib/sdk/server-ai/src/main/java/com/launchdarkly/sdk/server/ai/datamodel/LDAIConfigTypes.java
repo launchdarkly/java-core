@@ -217,7 +217,10 @@ public final class LDAIConfigTypes {
     private final Map<String, Object> parameters;
     private final Map<String, Object> custom;
 
-    private Model(String name, Map<String, Object> parameters, Map<String, Object> custom) {
+    private Model(
+        String name,
+        Map<String, Object> parameters,
+        Map<String, Object> custom) {
       this.name = name;
       this.parameters = parameters;
       this.custom = custom;

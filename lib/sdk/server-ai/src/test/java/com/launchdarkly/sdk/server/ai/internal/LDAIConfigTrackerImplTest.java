@@ -6,6 +6,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
@@ -61,6 +62,8 @@ public class LDAIConfigTrackerImplTest {
   private static final int VERSION = 3;
   private static final String MODEL_NAME = "gpt-4";
   private static final String PROVIDER_NAME = "openai";
+  private static final String MODEL_KEY = "custom-gpt";
+  private static final int MODEL_VERSION = 7;
 
   @Before
   public void setUp() {
@@ -71,9 +74,14 @@ public class LDAIConfigTrackerImplTest {
   }
 
   private LDAIConfigTrackerImpl makeTracker(String variationKey) {
+    return makeTracker(variationKey, MODEL_KEY, MODEL_VERSION);
+  }
+
+  private LDAIConfigTrackerImpl makeTracker(
+      String variationKey, String modelKey, int modelVersion) {
     return new LDAIConfigTrackerImpl(
         client, RUN_ID, CONFIG_KEY, variationKey, VERSION,
-        MODEL_NAME, PROVIDER_NAME, CONTEXT, null, logger);
+        MODEL_NAME, PROVIDER_NAME, modelKey, modelVersion, CONTEXT, null, logger);
   }
 
   private List<String> warnings() {
@@ -98,6 +106,8 @@ public class LDAIConfigTrackerImplTest {
         .put("version", VERSION)
         .put("modelName", MODEL_NAME)
         .put("providerName", PROVIDER_NAME)
+        .put("modelKey", MODEL_KEY)
+        .put("modelVersion", MODEL_VERSION)
         .build();
   }
 
@@ -112,6 +122,8 @@ public class LDAIConfigTrackerImplTest {
     assertThat(data.getVersion(), is(VERSION));
     assertThat(data.getModelName(), is(MODEL_NAME));
     assertThat(data.getProviderName(), is(PROVIDER_NAME));
+    assertThat(data.getModelKey(), is(MODEL_KEY));
+    assertThat(data.getModelVersion(), is(MODEL_VERSION));
     assertThat(data.getGraphKey(), is(nullValue()));
   }
 
@@ -140,6 +152,20 @@ public class LDAIConfigTrackerImplTest {
   }
 
   @Test
+  public void resumptionTokenExcludesModelMetadata() {
+    String token = tracker.getResumptionToken();
+    String decodedJson = new String(
+        java.util.Base64.getUrlDecoder().decode(token), java.nio.charset.StandardCharsets.UTF_8);
+    assertThat(decodedJson, not(containsString("modelKey")));
+    assertThat(decodedJson, not(containsString("modelVersion")));
+
+    // Changing only model metadata must not change the encoded token, since decode() has no
+    // model fields to carry it and encode() never receives them.
+    LDAIConfigTrackerImpl other = makeTracker(VARIATION_KEY, "different-model", 99);
+    assertThat(other.getResumptionToken(), is(token));
+  }
+
+  @Test
   public void fromResumptionTokenRestoresCorrectFields() {
     String token = tracker.getResumptionToken();
     LDAIConfigTrackerImpl restored =
@@ -151,6 +177,8 @@ public class LDAIConfigTrackerImplTest {
     assertThat(data.getVersion(), is(VERSION));
     assertThat(data.getModelName(), is("")); // not in token
     assertThat(data.getProviderName(), is("")); // not in token
+    assertThat(data.getModelKey(), is(nullValue())); // not in token
+    assertThat(data.getModelVersion(), is(1)); // not in token
   }
 
   // ---- trackDuration --------------------------------------------------------
@@ -368,6 +396,7 @@ public class LDAIConfigTrackerImplTest {
         .put("runId", RUN_ID).put("configKey", CONFIG_KEY)
         .put("variationKey", VARIATION_KEY).put("version", VERSION)
         .put("modelName", MODEL_NAME).put("providerName", PROVIDER_NAME)
+        .put("modelKey", MODEL_KEY).put("modelVersion", MODEL_VERSION)
         .put("toolKey", "search")
         .build();
 
@@ -381,6 +410,7 @@ public class LDAIConfigTrackerImplTest {
         .put("runId", RUN_ID).put("configKey", CONFIG_KEY)
         .put("variationKey", VARIATION_KEY).put("version", VERSION)
         .put("modelName", MODEL_NAME).put("providerName", PROVIDER_NAME)
+        .put("modelKey", MODEL_KEY).put("modelVersion", MODEL_VERSION)
         .put("toolKey", "fetch")
         .build();
     verify(client, times(1)).trackMetric(
@@ -415,6 +445,7 @@ public class LDAIConfigTrackerImplTest {
         .put("runId", RUN_ID).put("configKey", CONFIG_KEY)
         .put("variationKey", VARIATION_KEY).put("version", VERSION)
         .put("modelName", MODEL_NAME).put("providerName", PROVIDER_NAME)
+        .put("modelKey", MODEL_KEY).put("modelVersion", MODEL_VERSION)
         .put("judgeConfigKey", "my-judge")
         .build();
 
@@ -650,13 +681,41 @@ public class LDAIConfigTrackerImplTest {
     assertThat(dataCaptor.getValue().get("variationKey").stringValue(), is(VARIATION_KEY));
   }
 
+  // ---- model metadata inclusion --------------------------------------------
+
+  @Test
+  public void modelMetadataIncludedInPayloadWhenPresent() {
+    tracker.trackSuccess();
+    ArgumentCaptor<LDValue> dataCaptor = ArgumentCaptor.forClass(LDValue.class);
+    verify(client).trackMetric(eq("$ld:ai:generation:success"), any(), dataCaptor.capture(), anyDouble());
+    assertThat(dataCaptor.getValue().get("modelKey").stringValue(), is(MODEL_KEY));
+    assertThat(dataCaptor.getValue().get("modelVersion").intValue(), is(MODEL_VERSION));
+  }
+
+  @Test
+  public void blankModelKeyOmittedFromTrackDataAndPayload() {
+    for (String blankModelKey : Arrays.asList(null, "", "   ")) {
+      LDAIConfigTrackerImpl blankTracker =
+          makeTracker(VARIATION_KEY, blankModelKey, MODEL_VERSION);
+      assertThat(blankTracker.getTrackData().getModelKey(), is(nullValue()));
+      assertThat(blankTracker.getTrackData().toLDValue().get("modelKey").isNull(), is(true));
+    }
+
+    LDAIConfigTrackerImpl t = makeTracker(VARIATION_KEY, "   ", MODEL_VERSION);
+    t.trackSuccess();
+    ArgumentCaptor<LDValue> dataCaptor = ArgumentCaptor.forClass(LDValue.class);
+    verify(client).trackMetric(eq("$ld:ai:generation:success"), any(), dataCaptor.capture(), anyDouble());
+    assertThat(dataCaptor.getValue().get("modelKey").isNull(), is(true));
+    assertThat(dataCaptor.getValue().get("modelVersion").intValue(), is(MODEL_VERSION));
+  }
+
   // ---- graphKey inclusion ---------------------------------------------------
 
   @Test
   public void graphKeyIncludedInPayloadWhenSet() {
     LDAIConfigTrackerImpl t = new LDAIConfigTrackerImpl(
         client, RUN_ID, CONFIG_KEY, VARIATION_KEY, VERSION,
-        MODEL_NAME, PROVIDER_NAME, CONTEXT, "my-graph", logger);
+        MODEL_NAME, PROVIDER_NAME, MODEL_KEY, MODEL_VERSION, CONTEXT, "my-graph", logger);
     t.trackSuccess();
     ArgumentCaptor<LDValue> dataCaptor = ArgumentCaptor.forClass(LDValue.class);
     verify(client).trackMetric(eq("$ld:ai:generation:success"), any(), dataCaptor.capture(), anyDouble());
@@ -727,12 +786,12 @@ public class LDAIConfigTrackerImplTest {
   @Test(expected = NullPointerException.class)
   public void constructorRejectsNullClient() {
     new LDAIConfigTrackerImpl(null, RUN_ID, CONFIG_KEY, VARIATION_KEY, VERSION,
-        MODEL_NAME, PROVIDER_NAME, CONTEXT, null, logger);
+        MODEL_NAME, PROVIDER_NAME, MODEL_KEY, MODEL_VERSION, CONTEXT, null, logger);
   }
 
   @Test(expected = NullPointerException.class)
   public void constructorRejectsNullContext() {
     new LDAIConfigTrackerImpl(client, RUN_ID, CONFIG_KEY, VARIATION_KEY, VERSION,
-        MODEL_NAME, PROVIDER_NAME, null, null, logger);
+        MODEL_NAME, PROVIDER_NAME, MODEL_KEY, MODEL_VERSION, null, null, logger);
   }
 }

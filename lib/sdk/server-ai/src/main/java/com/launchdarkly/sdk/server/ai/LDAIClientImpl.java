@@ -265,7 +265,8 @@ public final class LDAIClientImpl implements LDAIClient {
       String graphKey) {
     Supplier<LDAIConfigTracker> factory = trackerFactory(
         key, parsed.getVariationKey(), parsed.getVersion(),
-        parsed.getModel(), parsed.getProvider(), context, graphKey);
+        parsed.getModel(), parsed.getProvider(),
+        parsed.getModelKey(), parsed.getModelVersion(), context, graphKey);
     switch (mode) {
       case AGENT:
         return new AIAgentConfig(
@@ -330,7 +331,7 @@ public final class LDAIClientImpl implements LDAIClient {
       String graphKey) {
     // Default configs still get real trackers — the configKey was requested even if no flag was found.
     // variationKey is null because no flag evaluation occurred.
-    Supplier<LDAIConfigTracker> factory = trackerFactory(key, null, null, null, null, context, graphKey);
+    Supplier<LDAIConfigTracker> factory = trackerFactory(key, null, null, null, null, null, null, context, graphKey);
     switch (mode) {
       case AGENT: {
         AIAgentConfigDefault agent = (AIAgentConfigDefault) defaultValue;
@@ -386,21 +387,14 @@ public final class LDAIClientImpl implements LDAIClient {
       Integer version,
       com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Model model,
       com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Provider provider,
-      LDContext context) {
-    return trackerFactory(configKey, variationKey, version, model, provider, context, null);
-  }
-
-  private Supplier<LDAIConfigTracker> trackerFactory(
-      String configKey,
-      String variationKey,
-      Integer version,
-      com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Model model,
-      com.launchdarkly.sdk.server.ai.datamodel.LDAIConfigTypes.Provider provider,
+      String modelKey,
+      Integer modelVersion,
       LDContext context,
       String graphKey) {
     String modelName = model != null && model.getName() != null ? model.getName() : "";
     String providerName = provider != null && provider.getName() != null ? provider.getName() : "";
     int ver = version != null ? version : 1;
+    int mVer = modelVersion != null ? modelVersion : 1;
     return () -> new LDAIConfigTrackerImpl(
         client,
         UUID.randomUUID().toString(),
@@ -409,6 +403,8 @@ public final class LDAIClientImpl implements LDAIClient {
         ver,
         modelName,
         providerName,
+        modelKey,
+        mVer,
         context,
         graphKey,
         logger);

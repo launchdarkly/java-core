@@ -21,8 +21,10 @@ public class AIConfigParserTest {
   @Test
   public void parsesFullCompletionConfig() {
     LDValue value = LDValue.parse("{"
-        + "\"_ldMeta\":{\"variationKey\":\"v1\",\"enabled\":true,\"version\":3,\"mode\":\"completion\"},"
-        + "\"model\":{\"name\":\"gpt-4\",\"parameters\":{\"temperature\":0.7,\"maxTokens\":100},"
+        + "\"_ldMeta\":{\"variationKey\":\"v1\",\"enabled\":true,\"version\":3,\"mode\":\"completion\","
+        + "\"modelKey\":\"custom-gpt\",\"modelVersion\":7},"
+        + "\"model\":{\"name\":\"gpt-4\","
+        + "\"parameters\":{\"temperature\":0.7,\"maxTokens\":100},"
         + "\"custom\":{\"team\":\"core\"}},"
         + "\"provider\":{\"name\":\"openai\"},"
         + "\"messages\":[{\"role\":\"system\",\"content\":\"You are {{persona}}.\"},"
@@ -39,6 +41,8 @@ public class AIConfigParserTest {
     assertThat(parsed.getVersion(), is(3));
     assertThat(parsed.getMode(), is(Mode.COMPLETION));
     assertThat(parsed.getModel().getName(), is("gpt-4"));
+    assertThat(parsed.getModelKey(), is("custom-gpt"));
+    assertThat(parsed.getModelVersion(), is(7));
     assertThat(parsed.getModel().getParameter("temperature"), is((Object) 0.7));
     assertThat(parsed.getModel().getParameter("maxTokens"), is((Object) 100L));
     assertThat(parsed.getModel().getCustom("team"), is((Object) "core"));
@@ -51,6 +55,23 @@ public class AIConfigParserTest {
     assertThat(judges.getJudges().get(0).getSamplingRate(), is(0.5));
     assertThat(parsed.getTools().keySet(), contains("search"));
     assertThat(parsed.getTools().get("search").getType(), is("function"));
+  }
+
+  @Test
+  public void modelMetadataDefaultsWhenMissingOrWrongType() {
+    AIConfigFlagValue missing = AIConfigParser.parse(
+        LDValue.parse("{\"model\":{\"name\":\"gpt-4\"}}"));
+    assertThat(missing.getModelKey(), is(nullValue()));
+    assertThat(missing.getModelVersion(), is(1));
+
+    AIConfigFlagValue wrongType = AIConfigParser.parse(
+        LDValue.parse("{\"_ldMeta\":{\"modelKey\":3,\"modelVersion\":\"two\"},\"model\":{}}"));
+    assertThat(wrongType.getModelKey(), is(nullValue()));
+    assertThat(wrongType.getModelVersion(), is(1));
+
+    AIConfigFlagValue blankKey = AIConfigParser.parse(
+        LDValue.parse("{\"_ldMeta\":{\"modelKey\":\"   \"},\"model\":{}}"));
+    assertThat(blankKey.getModelKey(), is(nullValue()));
   }
 
   @Test
