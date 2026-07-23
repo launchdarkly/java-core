@@ -7,8 +7,10 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.sameInstance;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -671,5 +673,147 @@ public class LDAIClientImplTest {
 
   private static <K, V> java.util.LinkedHashMap<K, V> newLinkedHashMap() {
     return new java.util.LinkedHashMap<>();
+  }
+
+  // ---- Evaluator-building (runner provider) ---------------------------------
+
+  private static LDValue completionFlagWithJudge(String judgeKey) {
+    return LDValue.parse("{\"_ldMeta\":{\"enabled\":true,\"mode\":\"completion\"},"
+        + "\"judgeConfiguration\":{\"judges\":[{\"key\":\"" + judgeKey + "\",\"samplingRate\":1.0}]}}");
+  }
+
+  private static LDValue completionFlagWithJudges(String... judgeKeys) {
+    StringBuilder sb = new StringBuilder(
+        "{\"_ldMeta\":{\"enabled\":true,\"mode\":\"completion\"},"
+        + "\"judgeConfiguration\":{\"judges\":[");
+    for (int i = 0; i < judgeKeys.length; i++) {
+      if (i > 0) sb.append(",");
+      sb.append("{\"key\":\"").append(judgeKeys[i]).append("\",\"samplingRate\":1.0}");
+    }
+    sb.append("]}}");
+    return LDValue.parse(sb.toString());
+  }
+
+  private static LDValue judgeFlagValue(boolean enabled) {
+    return LDValue.parse("{\"_ldMeta\":{\"enabled\":" + enabled + ",\"mode\":\"judge\"},"
+        + "\"evaluationMetricKey\":\"relevance\"}");
+  }
+
+  private List<String> infoMessages() {
+    return logCapture.getMessages().stream()
+        .filter(m -> m.getLevel() == LDLogLevel.INFO)
+        .map(LogCapture.Message::getText)
+        .collect(Collectors.toList());
+  }
+
+  @Test
+  public void completionConfigWithJudgeConfigAndProviderBuildsRealEvaluator() {
+    Runner mockRunner = mock(Runner.class);
+    LDAIClientImpl aiWithProvider = new LDAIClientImpl(client, logger, cfg -> mockRunner);
+
+    when(client.jsonValueVariation(eq("comp-key"), any(), any()))
+        .thenReturn(completionFlagWithJudge("judge-key"));
+    when(client.jsonValueVariation(eq("judge-key"), any(), any()))
+        .thenReturn(judgeFlagValue(true));
+
+    AICompletionConfig config = aiWithProvider.completionConfig("comp-key", context, null, null);
+
+    assertThat(config.getEvaluator(), is(not(sameInstance(Evaluator.noop()))));
+  }
+
+  @Test
+  public void completionConfigWithNoJudgesYieldsNoopEvaluator() {
+    LDAIClientImpl aiWithProvider = new LDAIClientImpl(client, logger, cfg -> mock(Runner.class));
+    when(client.jsonValueVariation(anyString(), any(), any()))
+        .thenReturn(LDValue.parse("{\"_ldMeta\":{\"enabled\":true,\"mode\":\"completion\"}}"));
+
+    AICompletionConfig config = aiWithProvider.completionConfig("comp-key", context, null, null);
+
+    assertThat(config.getEvaluator(), is(sameInstance(Evaluator.noop())));
+  }
+
+  @Test
+  public void completionConfigWithNullRunnerProviderYieldsNoopEvaluator() {
+    // Legacy two-arg constructor → no provider → noop evaluator even with judgeConfiguration.
+    when(client.jsonValueVariation(anyString(), any(), any()))
+        .thenReturn(completionFlagWithJudge("judge-key"));
+
+    AICompletionConfig config = ai.completionConfig("comp-key", context, null, null);
+
+    assertThat(config.getEvaluator(), is(sameInstance(Evaluator.noop())));
+  }
+
+  @Test
+  public void disabledJudgeConfigIsFilteredAndEvaluatorIsNoop() {
+    LDAIClientImpl aiWithProvider = new LDAIClientImpl(client, logger, cfg -> mock(Runner.class));
+
+    when(client.jsonValueVariation(eq("comp-key"), any(), any()))
+        .thenReturn(completionFlagWithJudge("judge-key"));
+    when(client.jsonValueVariation(eq("judge-key"), any(), any()))
+        .thenReturn(judgeFlagValue(false));
+
+    AICompletionConfig config = aiWithProvider.completionConfig("comp-key", context, null, null);
+
+    assertThat(config.getEvaluator(), is(sameInstance(Evaluator.noop())));
+    assertThat(infoMessages(), hasSize(1));
+    assertThat(infoMessages().get(0), containsString("disabled"));
+  }
+
+  @Test
+  public void throwingRunnerProviderSkipsThatJudgeButKeepsOthers() {
+    Runner mockRunner = mock(Runner.class);
+    AIRunnerProvider provider = cfg -> {
+      if ("bad-judge".equals(cfg.getKey())) {
+        throw new RuntimeException("provider error");
+      }
+      return mockRunner;
+    };
+    LDAIClientImpl aiWithProvider = new LDAIClientImpl(client, logger, provider);
+
+    when(client.jsonValueVariation(eq("comp-key"), any(), any()))
+        .thenReturn(completionFlagWithJudges("bad-judge", "good-judge"));
+    when(client.jsonValueVariation(eq("bad-judge"), any(), any()))
+        .thenReturn(judgeFlagValue(true));
+    when(client.jsonValueVariation(eq("good-judge"), any(), any()))
+        .thenReturn(judgeFlagValue(true));
+
+    AICompletionConfig config = aiWithProvider.completionConfig("comp-key", context, null, null);
+
+    // good-judge survived; evaluator is non-noop
+    assertThat(config.getEvaluator(), is(not(sameInstance(Evaluator.noop()))));
+    assertThat(warnings(), hasSize(1));
+    assertThat(warnings().get(0), containsString("bad-judge"));
+  }
+
+  @Test
+  public void nullRunnerFromProviderSkipsThatJudge() {
+    LDAIClientImpl aiWithProvider = new LDAIClientImpl(client, logger, cfg -> null);
+
+    when(client.jsonValueVariation(eq("comp-key"), any(), any()))
+        .thenReturn(completionFlagWithJudge("judge-key"));
+    when(client.jsonValueVariation(eq("judge-key"), any(), any()))
+        .thenReturn(judgeFlagValue(true));
+
+    AICompletionConfig config = aiWithProvider.completionConfig("comp-key", context, null, null);
+
+    assertThat(config.getEvaluator(), is(sameInstance(Evaluator.noop())));
+    assertThat(warnings(), hasSize(1));
+    assertThat(warnings().get(0), containsString("judge-key"));
+  }
+
+  @Test
+  public void agentConfigWithJudgeConfigAndProviderBuildsRealEvaluator() {
+    Runner mockRunner = mock(Runner.class);
+    LDAIClientImpl aiWithProvider = new LDAIClientImpl(client, logger, cfg -> mockRunner);
+
+    when(client.jsonValueVariation(eq("agent-key"), any(), any()))
+        .thenReturn(LDValue.parse("{\"_ldMeta\":{\"enabled\":true,\"mode\":\"agent\"},"
+            + "\"judgeConfiguration\":{\"judges\":[{\"key\":\"judge-key\",\"samplingRate\":1.0}]}}"));
+    when(client.jsonValueVariation(eq("judge-key"), any(), any()))
+        .thenReturn(judgeFlagValue(true));
+
+    AIAgentConfig config = aiWithProvider.agentConfig("agent-key", context, null, null);
+
+    assertThat(config.getEvaluator(), is(not(sameInstance(Evaluator.noop()))));
   }
 }
