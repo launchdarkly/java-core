@@ -4,6 +4,10 @@ import com.launchdarkly.sdk.json.JsonSerialization;
 
 import org.junit.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -437,4 +441,40 @@ public class LDContextTest {
     assertThat(c2.isValid(), is(false));
     assertThat(c2.getError(), equalTo(Errors.CONTEXT_NO_KEY));
 }
+
+  @Test
+  public void javaSerializationRoundTripSingleKind() throws Exception {
+    LDContext c = LDContext.builder(kind1, "my-key")
+        .name("my-name")
+        .anonymous(true)
+        .set("email", "x@example.com")
+        .set("happy", true)
+        .set("count", 3)
+        .set("tags", LDValue.buildArray().add("a").add("b").build())
+        .set("nested", LDValue.buildObject().put("inner", "v").build())
+        .privateAttributes("email")
+        .build();
+
+    assertThat(javaSerializeAndDeserialize(c), equalTo(c));
+  }
+
+  @Test
+  public void javaSerializationRoundTripMultiKind() throws Exception {
+    LDContext c = LDContext.createMulti(
+        LDContext.builder(kind1, "key1").set("a", "b").build(),
+        LDContext.builder(kind2, "key2").set("c", LDValue.buildArray().add(1).add(2).build()).build()
+    );
+
+    assertThat(javaSerializeAndDeserialize(c), equalTo(c));
+  }
+
+  private static LDContext javaSerializeAndDeserialize(LDContext c) throws Exception {
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    try (ObjectOutputStream out = new ObjectOutputStream(bytes)) {
+      out.writeObject(c);
+    }
+    try (ObjectInputStream in = new ObjectInputStream(new ByteArrayInputStream(bytes.toByteArray()))) {
+      return (LDContext) in.readObject();
+    }
+  }
 }
