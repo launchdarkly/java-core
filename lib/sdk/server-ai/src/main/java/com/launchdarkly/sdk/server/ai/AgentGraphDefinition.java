@@ -2,6 +2,7 @@ package com.launchdarkly.sdk.server.ai;
 
 import com.launchdarkly.sdk.server.ai.internal.AgentGraphFlagValue;
 
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -23,8 +24,9 @@ import java.util.function.Supplier;
  * {@link #getConfig()} and {@link #createTracker()} remain meaningful, so callers can still inspect
  * the raw flag value and fire graph-level usage events for a disabled graph.
  * <p>
- * Traversal methods ({@link #traverse} and {@link #reverseTraverse}) are BFS-based and
- * cycle-safe: each node is visited at most once.
+ * Traversal ({@link #traverse}, {@link #reverseTraverse}) visits each reachable node once in
+ * topological order (predecessors-first or descendants-first), deterministically and cycle-safe.
+ * Each visitor sees only the initial context plus that node's dependency results.
  * <p>
  * This class is thread-safe. All returned collections are unmodifiable.
  */
@@ -158,16 +160,16 @@ public final class AgentGraphDefinition {
   }
 
   /**
-   * Performs a BFS traversal of the graph starting from the root node.
+   * Topological traversal from the root (predecessors-first; root first).
    * <p>
-   * For each node visited, {@code fn} is called with the node and the mutable context map. The
-   * return value of {@code fn} is stored in the context map under the node's key, making it
-   * available to subsequently visited nodes. Each node is visited exactly once (cycle-safe).
+   * A node runs only after all reachable predecessors. Ties break by discovery order (BFS from
+   * root, declared edge order). Cycle-safe: each reachable node is visited once.
    * <p>
-   * This is a no-op when the graph is disabled or the root node is absent.
+   * {@code fn} receives a fresh map of the initial {@code ctx} plus that node's predecessor
+   * results only. {@code ctx} itself is not mutated. No-op if disabled or root is absent.
    *
-   * @param fn the visitor function; receives the current node and the context map
-   * @param ctx the mutable context map; values from earlier nodes are available to later ones
+   * @param fn visitor; node and dependency-scoped context
+   * @param ctx initial context template (global scratch); not written with node results
    */
   public void traverse(BiFunction<AgentGraphNode, Map<String, Object>, Object> fn,
       Map<String, Object> ctx) {
@@ -176,33 +178,75 @@ public final class AgentGraphDefinition {
       return;
     }
 
+    Map.Entry<Set<String>, List<String>> rd = reachableAndDiscovery(root.getKey());
+    Set<String> reachable = rd.getKey();
+    List<String> order = rd.getValue();
+
+    Map<String, Integer> indeg = new HashMap<>();
+    for (String k : reachable) {
+      indeg.put(k, 0);
+    }
+    for (String k : reachable) {
+      AgentGraphNode node = getNode(k);
+      if (node == null) {
+        continue;
+      }
+      for (GraphEdge e : node.getEdges()) {
+        if (reachable.contains(e.getKey())) {
+          indeg.merge(e.getKey(), 1, Integer::sum);
+        }
+      }
+    }
+    indeg.put(root.getKey(), 0);
+
     Set<String> visited = new HashSet<>();
-    Queue<AgentGraphNode> queue = new LinkedList<>();
-    visited.add(root.getKey());
-    queue.add(root);
+    Map<String, Object> results = new HashMap<>();
+    Map<String, Set<String>> ancestors = new HashMap<>();
+    while (visited.size() < reachable.size()) {
+      String next = firstReady(order, visited, indeg);
+      if (next == null) {
+        next = lowestDegree(order, visited, indeg);
+      }
+      visited.add(next);
 
-    while (!queue.isEmpty()) {
-      AgentGraphNode node = queue.poll();
-      Object result = fn.apply(node, ctx);
-      ctx.put(node.getKey(), result);
+      Set<String> anc = new HashSet<>();
+      for (AgentGraphNode parent : getParentNodes(next)) {
+        String pk = parent.getKey();
+        if (!visited.contains(pk) || !reachable.contains(pk) || pk.equals(next)) {
+          continue;
+        }
+        anc.add(pk);
+        Set<String> parentAnc = ancestors.get(pk);
+        if (parentAnc != null) {
+          anc.addAll(parentAnc);
+        }
+      }
+      ancestors.put(next, anc);
 
-      for (AgentGraphNode child : getChildNodes(node.getKey())) {
-        if (visited.add(child.getKey())) {
-          queue.add(child);
+      AgentGraphNode nextNode = getNode(next);
+      results.put(next, fn.apply(nextNode, scopedCtx(ctx, results, anc)));
+
+      if (nextNode != null) {
+        for (GraphEdge e : nextNode.getEdges()) {
+          if (reachable.contains(e.getKey())) {
+            indeg.merge(e.getKey(), -1, Integer::sum);
+          }
         }
       }
     }
   }
 
   /**
-   * Performs a reverse BFS traversal of the graph, starting from terminal nodes and working
-   * upward toward the root.
+   * Reverse topological traversal (descendants-first; root last).
    * <p>
-   * The root node is always processed last. Each node is visited exactly once (cycle-safe). This
-   * is a no-op when the graph is disabled or there are no terminal nodes.
+   * A node runs only after all reachable descendants. Ties break by discovery order. Cycle-safe,
+   * including graphs with no terminals. Each reachable node is visited once.
+   * <p>
+   * {@code fn} receives a fresh map of the initial {@code ctx} plus that node's descendant
+   * results only. {@code ctx} itself is not mutated. No-op if disabled or root is absent.
    *
-   * @param fn the visitor function; receives the current node and the context map
-   * @param ctx the mutable context map; values from earlier nodes are available to later ones
+   * @param fn visitor; node and dependency-scoped context
+   * @param ctx initial context template (global scratch); not written with node results
    */
   public void reverseTraverse(BiFunction<AgentGraphNode, Map<String, Object>, Object> fn,
       Map<String, Object> ctx) {
@@ -210,34 +254,172 @@ public final class AgentGraphDefinition {
     if (root == null) {
       return;
     }
+    String rootKey = root.getKey();
 
-    Set<String> visited = new HashSet<>();
-    Queue<AgentGraphNode> queue = new LinkedList<>();
+    Map.Entry<Set<String>, List<String>> rd = reachableAndDiscovery(rootKey);
+    Set<String> reachable = rd.getKey();
+    List<String> order = rd.getValue();
 
-    // Seed from terminals, excluding root (it will be processed last).
-    for (AgentGraphNode terminal : terminalNodes()) {
-      if (!terminal.getKey().equals(root.getKey()) && visited.add(terminal.getKey())) {
-        queue.add(terminal);
+    Map<String, Integer> outdeg = new HashMap<>();
+    for (String k : reachable) {
+      int d = 0;
+      AgentGraphNode node = getNode(k);
+      if (node != null) {
+        for (GraphEdge e : node.getEdges()) {
+          if (reachable.contains(e.getKey())) {
+            d++;
+          }
+        }
       }
+      outdeg.put(k, d);
     }
 
-    while (!queue.isEmpty()) {
-      AgentGraphNode node = queue.poll();
-      Object result = fn.apply(node, ctx);
-      ctx.put(node.getKey(), result);
+    Set<String> visited = new HashSet<>();
+    Map<String, Object> results = new HashMap<>();
+    Map<String, Set<String>> descendants = new HashMap<>();
+    while (hasNonRootRemaining(reachable, visited, rootKey)) {
+      String next = firstReadyNonRoot(order, visited, outdeg, rootKey);
+      if (next == null) {
+        next = lowestDegreeNonRoot(order, visited, outdeg, rootKey);
+      }
+      visited.add(next);
 
-      for (AgentGraphNode parent : getParentNodes(node.getKey())) {
-        if (!parent.getKey().equals(root.getKey()) && visited.add(parent.getKey())) {
-          queue.add(parent);
+      Set<String> desc = new HashSet<>();
+      AgentGraphNode nextNode = getNode(next);
+      if (nextNode != null) {
+        for (GraphEdge e : nextNode.getEdges()) {
+          String ck = e.getKey();
+          if (!reachable.contains(ck) || !visited.contains(ck)) {
+            continue;
+          }
+          desc.add(ck);
+          Set<String> childDesc = descendants.get(ck);
+          if (childDesc != null) {
+            desc.addAll(childDesc);
+          }
+        }
+      }
+      descendants.put(next, desc);
+      results.put(next, fn.apply(nextNode, scopedCtx(ctx, results, desc)));
+
+      for (AgentGraphNode parent : getParentNodes(next)) {
+        String pk = parent.getKey();
+        if (!pk.equals(rootKey) && reachable.contains(pk)) {
+          outdeg.merge(pk, -1, Integer::sum);
         }
       }
     }
 
-    // Process root last (whether or not it was encountered as a parent above).
-    if (visited.add(root.getKey())) {
-      Object result = fn.apply(root, ctx);
-      ctx.put(root.getKey(), result);
+    Set<String> rootDeps = new HashSet<>();
+    for (String k : reachable) {
+      if (!k.equals(rootKey)) {
+        rootDeps.add(k);
+      }
     }
+    results.put(rootKey, fn.apply(root, scopedCtx(ctx, results, rootDeps)));
+  }
+
+  /** Reachable set and discovery order (BFS from root, declared edge order). */
+  private Map.Entry<Set<String>, List<String>> reachableAndDiscovery(String rootKey) {
+    Set<String> reachable = new HashSet<>();
+    List<String> order = new ArrayList<>();
+    Queue<String> queue = new LinkedList<>();
+    reachable.add(rootKey);
+    order.add(rootKey);
+    queue.add(rootKey);
+    while (!queue.isEmpty()) {
+      String key = queue.poll();
+      AgentGraphNode node = getNode(key);
+      if (node == null) {
+        continue;
+      }
+      for (GraphEdge edge : node.getEdges()) {
+        if (getNode(edge.getKey()) != null && reachable.add(edge.getKey())) {
+          order.add(edge.getKey());
+          queue.add(edge.getKey());
+        }
+      }
+    }
+    return new AbstractMap.SimpleEntry<>(reachable, order);
+  }
+
+  /** Copy of {@code initial} with {@code results} entries for {@code deps} overlaid. */
+  private static Map<String, Object> scopedCtx(
+      Map<String, Object> initial, Map<String, Object> results, Set<String> deps) {
+    Map<String, Object> out = new HashMap<>(initial);
+    for (String k : deps) {
+      out.put(k, results.get(k));
+    }
+    return out;
+  }
+
+  private static String firstReady(
+      List<String> order, Set<String> visited, Map<String, Integer> degree) {
+    for (String k : order) {
+      if (!visited.contains(k) && degree.get(k) != null && degree.get(k) == 0) {
+        return k;
+      }
+    }
+    return null;
+  }
+
+  private static String lowestDegree(
+      List<String> order, Set<String> visited, Map<String, Integer> degree) {
+    String best = null;
+    int bestDeg = Integer.MAX_VALUE;
+    for (String k : order) {
+      if (visited.contains(k)) {
+        continue;
+      }
+      Integer d = degree.get(k);
+      int deg = d == null ? 0 : d;
+      if (best == null || deg < bestDeg) {
+        best = k;
+        bestDeg = deg;
+      }
+    }
+    return best;
+  }
+
+  private static String firstReadyNonRoot(
+      List<String> order, Set<String> visited, Map<String, Integer> degree, String rootKey) {
+    for (String k : order) {
+      if (k.equals(rootKey) || visited.contains(k)) {
+        continue;
+      }
+      if (degree.get(k) != null && degree.get(k) == 0) {
+        return k;
+      }
+    }
+    return null;
+  }
+
+  private static String lowestDegreeNonRoot(
+      List<String> order, Set<String> visited, Map<String, Integer> degree, String rootKey) {
+    String best = null;
+    int bestDeg = Integer.MAX_VALUE;
+    for (String k : order) {
+      if (k.equals(rootKey) || visited.contains(k)) {
+        continue;
+      }
+      Integer d = degree.get(k);
+      int deg = d == null ? 0 : d;
+      if (best == null || deg < bestDeg) {
+        best = k;
+        bestDeg = deg;
+      }
+    }
+    return best;
+  }
+
+  private static boolean hasNonRootRemaining(
+      Set<String> reachable, Set<String> visited, String rootKey) {
+    for (String k : reachable) {
+      if (!k.equals(rootKey) && !visited.contains(k)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
