@@ -207,12 +207,12 @@ public final class AgentGraphDefinition {
       if (next == null) {
         next = lowestDegree(order, visited, indeg);
       }
-      visited.add(next);
 
+      // Accumulate deps before marking visited so a self-loop does not count as its own ancestor.
       Set<String> anc = new HashSet<>();
       for (AgentGraphNode parent : getParentNodes(next)) {
         String pk = parent.getKey();
-        if (!visited.contains(pk) || !reachable.contains(pk) || pk.equals(next)) {
+        if (!visited.contains(pk) || !reachable.contains(pk)) {
           continue;
         }
         anc.add(pk);
@@ -222,6 +222,7 @@ public final class AgentGraphDefinition {
         }
       }
       ancestors.put(next, anc);
+      visited.add(next);
 
       AgentGraphNode nextNode = getNode(next);
       results.put(next, fn.apply(nextNode, scopedCtx(ctx, results, anc)));
@@ -282,8 +283,8 @@ public final class AgentGraphDefinition {
       if (next == null) {
         next = lowestDegreeNonRoot(order, visited, outdeg, rootKey);
       }
-      visited.add(next);
 
+      // Accumulate deps before marking visited so a self-loop does not count as its own descendant.
       Set<String> desc = new HashSet<>();
       AgentGraphNode nextNode = getNode(next);
       if (nextNode != null) {
@@ -300,6 +301,7 @@ public final class AgentGraphDefinition {
         }
       }
       descendants.put(next, desc);
+      visited.add(next);
       results.put(next, fn.apply(nextNode, scopedCtx(ctx, results, desc)));
 
       for (AgentGraphNode parent : getParentNodes(next)) {

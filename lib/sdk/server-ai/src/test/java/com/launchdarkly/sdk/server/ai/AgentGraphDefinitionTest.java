@@ -418,6 +418,24 @@ public class AgentGraphDefinitionTest {
   }
 
   @Test
+  public void selfLoopIsNotIncludedInOwnContext() {
+    // a → b → b (self-loop on b)
+    AgentGraphDefinition graph = buildEnabled("a",
+        new String[][]{{"a", "b"}, {"b", "b"}}, "a", "b");
+    Map<String, Object> initial = new HashMap<>();
+    initial.put("seed", 1);
+
+    Map<String, Set<String>> fwd = captureContextKeys(graph, false, initial);
+    assertThat(fwd.get("b"), containsInAnyOrder("seed", "a"));
+    assertThat(fwd.get("b").contains("b"), is(false));
+
+    Map<String, Set<String>> rev = captureContextKeys(graph, true, initial);
+    assertThat(rev.get("b"), containsInAnyOrder("seed"));
+    assertThat(rev.get("b").contains("b"), is(false));
+    assertThat(rev.get("a"), containsInAnyOrder("seed", "b"));
+  }
+
+  @Test
   public void reverseTraverseIsNoOpWhenDisabled() {
     AgentGraphDefinition graph = new AgentGraphDefinition(
         AgentGraphFlagValue.disabled(), Collections.emptyMap(), false, null);
