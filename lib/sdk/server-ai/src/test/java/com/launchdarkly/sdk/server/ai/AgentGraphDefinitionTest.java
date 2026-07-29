@@ -4,6 +4,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
@@ -16,6 +17,7 @@ import com.launchdarkly.sdk.server.ai.internal.AgentGraphFlagValue;
 import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -330,6 +332,120 @@ public class AgentGraphDefinitionTest {
     return keysByNode;
   }
 
+  /** Canonical order + exact-context vector (empty initial context). */
+  private static final class Vector {
+    final String id;
+    final String root;
+    final String[][] edges;
+    final String[] nodeKeys;
+    final List<String> fwdOrder;
+    final List<String> revOrder;
+    final Map<String, Set<String>> fwdCtx;
+    final Map<String, Set<String>> revCtx;
+
+    Vector(
+        String id,
+        String root,
+        String[][] edges,
+        String[] nodeKeys,
+        List<String> fwdOrder,
+        List<String> revOrder,
+        Map<String, Set<String>> fwdCtx,
+        Map<String, Set<String>> revCtx) {
+      this.id = id;
+      this.root = root;
+      this.edges = edges;
+      this.nodeKeys = nodeKeys;
+      this.fwdOrder = fwdOrder;
+      this.revOrder = revOrder;
+      this.fwdCtx = fwdCtx;
+      this.revCtx = revCtx;
+    }
+  }
+
+  private static List<String> lists(String... keys) {
+    return Arrays.asList(keys);
+  }
+
+  private static Set<String> set(String... keys) {
+    return new HashSet<>(Arrays.asList(keys));
+  }
+
+  /** Builds a node→dependency-key map from alternating node, deps pairs. */
+  @SafeVarargs
+  private static Map<String, Set<String>> ctx(Object... nodeAndDeps) {
+    Map<String, Set<String>> m = new HashMap<>();
+    for (int i = 0; i < nodeAndDeps.length; i += 2) {
+      @SuppressWarnings("unchecked")
+      Set<String> deps = (Set<String>) nodeAndDeps[i + 1];
+      m.put((String) nodeAndDeps[i], deps);
+    }
+    return m;
+  }
+
+  private static final List<Vector> VECTORS = Arrays.asList(
+      new Vector(
+          "G1", "a",
+          new String[][]{{"a", "b"}, {"b", "c"}},
+          new String[]{"a", "b", "c"},
+          lists("a", "b", "c"),
+          lists("c", "b", "a"),
+          ctx("a", set(), "b", set("a"), "c", set("a", "b")),
+          ctx("a", set("b", "c"), "b", set("c"), "c", set())),
+      new Vector(
+          "G2", "a",
+          new String[][]{{"a", "b"}, {"a", "c"}, {"c", "d"}, {"d", "e"}, {"b", "e"}},
+          new String[]{"a", "b", "c", "d", "e"},
+          lists("a", "b", "c", "d", "e"),
+          lists("e", "b", "d", "c", "a"),
+          ctx("a", set(), "b", set("a"), "c", set("a"), "d", set("a", "c"),
+              "e", set("a", "b", "c", "d")),
+          ctx("a", set("b", "c", "d", "e"), "b", set("e"), "c", set("d", "e"),
+              "d", set("e"), "e", set())),
+      new Vector(
+          "G2b", "a",
+          new String[][]{{"a", "c"}, {"a", "b"}, {"c", "d"}, {"d", "e"}, {"b", "e"}},
+          new String[]{"a", "b", "c", "d", "e"},
+          lists("a", "c", "b", "d", "e"),
+          lists("e", "b", "d", "c", "a"),
+          ctx("a", set(), "b", set("a"), "c", set("a"), "d", set("a", "c"),
+              "e", set("a", "b", "c", "d")),
+          ctx("a", set("b", "c", "d", "e"), "b", set("e"), "c", set("d", "e"),
+              "d", set("e"), "e", set())),
+      new Vector(
+          "G3", "a",
+          new String[][]{{"a", "b"}, {"a", "c"}, {"b", "d"}, {"c", "d"}},
+          new String[]{"a", "b", "c", "d"},
+          lists("a", "b", "c", "d"),
+          lists("d", "b", "c", "a"),
+          ctx("a", set(), "b", set("a"), "c", set("a"), "d", set("a", "b", "c")),
+          ctx("a", set("b", "c", "d"), "b", set("d"), "c", set("d"), "d", set())),
+      new Vector(
+          "G4", "a",
+          new String[][]{{"a", "n"}, {"n", "m"}, {"n", "t"}, {"m", "t"}},
+          new String[]{"a", "n", "m", "t"},
+          lists("a", "n", "m", "t"),
+          lists("t", "m", "n", "a"),
+          ctx("a", set(), "n", set("a"), "m", set("a", "n"), "t", set("a", "m", "n")),
+          ctx("a", set("m", "n", "t"), "n", set("m", "t"), "m", set("t"), "t", set())),
+      new Vector(
+          "G5", "a",
+          new String[][]{{"a", "b"}, {"a", "c"}, {"b", "d"}},
+          new String[]{"a", "b", "c", "d"},
+          lists("a", "b", "c", "d"),
+          lists("c", "d", "b", "a"),
+          ctx("a", set(), "b", set("a"), "c", set("a"), "d", set("a", "b")),
+          ctx("a", set("b", "c", "d"), "b", set("d"), "c", set(), "d", set())),
+      new Vector(
+          "G6", "a",
+          new String[][]{{"a", "b"}, {"b", "c"}, {"c", "b"}},
+          new String[]{"a", "b", "c"},
+          lists("a", "b", "c"),
+          lists("b", "c", "a"),
+          ctx("a", set(), "b", set("a"), "c", set("a", "b")),
+          ctx("a", set("b", "c"), "b", set(), "c", set("b")))
+  );
+
   // ---- traverse -------------------------------------------------------------
 
   @Test
@@ -548,52 +664,27 @@ public class AgentGraphDefinitionTest {
   }
 
   @Test
-  public void g2ExactContextScopingForward() {
-    AgentGraphDefinition graph = buildEnabled("a",
-        new String[][]{{"a", "b"}, {"a", "c"}, {"c", "d"}, {"d", "e"}, {"b", "e"}},
-        "a", "b", "c", "d", "e");
-    Map<String, Object> initial = new HashMap<>();
-    initial.put("seed", 1);
-    Map<String, Set<String>> keys = captureContextKeys(graph, false, initial);
+  public void vectorTraversalOrderAndContextParity() {
+    for (Vector v : VECTORS) {
+      AgentGraphDefinition graph = buildEnabled(v.root, v.edges, v.nodeKeys);
+      Map<String, Object> empty = new HashMap<>();
 
-    assertThat(keys.get("a"), containsInAnyOrder("seed"));
-    assertThat(keys.get("b"), containsInAnyOrder("seed", "a"));
-    assertThat(keys.get("c"), containsInAnyOrder("seed", "a"));
-    assertThat(keys.get("d"), containsInAnyOrder("seed", "a", "c"));
-    assertThat(keys.get("e"), containsInAnyOrder("seed", "a", "b", "c", "d"));
-    // Parallel-branch leak must not occur
-    assertThat(keys.get("b").contains("c"), is(false));
-    assertThat(keys.get("d").contains("c"), is(true)); // d's ancestor
-    assertThat(keys.get("d").contains("b"), is(false));
-  }
+      assertThat(v.id + " forward order",
+          visitOrder(graph, false, empty), equalTo(v.fwdOrder));
+      assertThat(v.id + " reverse order",
+          visitOrder(graph, true, empty), equalTo(v.revOrder));
 
-  @Test
-  public void g2ExactContextScopingReverse() {
-    AgentGraphDefinition graph = buildEnabled("a",
-        new String[][]{{"a", "b"}, {"a", "c"}, {"c", "d"}, {"d", "e"}, {"b", "e"}},
-        "a", "b", "c", "d", "e");
-    Map<String, Object> initial = new HashMap<>();
-    initial.put("seed", 1);
-    Map<String, Set<String>> keys = captureContextKeys(graph, true, initial);
-
-    assertThat(keys.get("e"), containsInAnyOrder("seed"));
-    assertThat(keys.get("b"), containsInAnyOrder("seed", "e"));
-    assertThat(keys.get("d"), containsInAnyOrder("seed", "e"));
-    assertThat(keys.get("c"), containsInAnyOrder("seed", "d", "e"));
-    assertThat(keys.get("a"), containsInAnyOrder("seed", "b", "c", "d", "e"));
-    assertThat(keys.get("b").contains("c"), is(false));
-    assertThat(keys.get("d").contains("c"), is(false));
-  }
-
-  @Test
-  public void g2ContextScopingIndependentOfEdgeOrder() {
-    AgentGraphDefinition graph = buildEnabled("a",
-        new String[][]{{"a", "c"}, {"a", "b"}, {"c", "d"}, {"d", "e"}, {"b", "e"}},
-        "a", "b", "c", "d", "e");
-    Map<String, Set<String>> keys = captureContextKeys(graph, false, new HashMap<String, Object>());
-    assertThat(keys.get("b").contains("c"), is(false));
-    assertThat(keys.get("d").contains("b"), is(false));
-    assertThat(keys.get("e"), containsInAnyOrder("a", "b", "c", "d"));
+      Map<String, Set<String>> fwd = captureContextKeys(graph, false, empty);
+      for (Map.Entry<String, Set<String>> e : v.fwdCtx.entrySet()) {
+        assertThat(v.id + " forward ctx @" + e.getKey(),
+            fwd.get(e.getKey()), equalTo(e.getValue()));
+      }
+      Map<String, Set<String>> rev = captureContextKeys(graph, true, empty);
+      for (Map.Entry<String, Set<String>> e : v.revCtx.entrySet()) {
+        assertThat(v.id + " reverse ctx @" + e.getKey(),
+            rev.get(e.getKey()), equalTo(e.getValue()));
+      }
+    }
   }
 
   @Test
