@@ -443,7 +443,23 @@ public class AgentGraphDefinitionTest {
           lists("a", "b", "c"),
           lists("b", "c", "a"),
           ctx("a", set(), "b", set("a"), "c", set("a", "b")),
-          ctx("a", set("b", "c"), "b", set(), "c", set("b")))
+          ctx("a", set("b", "c"), "b", set(), "c", set("b"))),
+      new Vector(
+          "G7", "a",
+          new String[][]{{"a", "b"}, {"b", "c"}, {"c", "a"}},
+          new String[]{"a", "b", "c"},
+          lists("a", "b", "c"),
+          lists("c", "b", "a"),
+          ctx("a", set(), "b", set("a"), "c", set("a", "b")),
+          ctx("a", set("b", "c"), "b", set("c"), "c", set())),
+      new Vector(
+          "G8", "a",
+          new String[][]{{"a", "b"}, {"b", "a"}},
+          new String[]{"a", "b"},
+          lists("a", "b"),
+          lists("b", "a"),
+          ctx("a", set(), "b", set("a")),
+          ctx("a", set("b"), "b", set()))
   );
 
   // ---- traverse -------------------------------------------------------------

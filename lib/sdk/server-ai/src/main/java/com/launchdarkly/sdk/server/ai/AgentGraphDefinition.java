@@ -267,7 +267,8 @@ public final class AgentGraphDefinition {
       AgentGraphNode node = getNode(k);
       if (node != null) {
         for (GraphEdge e : node.getEdges()) {
-          if (reachable.contains(e.getKey())) {
+          // The root is visited last, outside this loop, so no node waits on it.
+          if (!e.getKey().equals(rootKey) && reachable.contains(e.getKey())) {
             d++;
           }
         }
