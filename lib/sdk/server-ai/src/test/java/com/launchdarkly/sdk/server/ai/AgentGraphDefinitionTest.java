@@ -1,9 +1,10 @@
 package com.launchdarkly.sdk.server.ai;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
@@ -16,6 +17,7 @@ import com.launchdarkly.sdk.server.ai.internal.AgentGraphFlagValue;
 import com.launchdarkly.sdk.server.interfaces.LDClientInterface;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -298,35 +300,191 @@ public class AgentGraphDefinitionTest {
     assertThat(graph.createTracker(), is(notNullValue()));
   }
 
+  // ---- traversal helpers ----------------------------------------------------
+
+  private static List<String> visitOrder(
+      AgentGraphDefinition graph, boolean reverse, Map<String, Object> initialCtx) {
+    List<String> visited = new ArrayList<>();
+    BiFunction<AgentGraphNode, Map<String, Object>, Object> fn = (node, ctx) -> {
+      visited.add(node.getKey());
+      return node.getKey() + "_result";
+    };
+    if (reverse) {
+      graph.reverseTraverse(fn, initialCtx);
+    } else {
+      graph.traverse(fn, initialCtx);
+    }
+    return visited;
+  }
+
+  private static Map<String, Set<String>> captureContextKeys(
+      AgentGraphDefinition graph, boolean reverse, Map<String, Object> initialCtx) {
+    Map<String, Set<String>> keysByNode = new LinkedHashMap<>();
+    BiFunction<AgentGraphNode, Map<String, Object>, Object> fn = (node, ctx) -> {
+      keysByNode.put(node.getKey(), new HashSet<>(ctx.keySet()));
+      return node.getKey() + "_result";
+    };
+    if (reverse) {
+      graph.reverseTraverse(fn, initialCtx);
+    } else {
+      graph.traverse(fn, initialCtx);
+    }
+    return keysByNode;
+  }
+
+  /** Canonical order + exact-context vector (empty initial context). */
+  private static final class Vector {
+    final String id;
+    final String root;
+    final String[][] edges;
+    final String[] nodeKeys;
+    final List<String> fwdOrder;
+    final List<String> revOrder;
+    final Map<String, Set<String>> fwdCtx;
+    final Map<String, Set<String>> revCtx;
+
+    Vector(
+        String id,
+        String root,
+        String[][] edges,
+        String[] nodeKeys,
+        List<String> fwdOrder,
+        List<String> revOrder,
+        Map<String, Set<String>> fwdCtx,
+        Map<String, Set<String>> revCtx) {
+      this.id = id;
+      this.root = root;
+      this.edges = edges;
+      this.nodeKeys = nodeKeys;
+      this.fwdOrder = fwdOrder;
+      this.revOrder = revOrder;
+      this.fwdCtx = fwdCtx;
+      this.revCtx = revCtx;
+    }
+  }
+
+  private static List<String> lists(String... keys) {
+    return Arrays.asList(keys);
+  }
+
+  private static Set<String> set(String... keys) {
+    return new HashSet<>(Arrays.asList(keys));
+  }
+
+  /** Builds a node→dependency-key map from alternating node, deps pairs. */
+  @SafeVarargs
+  private static Map<String, Set<String>> ctx(Object... nodeAndDeps) {
+    Map<String, Set<String>> m = new HashMap<>();
+    for (int i = 0; i < nodeAndDeps.length; i += 2) {
+      @SuppressWarnings("unchecked")
+      Set<String> deps = (Set<String>) nodeAndDeps[i + 1];
+      m.put((String) nodeAndDeps[i], deps);
+    }
+    return m;
+  }
+
+  private static final List<Vector> VECTORS = Arrays.asList(
+      new Vector(
+          "G1", "a",
+          new String[][]{{"a", "b"}, {"b", "c"}},
+          new String[]{"a", "b", "c"},
+          lists("a", "b", "c"),
+          lists("c", "b", "a"),
+          ctx("a", set(), "b", set("a"), "c", set("a", "b")),
+          ctx("a", set("b", "c"), "b", set("c"), "c", set())),
+      new Vector(
+          "G2", "a",
+          new String[][]{{"a", "b"}, {"a", "c"}, {"c", "d"}, {"d", "e"}, {"b", "e"}},
+          new String[]{"a", "b", "c", "d", "e"},
+          lists("a", "b", "c", "d", "e"),
+          lists("e", "b", "d", "c", "a"),
+          ctx("a", set(), "b", set("a"), "c", set("a"), "d", set("a", "c"),
+              "e", set("a", "b", "c", "d")),
+          ctx("a", set("b", "c", "d", "e"), "b", set("e"), "c", set("d", "e"),
+              "d", set("e"), "e", set())),
+      new Vector(
+          "G2b", "a",
+          new String[][]{{"a", "c"}, {"a", "b"}, {"c", "d"}, {"d", "e"}, {"b", "e"}},
+          new String[]{"a", "b", "c", "d", "e"},
+          lists("a", "c", "b", "d", "e"),
+          lists("e", "b", "d", "c", "a"),
+          ctx("a", set(), "b", set("a"), "c", set("a"), "d", set("a", "c"),
+              "e", set("a", "b", "c", "d")),
+          ctx("a", set("b", "c", "d", "e"), "b", set("e"), "c", set("d", "e"),
+              "d", set("e"), "e", set())),
+      new Vector(
+          "G3", "a",
+          new String[][]{{"a", "b"}, {"a", "c"}, {"b", "d"}, {"c", "d"}},
+          new String[]{"a", "b", "c", "d"},
+          lists("a", "b", "c", "d"),
+          lists("d", "b", "c", "a"),
+          ctx("a", set(), "b", set("a"), "c", set("a"), "d", set("a", "b", "c")),
+          ctx("a", set("b", "c", "d"), "b", set("d"), "c", set("d"), "d", set())),
+      new Vector(
+          "G4", "a",
+          new String[][]{{"a", "n"}, {"n", "m"}, {"n", "t"}, {"m", "t"}},
+          new String[]{"a", "n", "m", "t"},
+          lists("a", "n", "m", "t"),
+          lists("t", "m", "n", "a"),
+          ctx("a", set(), "n", set("a"), "m", set("a", "n"), "t", set("a", "m", "n")),
+          ctx("a", set("m", "n", "t"), "n", set("m", "t"), "m", set("t"), "t", set())),
+      new Vector(
+          "G5", "a",
+          new String[][]{{"a", "b"}, {"a", "c"}, {"b", "d"}},
+          new String[]{"a", "b", "c", "d"},
+          lists("a", "b", "c", "d"),
+          lists("c", "d", "b", "a"),
+          ctx("a", set(), "b", set("a"), "c", set("a"), "d", set("a", "b")),
+          ctx("a", set("b", "c", "d"), "b", set("d"), "c", set(), "d", set())),
+      new Vector(
+          "G6", "a",
+          new String[][]{{"a", "b"}, {"b", "c"}, {"c", "b"}},
+          new String[]{"a", "b", "c"},
+          lists("a", "b", "c"),
+          lists("b", "c", "a"),
+          ctx("a", set(), "b", set("a"), "c", set("a", "b")),
+          ctx("a", set("b", "c"), "b", set(), "c", set("b"))),
+      new Vector(
+          "G7", "a",
+          new String[][]{{"a", "b"}, {"b", "c"}, {"c", "a"}},
+          new String[]{"a", "b", "c"},
+          lists("a", "b", "c"),
+          lists("c", "b", "a"),
+          ctx("a", set(), "b", set("a"), "c", set("a", "b")),
+          ctx("a", set("b", "c"), "b", set("c"), "c", set())),
+      new Vector(
+          "G8", "a",
+          new String[][]{{"a", "b"}, {"b", "a"}},
+          new String[]{"a", "b"},
+          lists("a", "b"),
+          lists("b", "a"),
+          ctx("a", set(), "b", set("a")),
+          ctx("a", set("b"), "b", set()))
+  );
+
   // ---- traverse -------------------------------------------------------------
 
   @Test
   public void traverseVisitsAllNodesFromRoot() {
-    // a -> b -> c
     AgentGraphDefinition graph = buildEnabled("a",
         new String[][]{{"a", "b"}, {"b", "c"}}, "a", "b", "c");
-
-    List<String> visited = new ArrayList<>();
-    BiFunction<AgentGraphNode, Map<String, Object>, Object> fn = (node, ctx) -> {
-      visited.add(node.getKey());
-      return node.getKey();
-    };
-    graph.traverse(fn, new HashMap<>());
-    assertThat(visited, containsInAnyOrder("a", "b", "c"));
-    // Root must be first
-    assertThat(visited.get(0), is("a"));
+    List<String> visited = visitOrder(graph, false, new HashMap<String, Object>());
+    assertThat(visited, contains("a", "b", "c"));
   }
 
   @Test
-  public void traverseStoresResultsInContext() {
+  public void traverseDoesNotMutateCallerContextWithNodeResults() {
     AgentGraphDefinition graph = buildEnabled("a", new String[][]{{"a", "b"}}, "a", "b");
 
     Map<String, Object> ctx = new HashMap<>();
-    BiFunction<AgentGraphNode, Map<String, Object>, Object> fn = (node, c) -> node.getKey() + "_result";
-    graph.traverse(fn, ctx);
+    ctx.put("seed", "value");
+    Map<String, Set<String>> keysByNode = captureContextKeys(graph, false, ctx);
 
-    assertThat(ctx.get("a"), is("a_result"));
-    assertThat(ctx.get("b"), is("b_result"));
+    // Caller map is only the initial-context template; node results are not written back.
+    assertThat(ctx.keySet(), containsInAnyOrder("seed"));
+    assertThat(keysByNode.get("a"), containsInAnyOrder("seed"));
+    assertThat(keysByNode.get("b"), containsInAnyOrder("seed", "a"));
+    assertThat(keysByNode.get("b").contains("b"), is(false));
   }
 
   @Test
@@ -341,49 +499,32 @@ public class AgentGraphDefinitionTest {
 
   @Test
   public void traverseHandlesCyclesSafely() {
-    // Manually build a cyclic graph: a -> b -> a
-    LDClientInterface client = mock(LDClientInterface.class);
-    Map<String, AIAgentConfig> cfgs = configs("a", "b");
-    List<GraphEdge> aEdges = Collections.singletonList(new GraphEdge("b", null));
-    List<GraphEdge> bEdges = Collections.singletonList(new GraphEdge("a", null));
-    Map<String, AgentGraphNode> nodes = new HashMap<>();
-    nodes.put("a", new AgentGraphNode("a", cfgs.get("a"), aEdges));
-    nodes.put("b", new AgentGraphNode("b", cfgs.get("b"), bEdges));
-    nodes = Collections.unmodifiableMap(nodes);
+    AgentGraphDefinition graph = buildEnabled("a",
+        new String[][]{{"a", "b"}, {"b", "a"}}, "a", "b");
 
-    AgentGraphFlagValue fv = flagValue("a", new String[][]{{"a", "b"}, {"b", "a"}});
-    AgentGraphDefinition graph = new AgentGraphDefinition(fv, nodes, true, null);
-
-    List<String> visited = new ArrayList<>();
-    graph.traverse((node, ctx) -> { visited.add(node.getKey()); return null; }, new HashMap<>());
-    assertThat(visited.size(), is(2)); // each node visited exactly once
+    List<String> visited = visitOrder(graph, false, new HashMap<String, Object>());
+    assertThat(visited.size(), is(2));
+    assertThat(visited.get(0), is("a"));
+    assertThat(new HashSet<>(visited), containsInAnyOrder("a", "b"));
   }
 
   // ---- reverseTraverse ------------------------------------------------------
 
   @Test
   public void reverseTraverseProcessesRootLast() {
-    // a -> b -> c
     AgentGraphDefinition graph = buildEnabled("a",
         new String[][]{{"a", "b"}, {"b", "c"}}, "a", "b", "c");
 
-    List<String> visited = new ArrayList<>();
-    graph.reverseTraverse((node, ctx) -> { visited.add(node.getKey()); return null; }, new HashMap<>());
-
-    // c is terminal (seeded first), root "a" is last
-    assertThat(visited.get(visited.size() - 1), is("a"));
-    assertThat(visited.contains("b"), is(true));
-    assertThat(visited.contains("c"), is(true));
+    List<String> visited = visitOrder(graph, true, new HashMap<String, Object>());
+    assertThat(visited, contains("c", "b", "a"));
   }
 
   @Test
   public void reverseTraverseVisitsAllNodes() {
-    // a -> b, a -> c (c and b are terminals)
     AgentGraphDefinition graph = buildEnabled("a",
         new String[][]{{"a", "b"}, {"a", "c"}}, "a", "b", "c");
 
-    List<String> visited = new ArrayList<>();
-    graph.reverseTraverse((node, ctx) -> { visited.add(node.getKey()); return null; }, new HashMap<>());
+    List<String> visited = visitOrder(graph, true, new HashMap<String, Object>());
     assertThat(visited, containsInAnyOrder("a", "b", "c"));
     assertThat(visited.get(visited.size() - 1), is("a"));
   }
@@ -392,30 +533,38 @@ public class AgentGraphDefinitionTest {
   public void reverseTraverseSingleNodeGraph() {
     AgentGraphDefinition graph = buildEnabled("a", null, "a");
 
-    List<String> visited = new ArrayList<>();
-    graph.reverseTraverse((node, ctx) -> { visited.add(node.getKey()); return null; }, new HashMap<>());
-    assertThat(visited, containsInAnyOrder("a"));
+    List<String> visited = visitOrder(graph, true, new HashMap<String, Object>());
+    assertThat(visited, contains("a"));
   }
 
   @Test
   public void reverseTraverseHandlesCyclesSafely() {
-    Map<String, AIAgentConfig> cfgs = configs("a", "b");
-    List<GraphEdge> aEdges = Collections.singletonList(new GraphEdge("b", null));
-    List<GraphEdge> bEdges = Collections.singletonList(new GraphEdge("a", null));
-    Map<String, AgentGraphNode> nodes = new HashMap<>();
-    nodes.put("a", new AgentGraphNode("a", cfgs.get("a"), aEdges));
-    nodes.put("b", new AgentGraphNode("b", cfgs.get("b"), bEdges));
-    nodes = Collections.unmodifiableMap(nodes);
+    AgentGraphDefinition graph = buildEnabled("a",
+        new String[][]{{"a", "b"}, {"b", "a"}}, "a", "b");
 
-    AgentGraphFlagValue fv = flagValue("a", new String[][]{{"a", "b"}, {"b", "a"}});
-    AgentGraphDefinition graph = new AgentGraphDefinition(fv, nodes, true, null);
+    List<String> visited = visitOrder(graph, true, new HashMap<String, Object>());
+    // Cycle-safe: every reachable node visited exactly once; root last.
+    assertThat(visited.size(), is(2));
+    assertThat(visited.get(visited.size() - 1), is("a"));
+    assertThat(new HashSet<>(visited), containsInAnyOrder("a", "b"));
+  }
 
-    List<String> visited = new ArrayList<>();
-    graph.reverseTraverse((node, ctx) -> { visited.add(node.getKey()); return null; }, new HashMap<>());
-    // No infinite loop; in a pure cycle neither node is terminal, so no seeds are added —
-    // only root is processed in the final "root last" block.
-    assertThat(visited.size() <= 2, is(true));
-    assertThat(visited.size() >= 1, is(true));
+  @Test
+  public void selfLoopIsNotIncludedInOwnContext() {
+    // a → b → b (self-loop on b)
+    AgentGraphDefinition graph = buildEnabled("a",
+        new String[][]{{"a", "b"}, {"b", "b"}}, "a", "b");
+    Map<String, Object> initial = new HashMap<>();
+    initial.put("seed", 1);
+
+    Map<String, Set<String>> fwd = captureContextKeys(graph, false, initial);
+    assertThat(fwd.get("b"), containsInAnyOrder("seed", "a"));
+    assertThat(fwd.get("b").contains("b"), is(false));
+
+    Map<String, Set<String>> rev = captureContextKeys(graph, true, initial);
+    assertThat(rev.get("b"), containsInAnyOrder("seed"));
+    assertThat(rev.get("b").contains("b"), is(false));
+    assertThat(rev.get("a"), containsInAnyOrder("seed", "b"));
   }
 
   @Test
@@ -432,17 +581,13 @@ public class AgentGraphDefinitionTest {
 
   @Test
   public void traverseDiamondGraph() {
-    // root -> a, root -> b; a -> sink, b -> sink
     AgentGraphDefinition graph = buildEnabled("root",
         new String[][]{{"root", "a"}, {"root", "b"}, {"a", "sink"}, {"b", "sink"}},
         "root", "a", "b", "sink");
 
-    List<String> visited = new ArrayList<>();
-    graph.traverse((node, ctx) -> { visited.add(node.getKey()); return null; }, new HashMap<>());
-    // root first, sink visited only once
+    List<String> visited = visitOrder(graph, false, new HashMap<String, Object>());
     assertThat(visited.get(0), is("root"));
-    assertThat(visited.size(), is(4));
-    assertThat(new HashSet<>(visited).size(), is(4)); // all unique
+    assertThat(visited, contains("root", "a", "b", "sink"));
   }
 
   @Test
@@ -451,11 +596,59 @@ public class AgentGraphDefinitionTest {
         new String[][]{{"root", "a"}, {"root", "b"}, {"a", "sink"}, {"b", "sink"}},
         "root", "a", "b", "sink");
 
-    List<String> visited = new ArrayList<>();
-    graph.reverseTraverse((node, ctx) -> { visited.add(node.getKey()); return null; }, new HashMap<>());
-    // root last, sink visited once
+    List<String> visited = visitOrder(graph, true, new HashMap<String, Object>());
     assertThat(visited.get(visited.size() - 1), is("root"));
-    assertThat(visited.size(), is(4));
-    assertThat(new HashSet<>(visited).size(), is(4));
+    assertThat(visited, contains("sink", "a", "b", "root"));
+  }
+
+  @Test
+  public void vectorTraversalOrderAndContextParity() {
+    for (Vector v : VECTORS) {
+      AgentGraphDefinition graph = buildEnabled(v.root, v.edges, v.nodeKeys);
+      Map<String, Object> empty = new HashMap<>();
+
+      assertThat(v.id + " forward order",
+          visitOrder(graph, false, empty), equalTo(v.fwdOrder));
+      assertThat(v.id + " reverse order",
+          visitOrder(graph, true, empty), equalTo(v.revOrder));
+
+      Map<String, Set<String>> fwd = captureContextKeys(graph, false, empty);
+      for (Map.Entry<String, Set<String>> e : v.fwdCtx.entrySet()) {
+        assertThat(v.id + " forward ctx @" + e.getKey(),
+            fwd.get(e.getKey()), equalTo(e.getValue()));
+      }
+      Map<String, Set<String>> rev = captureContextKeys(graph, true, empty);
+      for (Map.Entry<String, Set<String>> e : v.revCtx.entrySet()) {
+        assertThat(v.id + " reverse ctx @" + e.getKey(),
+            rev.get(e.getKey()), equalTo(e.getValue()));
+      }
+    }
+  }
+
+  @Test
+  public void traversalIsDeterministicAcrossRuns() {
+    AgentGraphDefinition graph = buildEnabled("a",
+        new String[][]{{"a", "b"}, {"a", "c"}, {"c", "d"}, {"d", "e"}, {"b", "e"}},
+        "a", "b", "c", "d", "e");
+    List<String> firstFwd = visitOrder(graph, false, new HashMap<String, Object>());
+    List<String> firstRev = visitOrder(graph, true, new HashMap<String, Object>());
+    for (int i = 0; i < 20; i++) {
+      assertThat(visitOrder(graph, false, new HashMap<String, Object>()), is(firstFwd));
+      assertThat(visitOrder(graph, true, new HashMap<String, Object>()), is(firstRev));
+    }
+  }
+
+  @Test
+  public void seededInitialContextVisibleToEveryNode() {
+    AgentGraphDefinition graph = buildEnabled("a",
+        new String[][]{{"a", "b"}, {"b", "c"}}, "a", "b", "c");
+    Map<String, Object> initial = new HashMap<>();
+    initial.put("provider", "handle");
+    Map<String, Set<String>> fwd = captureContextKeys(graph, false, initial);
+    Map<String, Set<String>> rev = captureContextKeys(graph, true, initial);
+    for (String key : new String[]{"a", "b", "c"}) {
+      assertThat(fwd.get(key).contains("provider"), is(true));
+      assertThat(rev.get(key).contains("provider"), is(true));
+    }
   }
 }
