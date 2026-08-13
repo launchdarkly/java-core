@@ -11,6 +11,7 @@ on:
           - lib/shared/internal
           - lib/shared/test-helpers
           - lib/sdk/server
+          - lib/sdk/server-ai
           - lib/java-server-sdk-otel
           - lib/java-server-sdk-redis-store
       prerelease:
