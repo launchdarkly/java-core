@@ -63,6 +63,7 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
   
   private volatile Status currentStatus;
   private volatile boolean lastStoreUpdateFailed = false;
+  private volatile String environmentId = null;
   volatile Consumer<String> onOutageErrorLog = null; // test instrumentation
   
   DataSourceUpdatesImpl(
@@ -370,13 +371,28 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
   }
     
   @Override
-  public boolean apply(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet) {
-    if (store instanceof TransactionalDataStore) {
-      return applyToTransactionalStore((TransactionalDataStore) store, changeSet);
+  public void setEnvironmentId(String environmentId) {
+    if (environmentId != null && !environmentId.isEmpty()) {
+      this.environmentId = environmentId;
     }
-    
-    // Legacy update path for non-transactional stores
-    return applyToLegacyStore(changeSet);
+  }
+
+  String getEnvironmentId() {
+    return environmentId;
+  }
+
+  @Override
+  public boolean apply(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet) {
+    boolean applied = store instanceof TransactionalDataStore
+        ? applyToTransactionalStore((TransactionalDataStore) store, changeSet)
+        // Legacy update path for non-transactional stores
+        : applyToLegacyStore(changeSet);
+
+    if (applied) {
+      setEnvironmentId(changeSet.getEnvironmentId());
+    }
+
+    return applied;
   }
   
   private boolean applyToTransactionalStore(TransactionalDataStore transactionalDataStore,

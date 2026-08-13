@@ -255,6 +255,7 @@ public abstract class Representations {
     LDContext context;
     LDValue defaultValue;
     String method;
+    String environmentId;
   }
 
   public static class IdentifyEventParams {

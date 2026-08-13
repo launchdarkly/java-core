@@ -258,7 +258,12 @@ final class StreamProcessor implements DataSource {
     }
     logger.debug("Received StreamEvent: {}", event);    
     if (event instanceof MessageEvent) {
-      handleMessage((MessageEvent)event, initFuture);
+      MessageEvent messageEvent = (MessageEvent)event;
+      if (messageEvent.getHeaders() != null) {
+        dataSourceUpdates.setEnvironmentId(
+            messageEvent.getHeaders().value(HeaderConstants.ENVIRONMENT_ID.getHeaderName()));
+      }
+      handleMessage(messageEvent, initFuture);
     } else if (event instanceof FaultEvent) {
       return handleError(((FaultEvent)event).getCause(), initFuture);
     }

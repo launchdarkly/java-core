@@ -131,6 +131,7 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
      */
     private static class ConvertingUpdateSink implements DataSourceUpdateSink {
         private final IterableAsyncQueue<FDv2SourceResult> resultQueue;
+        private volatile String environmentId = null;
 
         public ConvertingUpdateSink(IterableAsyncQueue<FDv2SourceResult> resultQueue) {
             this.resultQueue = resultQueue;
@@ -144,7 +145,7 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
                             ChangeSetType.Full,
                             Selector.EMPTY,
                             allData.getData(),
-                            null,
+                            environmentId,
                             allData.shouldPersist()
                         );
             resultQueue.put(FDv2SourceResult.changeSet(changeSet, false));
@@ -166,11 +167,18 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
                             ChangeSetType.Partial,
                             Selector.EMPTY,
                             data,
-                            null,
+                            environmentId,
                             true // default to true as this adapter is used for adapting FDv1 data sources which are always persistent
                         );
             resultQueue.put(FDv2SourceResult.changeSet(changeSet, false));
             return true;
+        }
+
+        @Override
+        public void setEnvironmentId(String environmentId) {
+            if (environmentId != null && !environmentId.isEmpty()) {
+                this.environmentId = environmentId;
+            }
         }
 
         @Override

@@ -94,6 +94,7 @@ final class PollingProcessor implements DataSource {
       // storing any data, then we would still want to parse and try to store it even if it's cached.
       boolean alreadyInited = initialized.get();
       FullDataSet<ItemDescriptor> allData = requestor.getAllData(!alreadyInited);
+      dataSourceUpdates.setEnvironmentId(requestor.getEnvironmentId());
       if (allData == null) {
         // This means it was cached, and alreadyInited was true
         dataSourceUpdates.updateStatus(State.VALID, null);

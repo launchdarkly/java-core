@@ -239,6 +239,15 @@ public class TestComponents {
     }
 
     @Override
+    public void setEnvironmentId(String environmentId) {
+      wrappedInstance.setEnvironmentId(environmentId);
+    }
+
+    public String getEnvironmentId() {
+      return wrappedInstance.getEnvironmentId();
+    }
+
+    @Override
     public DataStoreStatusProvider getDataStoreStatusProvider() {
       return dataStoreStatusProvider;
     }

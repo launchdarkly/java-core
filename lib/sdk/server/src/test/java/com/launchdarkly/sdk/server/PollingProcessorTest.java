@@ -50,6 +50,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -408,6 +409,60 @@ public class PollingProcessorTest extends BaseTest {
       action.apply(statuses);
     } finally {
       dataSourceUpdates.statusBroadcaster.unregister(addStatus);
+    }
+  }
+  @Test
+  public void environmentIdIsCapturedFromPollResponseHeader() throws Exception {
+    Handler pollingHandler = Handlers.all(
+        Handlers.header("x-ld-envid", "env-from-poll"),
+        new TestPollHandler()
+        );
+
+    try (HttpServer server = HttpServer.start(pollingHandler)) {
+      try (PollingProcessor pollingProcessor = makeProcessor(server.getUri(), LENGTHY_INTERVAL)) {
+        assertNull(dataSourceUpdates.getEnvironmentId());
+
+        assertFutureIsCompleted(pollingProcessor.start(), 1, TimeUnit.SECONDS);
+
+        assertEquals("env-from-poll", dataSourceUpdates.getEnvironmentId());
+      }
+    }
+  }
+
+  @Test
+  public void environmentIdIsNullIfHeaderIsEmpty() throws Exception {
+    Handler pollingHandler = Handlers.all(
+        Handlers.header("x-ld-envid", ""),
+        new TestPollHandler()
+        );
+
+    try (HttpServer server = HttpServer.start(pollingHandler)) {
+      try (PollingProcessor pollingProcessor = makeProcessor(server.getUri(), LENGTHY_INTERVAL)) {
+        assertFutureIsCompleted(pollingProcessor.start(), 1, TimeUnit.SECONDS);
+
+        assertNull(dataSourceUpdates.getEnvironmentId());
+      }
+    }
+  }
+
+  @Test
+  public void environmentIdIsRetainedAfterPollFailure() throws Exception {
+    TestPollHandler handler = new TestPollHandler();
+    Handler pollingHandler = Handlers.all(
+        Handlers.header("x-ld-envid", "env-from-poll"),
+        handler
+        );
+
+    try (HttpServer server = HttpServer.start(pollingHandler)) {
+      try (PollingProcessor pollingProcessor = makeProcessor(server.getUri(), BRIEF_INTERVAL)) {
+        assertFutureIsCompleted(pollingProcessor.start(), 1, TimeUnit.SECONDS);
+        assertEquals("env-from-poll", dataSourceUpdates.getEnvironmentId());
+
+        handler.setError(503);
+        Thread.sleep(100);
+
+        assertEquals("env-from-poll", dataSourceUpdates.getEnvironmentId());
+      }
     }
   }
 }

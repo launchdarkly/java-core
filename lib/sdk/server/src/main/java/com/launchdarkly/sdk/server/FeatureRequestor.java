@@ -23,4 +23,14 @@ interface FeatureRequestor extends Closeable {
    * @throws HttpErrorException for HTTP error responses
    */
   FullDataSet<ItemDescriptor> getAllData(boolean returnDataEvenIfCached) throws IOException, HttpErrorException;
+
+  /**
+   * Returns the environment ID reported by LaunchDarkly in the most recent successful response, or
+   * null if none has been reported.
+   *
+   * @return the environment ID, or null
+   */
+  default String getEnvironmentId() {
+    return null;
+  }
 }
