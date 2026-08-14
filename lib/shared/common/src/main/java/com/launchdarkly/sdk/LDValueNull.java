@@ -26,4 +26,9 @@ final class LDValueNull extends LDValue {
   void write(JsonWriter writer) throws IOException {
     writer.nullValue();
   }
+
+  // Preserve singleton identity after Java deserialization.
+  private Object readResolve() {
+    return INSTANCE;
+  }
 }
