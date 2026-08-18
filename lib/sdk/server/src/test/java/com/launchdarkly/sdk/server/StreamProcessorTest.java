@@ -72,6 +72,7 @@ import static org.hamcrest.Matchers.startsWith;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -878,6 +879,39 @@ public class StreamProcessorTest extends BaseTest {
     assertEquals(feature.getVersion(), dataStore.get(FEATURES, feature.getKey()).getVersion());
   }
   
+  @Test
+  public void environmentIdIsCapturedFromStreamResponseHeader() throws Exception {
+    Handler streamHandler = Handlers.all(
+        Handlers.header("x-ld-envid", "env-from-stream"),
+        Handlers.SSE.start(),
+        Handlers.SSE.event(EMPTY_DATA_EVENT),
+        Handlers.SSE.leaveOpen()
+        );
+
+    try (HttpServer server = HttpServer.start(streamHandler)) {
+      try (StreamProcessor sp = createStreamProcessor(null, server.getUri())) {
+        assertNull(dataStore.getEnvironmentId());
+
+        sp.start();
+        dataSourceUpdates.awaitInit();
+
+        assertEquals("env-from-stream", dataStore.getEnvironmentId());
+      }
+    }
+  }
+
+  @Test
+  public void environmentIdIsNullWhenStreamResponseHasNoHeader() throws Exception {
+    try (HttpServer server = HttpServer.start(streamResponse(EMPTY_DATA_EVENT))) {
+      try (StreamProcessor sp = createStreamProcessor(null, server.getUri())) {
+        sp.start();
+        dataSourceUpdates.awaitInit();
+
+        assertNull(dataStore.getEnvironmentId());
+      }
+    }
+  }
+
   private void assertSegmentInStore(DataModel.Segment segment) {
     assertEquals(segment.getVersion(), dataStore.get(SEGMENTS, segment.getKey()).getVersion());
   }

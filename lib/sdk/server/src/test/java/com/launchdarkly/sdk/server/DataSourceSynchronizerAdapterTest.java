@@ -4,7 +4,9 @@ import com.launchdarkly.sdk.fdv2.SourceResultType;
 import com.launchdarkly.sdk.fdv2.SourceSignal;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
+import com.launchdarkly.sdk.server.DataStoreTestTypes.DataBuilder;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 
 import org.junit.After;
 import org.junit.Test;
@@ -17,6 +19,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.*;
 
@@ -294,5 +297,31 @@ public class DataSourceSynchronizerAdapterTest extends BaseTest {
         public boolean isDone() {
             return delegate.isDone();
         }
+    }
+
+    /**
+     * Test that an environment ID reported through the FDv1 update sink is carried on the
+     * change sets produced for the FDv2 data system.
+     */
+    @Test
+    public void environmentIdIsForwardedToChangeSets() throws Exception {
+        AtomicReference<DataSourceUpdateSink> capturedSink = new AtomicReference<>();
+
+        DataSourceSynchronizerAdapter adapter = new DataSourceSynchronizerAdapter(sink -> {
+            capturedSink.set(sink);
+            return new MockDataSource(new CountDownLatch(1), null);
+        });
+        resourcesToClose.add(adapter);
+
+        CompletableFuture<FDv2SourceResult> nextFuture = adapter.next();
+
+        capturedSink.get().init(new FullDataSet<>(DataBuilder.forStandardTypes().build().getData(), true,
+                "env-from-fdv1"));
+
+        FDv2SourceResult result = nextFuture.get(2, TimeUnit.SECONDS);
+        assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
+        assertEquals("env-from-fdv1", result.getChangeSet().getEnvironmentId());
+
+        adapter.close();
     }
 }

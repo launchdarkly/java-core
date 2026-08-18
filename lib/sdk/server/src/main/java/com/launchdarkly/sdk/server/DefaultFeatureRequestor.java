@@ -128,7 +128,8 @@ final class DefaultFeatureRequestor implements FeatureRequestor {
 
       JsonReader jr = new JsonReader(response.body().charStream());
       // Polling data from LaunchDarkly should be persisted
-      return new FullDataSet<>(parseFullDataSet(jr), true);
+      return new FullDataSet<>(parseFullDataSet(jr), true,
+          response.header(HeaderConstants.ENVIRONMENT_ID.getHeaderName()));
     }
   }
 }

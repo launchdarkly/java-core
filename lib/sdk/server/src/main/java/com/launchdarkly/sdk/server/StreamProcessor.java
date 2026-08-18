@@ -31,6 +31,7 @@ import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.State;
 import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.SerializationException;
 
@@ -269,7 +270,7 @@ final class StreamProcessor implements DataSource {
     try {
       switch (event.getEventName()) {
         case PUT:
-          handlePut(event.getDataReader(), initFuture);
+          handlePut(event.getDataReader(), environmentIdOf(event), initFuture);
           break;
        
         case PATCH:
@@ -331,12 +332,19 @@ final class StreamProcessor implements DataSource {
     return e.getCause() != null && exceptionHasCause(e.getCause(), c);
   }
   
-  private void handlePut(Reader eventData, CompletableFuture<Void> initFuture)
+  private static String environmentIdOf(MessageEvent event) {
+    return event.getHeaders() == null ? null
+        : event.getHeaders().value(HeaderConstants.ENVIRONMENT_ID.getHeaderName());
+  }
+
+  private void handlePut(Reader eventData, String environmentId, CompletableFuture<Void> initFuture)
       throws StreamInputException, StreamStoreException {
     recordStreamInit(false);
     esStarted = 0;
     PutData putData = parseStreamJson(StreamProcessorEvents::parsePutData, eventData);
-    if (!dataSourceUpdates.init(putData.data)) {
+    FullDataSet<ItemDescriptor> data = new FullDataSet<>(putData.data.getData(), putData.data.shouldPersist(),
+        environmentId);
+    if (!dataSourceUpdates.init(data)) {
       throw new StreamStoreException();
     }
     if (!initialized.getAndSet(true)) {
