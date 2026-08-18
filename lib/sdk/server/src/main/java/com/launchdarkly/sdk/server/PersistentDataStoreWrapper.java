@@ -205,10 +205,6 @@ final class PersistentDataStoreWrapper implements DataStore, SettableCache, Disa
       KeyedItems<SerializedItemDescriptor> items = PersistentDataStoreConverter.serializeAll(kind, e0.getValue());
       allBuilder.add(new AbstractMap.SimpleEntry<>(kind, items));
     }
-    String newEnvironmentId = allData.getEnvironmentId();
-    if (newEnvironmentId != null && !newEnvironmentId.isEmpty()) {
-      environmentId = newEnvironmentId;
-    }
     RuntimeException failure = initCore(new FullDataSet<>(allBuilder.build(), allData.shouldPersist(),
         allData.getEnvironmentId()));
     if (itemCache != null && allCache != null && !cacheDisabled) {
@@ -232,6 +228,10 @@ final class PersistentDataStoreWrapper implements DataStore, SettableCache, Disa
     }
     if (failure == null || cacheIndefinitely) {
       inited.set(true);
+      String newEnvironmentId = allData.getEnvironmentId();
+      if (newEnvironmentId != null && !newEnvironmentId.isEmpty()) {
+        environmentId = newEnvironmentId;
+      }
     }
     if (failure != null) {
       throw failure;
