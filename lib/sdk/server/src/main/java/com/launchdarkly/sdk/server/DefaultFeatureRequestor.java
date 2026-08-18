@@ -53,7 +53,6 @@ final class DefaultFeatureRequestor implements FeatureRequestor {
   @VisibleForTesting
   final URI pollingUri;
   private final Headers headers;
-  private volatile String environmentId = null;
   private final Path cacheDir;
   private final LDLogger logger;
 
@@ -93,11 +92,6 @@ final class DefaultFeatureRequestor implements FeatureRequestor {
     httpClient = httpBuilder.build();
   }
 
-  @Override
-  public String getEnvironmentId() {
-    return environmentId;
-  }
-
   public void close() {
     HttpProperties.shutdownHttpClient(httpClient);
     Util.deleteDirectory(cacheDir);
@@ -132,14 +126,10 @@ final class DefaultFeatureRequestor implements FeatureRequestor {
         throw new HttpErrorException(response.code());
       }
 
-      String responseEnvironmentId = response.header(HeaderConstants.ENVIRONMENT_ID.getHeaderName());
-      if (responseEnvironmentId != null && !responseEnvironmentId.isEmpty()) {
-        environmentId = responseEnvironmentId;
-      }
-
       JsonReader jr = new JsonReader(response.body().charStream());
       // Polling data from LaunchDarkly should be persisted
-      return new FullDataSet<>(parseFullDataSet(jr), true);
+      return new FullDataSet<>(parseFullDataSet(jr), true,
+          response.header(HeaderConstants.ENVIRONMENT_ID.getHeaderName()));
     }
   }
 }

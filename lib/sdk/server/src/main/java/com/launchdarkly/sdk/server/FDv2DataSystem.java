@@ -34,7 +34,6 @@ final class FDv2DataSystem implements DataSystem, Closeable {
   private final FlagChangeNotifier flagChanged;
   private final DataSourceStatusProvider dataSourceStatusProvider;
   private final DataStoreStatusProvider dataStoreStatusProvider;
-  private final DataSourceUpdatesImpl dataSourceUpdates;
   private boolean disposed = false;
 
   private FDv2DataSystem(
@@ -42,10 +41,8 @@ final class FDv2DataSystem implements DataSystem, Closeable {
     DataSource dataSource,
     DataSourceStatusProvider dataSourceStatusProvider,
     DataStoreStatusProvider dataStoreStatusProvider,
-    FlagChangeNotifier flagChanged,
-    DataSourceUpdatesImpl dataSourceUpdates
+    FlagChangeNotifier flagChanged
   ) {
-    this.dataSourceUpdates = dataSourceUpdates;
     this.store = store;
     this.dataSource = dataSource;
     this.dataStoreStatusProvider = dataStoreStatusProvider;
@@ -195,8 +192,7 @@ final class FDv2DataSystem implements DataSystem, Closeable {
       dataSource,
       dataSourceStatusProvider,
       dataStoreStatusProvider,
-      flagChanged,
-      dataSourceUpdates
+      flagChanged
     );
   }
 
@@ -232,7 +228,7 @@ final class FDv2DataSystem implements DataSystem, Closeable {
 
   @Override
   public String getEnvironmentId() {
-    return dataSourceUpdates.getEnvironmentId();
+    return store.getEnvironmentId();
   }
 
   @Override

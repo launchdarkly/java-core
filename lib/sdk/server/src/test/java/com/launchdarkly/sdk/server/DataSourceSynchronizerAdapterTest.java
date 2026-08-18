@@ -6,6 +6,7 @@ import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.DataStoreTestTypes.DataBuilder;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 
 import org.junit.After;
 import org.junit.Test;
@@ -314,8 +315,8 @@ public class DataSourceSynchronizerAdapterTest extends BaseTest {
 
         CompletableFuture<FDv2SourceResult> nextFuture = adapter.next();
 
-        capturedSink.get().setEnvironmentId("env-from-fdv1");
-        capturedSink.get().init(DataBuilder.forStandardTypes().build());
+        capturedSink.get().init(new FullDataSet<>(DataBuilder.forStandardTypes().build().getData(), true,
+                "env-from-fdv1"));
 
         FDv2SourceResult result = nextFuture.get(2, TimeUnit.SECONDS);
         assertEquals(SourceResultType.CHANGE_SET, result.getResultType());

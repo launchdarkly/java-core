@@ -84,14 +84,4 @@ public interface DataSourceUpdateSink {
    * @see DataSourceStatusProvider
    */
   void updateStatus(State newState, ErrorInfo newError);
-
-  /**
-   * Reports the ID of the LaunchDarkly environment that the data came from, as reported by
-   * LaunchDarkly in a successful response. The SDK makes this available to hook implementations.
-   * <p>
-   * Null or empty values are ignored and do not clear a previously reported ID.
-   *
-   * @param environmentId the environment ID reported by LaunchDarkly
-   */
-  default void setEnvironmentId(String environmentId) {}
 }

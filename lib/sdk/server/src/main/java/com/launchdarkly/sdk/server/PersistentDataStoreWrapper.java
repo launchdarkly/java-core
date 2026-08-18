@@ -63,6 +63,7 @@ final class PersistentDataStoreWrapper implements DataStore, SettableCache, Disa
   // themselves remain alive until GC reclaims them; the LoadingCache loaders
   // are short-circuited because every touch site checks this flag first.
   private volatile boolean cacheDisabled;
+  private volatile String environmentId = null;
   
   PersistentDataStoreWrapper(
       final PersistentDataStore core,
@@ -204,7 +205,12 @@ final class PersistentDataStoreWrapper implements DataStore, SettableCache, Disa
       KeyedItems<SerializedItemDescriptor> items = PersistentDataStoreConverter.serializeAll(kind, e0.getValue());
       allBuilder.add(new AbstractMap.SimpleEntry<>(kind, items));
     }
-    RuntimeException failure = initCore(new FullDataSet<>(allBuilder.build(), allData.shouldPersist()));
+    String newEnvironmentId = allData.getEnvironmentId();
+    if (newEnvironmentId != null && !newEnvironmentId.isEmpty()) {
+      environmentId = newEnvironmentId;
+    }
+    RuntimeException failure = initCore(new FullDataSet<>(allBuilder.build(), allData.shouldPersist(),
+        allData.getEnvironmentId()));
     if (itemCache != null && allCache != null && !cacheDisabled) {
       itemCache.invalidateAll();
       allCache.invalidateAll();
@@ -370,6 +376,11 @@ final class PersistentDataStoreWrapper implements DataStore, SettableCache, Disa
         itemStats.loadExceptionCount() + allStats.loadExceptionCount(),
         itemStats.totalLoadTime() + allStats.totalLoadTime(),
         itemStats.evictionCount() + allStats.evictionCount());
+  }
+
+  @Override
+  public String getEnvironmentId() {
+    return environmentId;
   }
 
   private ItemDescriptor getAndDeserializeItem(DataKind kind, String key) {

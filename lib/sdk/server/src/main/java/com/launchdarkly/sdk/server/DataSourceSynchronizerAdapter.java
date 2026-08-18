@@ -131,6 +131,7 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
      */
     private static class ConvertingUpdateSink implements DataSourceUpdateSink {
         private final IterableAsyncQueue<FDv2SourceResult> resultQueue;
+        // Only a full data set carries an environment ID; it is retained for subsequent partial updates.
         private volatile String environmentId = null;
 
         public ConvertingUpdateSink(IterableAsyncQueue<FDv2SourceResult> resultQueue) {
@@ -139,6 +140,9 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
 
         @Override
         public boolean init(DataStoreTypes.FullDataSet<ItemDescriptor> allData) {
+            if (allData.getEnvironmentId() != null && !allData.getEnvironmentId().isEmpty()) {
+                environmentId = allData.getEnvironmentId();
+            }
             // Convert the full data set into a ChangeSet and emit it
             ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet =
                     new ChangeSet<>(
@@ -172,13 +176,6 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
                         );
             resultQueue.put(FDv2SourceResult.changeSet(changeSet, false));
             return true;
-        }
-
-        @Override
-        public void setEnvironmentId(String environmentId) {
-            if (environmentId != null && !environmentId.isEmpty()) {
-                this.environmentId = environmentId;
-            }
         }
 
         @Override

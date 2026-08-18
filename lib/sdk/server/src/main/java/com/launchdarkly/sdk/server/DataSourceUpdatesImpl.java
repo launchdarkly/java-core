@@ -63,7 +63,6 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
   
   private volatile Status currentStatus;
   private volatile boolean lastStoreUpdateFailed = false;
-  private volatile String environmentId = null;
   volatile Consumer<String> onOutageErrorLog = null; // test instrumentation
   
   DataSourceUpdatesImpl(
@@ -371,28 +370,13 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
   }
     
   @Override
-  public void setEnvironmentId(String environmentId) {
-    if (environmentId != null && !environmentId.isEmpty()) {
-      this.environmentId = environmentId;
-    }
-  }
-
-  String getEnvironmentId() {
-    return environmentId;
-  }
-
-  @Override
   public boolean apply(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet) {
-    boolean applied = store instanceof TransactionalDataStore
-        ? applyToTransactionalStore((TransactionalDataStore) store, changeSet)
-        // Legacy update path for non-transactional stores
-        : applyToLegacyStore(changeSet);
-
-    if (applied) {
-      setEnvironmentId(changeSet.getEnvironmentId());
+    if (store instanceof TransactionalDataStore) {
+      return applyToTransactionalStore((TransactionalDataStore) store, changeSet);
     }
-
-    return applied;
+    
+    // Legacy update path for non-transactional stores
+    return applyToLegacyStore(changeSet);
   }
   
   private boolean applyToTransactionalStore(TransactionalDataStore transactionalDataStore,
@@ -445,7 +429,8 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
   
   private boolean applyFullChangeSetToLegacyStore(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> unsortedChangeset) {
     // Convert ChangeSet to FullDataSet for legacy init path, preserving shouldPersist flag
-    return init(new FullDataSet<>(unsortedChangeset.getData(), unsortedChangeset.shouldPersist()));
+    return init(new FullDataSet<>(unsortedChangeset.getData(), unsortedChangeset.shouldPersist(),
+        unsortedChangeset.getEnvironmentId()));
   }
   
   private boolean applyPartialChangeSetToLegacyStore(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet) {

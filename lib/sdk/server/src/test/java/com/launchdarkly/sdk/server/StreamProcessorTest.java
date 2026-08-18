@@ -890,12 +890,12 @@ public class StreamProcessorTest extends BaseTest {
 
     try (HttpServer server = HttpServer.start(streamHandler)) {
       try (StreamProcessor sp = createStreamProcessor(null, server.getUri())) {
-        assertNull(dataSourceUpdates.getEnvironmentId());
+        assertNull(dataStore.getEnvironmentId());
 
         sp.start();
         dataSourceUpdates.awaitInit();
 
-        assertEquals("env-from-stream", dataSourceUpdates.getEnvironmentId());
+        assertEquals("env-from-stream", dataStore.getEnvironmentId());
       }
     }
   }
@@ -907,7 +907,7 @@ public class StreamProcessorTest extends BaseTest {
         sp.start();
         dataSourceUpdates.awaitInit();
 
-        assertNull(dataSourceUpdates.getEnvironmentId());
+        assertNull(dataStore.getEnvironmentId());
       }
     }
   }

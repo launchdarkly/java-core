@@ -131,7 +131,7 @@ abstract class DataModelDependencies {
       DataKind kind = entry.getKey();
       builder.put(kind, sortCollection(kind, entry.getValue()));
     }
-    return new FullDataSet<>(builder.build().entrySet(), allData.shouldPersist());
+    return new FullDataSet<>(builder.build().entrySet(), allData.shouldPersist(), allData.getEnvironmentId());
   }
   
   /**

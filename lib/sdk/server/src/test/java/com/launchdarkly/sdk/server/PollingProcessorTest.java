@@ -61,11 +61,12 @@ public class PollingProcessorTest extends BaseTest {
   private static final Duration BRIEF_INTERVAL = Duration.ofMillis(20);
 
   private MockDataSourceUpdates dataSourceUpdates;
+  private InMemoryDataStore dataStore;
 
   @Before
   public void setup() {
-    DataStore store = new InMemoryDataStore();
-    dataSourceUpdates = TestComponents.dataSourceUpdates(store, new MockDataStoreStatusProvider());
+    dataStore = new InMemoryDataStore();
+    dataSourceUpdates = TestComponents.dataSourceUpdates(dataStore, new MockDataStoreStatusProvider());
   }
 
   private PollingProcessor makeProcessor(URI baseUri, Duration pollInterval) {
@@ -420,11 +421,11 @@ public class PollingProcessorTest extends BaseTest {
 
     try (HttpServer server = HttpServer.start(pollingHandler)) {
       try (PollingProcessor pollingProcessor = makeProcessor(server.getUri(), LENGTHY_INTERVAL)) {
-        assertNull(dataSourceUpdates.getEnvironmentId());
+        assertNull(dataStore.getEnvironmentId());
 
         assertFutureIsCompleted(pollingProcessor.start(), 1, TimeUnit.SECONDS);
 
-        assertEquals("env-from-poll", dataSourceUpdates.getEnvironmentId());
+        assertEquals("env-from-poll", dataStore.getEnvironmentId());
       }
     }
   }
@@ -440,7 +441,7 @@ public class PollingProcessorTest extends BaseTest {
       try (PollingProcessor pollingProcessor = makeProcessor(server.getUri(), LENGTHY_INTERVAL)) {
         assertFutureIsCompleted(pollingProcessor.start(), 1, TimeUnit.SECONDS);
 
-        assertNull(dataSourceUpdates.getEnvironmentId());
+        assertNull(dataStore.getEnvironmentId());
       }
     }
   }
@@ -456,12 +457,12 @@ public class PollingProcessorTest extends BaseTest {
     try (HttpServer server = HttpServer.start(pollingHandler)) {
       try (PollingProcessor pollingProcessor = makeProcessor(server.getUri(), BRIEF_INTERVAL)) {
         assertFutureIsCompleted(pollingProcessor.start(), 1, TimeUnit.SECONDS);
-        assertEquals("env-from-poll", dataSourceUpdates.getEnvironmentId());
+        assertEquals("env-from-poll", dataStore.getEnvironmentId());
 
         handler.setError(503);
         Thread.sleep(100);
 
-        assertEquals("env-from-poll", dataSourceUpdates.getEnvironmentId());
+        assertEquals("env-from-poll", dataStore.getEnvironmentId());
       }
     }
   }
