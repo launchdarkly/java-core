@@ -40,6 +40,8 @@ import org.junit.Test;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Future;
@@ -478,14 +480,16 @@ public class StreamProcessorTest extends BaseTest {
     testRecoverableHttpError(400);
   }
   
+  // 401 / 403 (and other UNEXPECTED 4xx) engage extended-regime backoff and
+  // keep retrying instead of transitioning to State.OFF.
   @Test
-  public void http401ErrorIsUnrecoverable() throws Exception {
-    testUnrecoverableHttpError(401);
+  public void http401TriggersExtendedRegimeAndKeepsRetrying() throws Exception {
+    testUnexpectedHttpErrorKeepsRetrying(401);
   }
 
   @Test
-  public void http403ErrorIsUnrecoverable() throws Exception {
-    testUnrecoverableHttpError(403);
+  public void http403TriggersExtendedRegimeAndKeepsRetrying() throws Exception {
+    testUnexpectedHttpErrorKeepsRetrying(403);
   }
 
   @Test
@@ -502,7 +506,227 @@ public class StreamProcessorTest extends BaseTest {
   public void http500ErrorIsRecoverable() throws Exception {
     testRecoverableHttpError(500);
   }
-  
+
+  // Extended-regime timing observation tests. These use compressed extended-regime
+  // timing (via the StreamProcessor constructor seams) so we can observe strategy
+  // behavior at ms-scale. Delays are observed via the eventsource's
+  // "Waiting X milliseconds before reconnecting" INFO log, which emits the strategy's
+  // computed (jitter-applied) delay directly. Jitter is 0.5x, so observed delays fall
+  // in [preJitter/2, preJitter].
+
+  @Test
+  public void unexpectedErrorEngagesExtendedRegime() throws Exception {
+    // A: verifies that a 401 causes the SDK to emit the "engaging extended backoff"
+    // info log, indicating activateRetryDelayStrategy has been called on the eventsource.
+    Duration extendedInitial = Duration.ofMillis(50);
+    Duration extendedMax = Duration.ofMillis(1000);
+    Duration retryReset = Duration.ofSeconds(60);
+    try (HttpServer server = HttpServer.start(Handlers.status(401))) {
+      try (StreamProcessor sp = createStreamProcessor(null, server.getUri(), null,
+          extendedInitial, extendedMax, retryReset)) {
+        sp.start();
+        LogCapture.Message engaged = awaitInfoMessageMatching(
+            "Classified failure as UNEXPECTED; engaging extended backoff.", 2000);
+        assertNotNull("expected 'engaging extended backoff' log", engaged);
+      }
+    }
+  }
+
+  @Test
+  public void unexpectedAndRecoverableUseDifferentRegimes() throws Exception {
+    // B: 500 uses normal-regime timing (BRIEF_RECONNECT_DELAY = 10ms initial); 401
+    // uses extended-regime timing (100ms initial). The observable difference in the
+    // "Waiting X ms" delays proves classification-drives-regime.
+    Duration extendedInitial = Duration.ofMillis(100);
+    Duration extendedMax = Duration.ofMillis(1000);
+    Duration retryReset = Duration.ofSeconds(60);
+
+    // Phase 1: continuous 500s → normal-regime delays.
+    try (HttpServer server = HttpServer.start(Handlers.status(500))) {
+      try (StreamProcessor sp = createStreamProcessor(null, server.getUri(), null,
+          extendedInitial, extendedMax, retryReset)) {
+        sp.start();
+        List<Long> normalDelays = awaitReconnectDelays(1, 2000);
+        assertFalse("expected some normal-regime reconnect delays", normalDelays.isEmpty());
+        // Normal regime: initial=10ms, first delay pre-jitter=10, post-jitter [5, 10].
+        // Second pre-jitter=20, post-jitter [10, 20]. Allow generous ceiling.
+        assertThat("first normal-regime delay should be <= 20ms; observed " + normalDelays.get(0),
+            normalDelays.get(0), lessThanOrEqualTo(20L));
+      }
+    }
+    drainCapturedLogs();
+
+    // Phase 2: continuous 401s → extended-regime delays.
+    try (HttpServer server = HttpServer.start(Handlers.status(401))) {
+      try (StreamProcessor sp = createStreamProcessor(null, server.getUri(), null,
+          extendedInitial, extendedMax, retryReset)) {
+        sp.start();
+        List<Long> extDelays = awaitReconnectDelays(1, 2000);
+        assertFalse("expected some extended-regime reconnect delays", extDelays.isEmpty());
+        // Extended regime: initial=100ms, first delay pre-jitter=100, post-jitter [50, 100].
+        assertThat("first extended-regime delay should be >= 40ms; observed " + extDelays.get(0),
+            extDelays.get(0), greaterThanOrEqualTo(40L));
+      }
+    }
+  }
+
+  @Test
+  public void healthyOpResetReturnsToNormalRegime() throws Exception {
+    // C: after an unexpected failure engages extended regime, a subsequent stream that
+    // stays open for >= retryResetInterval causes the eventsource library to revert to
+    // the normal-regime (default) strategy on the next reconnect. We observe the delay
+    // of the reconnect that follows the reset and expect it to be normal-regime-scale.
+    Duration extendedInitial = Duration.ofMillis(200);
+    Duration extendedMax = Duration.ofMillis(1000);
+    Duration retryReset = Duration.ofMillis(100);
+
+    Semaphore closeSuccessfulStream = new Semaphore(0);
+    Handler seq = Handlers.sequential(
+        Handlers.status(401),                                    // 1st: triggers extended
+        closableStreamResponse(EMPTY_DATA_EVENT, closeSuccessfulStream),  // 2nd: healthy stream
+        Handlers.status(500)                                      // 3rd: observe reconnect timing
+    );
+    try (HttpServer server = HttpServer.start(seq)) {
+      try (StreamProcessor sp = createStreamProcessor(null, server.getUri(), null,
+          extendedInitial, extendedMax, retryReset)) {
+        sp.start();
+
+        // Wait for the SDK to reach VALID (2nd request succeeded, stream is open).
+        dataSourceUpdates.awaitInit();
+
+        // Sleep past retryReset while the stream is happily open.
+        Thread.sleep(retryReset.toMillis() + 50);
+
+        // Drain the extended-regime reconnect delay log (from the 1st fault).
+        drainCapturedLogs();
+
+        // Close the successful stream → library computes reconnect delay. Because
+        // the stream was open >= retryReset, the library resets to default strategy.
+        closeSuccessfulStream.release();
+
+        // Observe the next "Waiting X ms" log: should be normal-regime timing.
+        List<Long> postResetDelays = awaitReconnectDelays(1, 2000);
+        assertFalse("expected a reconnect delay after healthy-op reset",
+            postResetDelays.isEmpty());
+        assertThat("post-reset delay should be normal-regime (<= 20ms); observed "
+            + postResetDelays.get(0),
+            postResetDelays.get(0), lessThanOrEqualTo(20L));
+      }
+    }
+  }
+
+  @Test
+  public void extendedRegimeDoublesEachAttempt() throws Exception {
+    // D: repeated 401s under extended-regime should produce delays that double each
+    // attempt (10 → 20 → 40 → 80 ms pre-jitter). With jitter [x/2, x], the ratio of
+    // consecutive delays is loose, but the ratio of first-vs-later delays should show
+    // clear growth.
+    Duration extendedInitial = Duration.ofMillis(20);
+    Duration extendedMax = Duration.ofMillis(5000);     // effectively no cap for this test
+    Duration retryReset = Duration.ofSeconds(60);
+    try (HttpServer server = HttpServer.start(Handlers.status(401))) {
+      try (StreamProcessor sp = createStreamProcessor(null, server.getUri(), null,
+          extendedInitial, extendedMax, retryReset)) {
+        sp.start();
+
+        // Collect 4 delays: pre-jitter should be 20, 40, 80, 160.
+        List<Long> delays = awaitReconnectDelays(4, 3000);
+        assertThat("expected at least 4 extended-regime delays; observed " + delays.size(),
+            delays.size(), greaterThanOrEqualTo(4));
+
+        // First delay pre-jitter=20, post-jitter [10, 20]; 4th delay pre-jitter=160,
+        // post-jitter [80, 160]. 4th should be at least 3x the first even under
+        // worst-case jitter (160/2 = 80, 20/1 = 20 → 4x).
+        long first = delays.get(0);
+        long fourth = delays.get(3);
+        assertThat(
+            "4th extended-regime delay should be significantly larger than 1st; "
+                + "observed 1st=" + first + " 4th=" + fourth,
+            fourth, greaterThanOrEqualTo(first * 3));
+      }
+    }
+  }
+
+  @Test
+  public void extendedRegimeClampsAtMax() throws Exception {
+    // E: repeated 401s under extended-regime with a tight extendedMax should show the
+    // doubling clamped at extendedMax. Pre-jitter: 10, 20, 40, 60 (clamped), 60, 60...
+    // Post-jitter [x/2, x]. After the clamp kicks in, all further delays fall in
+    // [max/2, max].
+    Duration extendedInitial = Duration.ofMillis(10);
+    Duration extendedMax = Duration.ofMillis(60);
+    Duration retryReset = Duration.ofSeconds(60);
+    try (HttpServer server = HttpServer.start(Handlers.status(401))) {
+      try (StreamProcessor sp = createStreamProcessor(null, server.getUri(), null,
+          extendedInitial, extendedMax, retryReset)) {
+        sp.start();
+
+        // Collect several delays; last few should be at the clamp.
+        List<Long> delays = awaitReconnectDelays(6, 3000);
+        assertThat("expected at least 6 extended-regime delays; observed " + delays.size(),
+            delays.size(), greaterThanOrEqualTo(6));
+
+        // The last two delays should each be <= extendedMax (60) — that's the clamp.
+        // Under jitter, they should be >= extendedMax/2 (30). Assert both bounds
+        // on the last two collected delays.
+        long extMax = extendedMax.toMillis();
+        long extHalf = extMax / 2;
+        for (int i = delays.size() - 2; i < delays.size(); i++) {
+          long d = delays.get(i);
+          assertThat("clamped delay index=" + i + " should be <= " + extMax + "; observed " + d,
+              d, lessThanOrEqualTo(extMax));
+          assertThat("clamped delay index=" + i + " should be >= " + extHalf + "; observed " + d,
+              d, greaterThanOrEqualTo(extHalf));
+        }
+      }
+    }
+  }
+
+  // Helpers for the extended-regime timing observation tests.
+
+  private static Long parseReconnectDelay(String logText) {
+    final String prefix = "Waiting ";
+    final String suffix = " milliseconds before reconnecting";
+    if (!logText.startsWith(prefix) || !logText.endsWith(suffix)) {
+      return null;
+    }
+    String middle = logText.substring(prefix.length(), logText.length() - suffix.length());
+    try {
+      return Long.parseLong(middle);
+    } catch (NumberFormatException e) {
+      return null;
+    }
+  }
+
+  private List<Long> awaitReconnectDelays(int minCount, int waitBudgetMs) {
+    List<Long> delays = new ArrayList<>();
+    long deadline = System.currentTimeMillis() + waitBudgetMs;
+    while (delays.size() < minCount) {
+      long remaining = deadline - System.currentTimeMillis();
+      if (remaining <= 0) break;
+      LogCapture.Message m = logCapture.awaitMessage(LDLogLevel.INFO, (int) remaining);
+      if (m == null) break;
+      Long d = parseReconnectDelay(m.getText());
+      if (d != null) delays.add(d);
+    }
+    return delays;
+  }
+
+  private LogCapture.Message awaitInfoMessageMatching(String expectedText, int waitBudgetMs) {
+    long deadline = System.currentTimeMillis() + waitBudgetMs;
+    while (true) {
+      long remaining = deadline - System.currentTimeMillis();
+      if (remaining <= 0) return null;
+      LogCapture.Message m = logCapture.awaitMessage(LDLogLevel.INFO, (int) remaining);
+      if (m == null) return null;
+      if (m.getText().equals(expectedText)) return m;
+    }
+  }
+
+  private void drainCapturedLogs() {
+    while (logCapture.awaitMessage(1) != null) { }
+  }
+
   @Test
   public void putEventWithInvalidJsonCausesStreamRestart() throws Exception {
     verifyEventCausesStreamRestart("put", "{sorry", ErrorKind.INVALID_DATA);
@@ -771,25 +995,42 @@ public class StreamProcessorTest extends BaseTest {
     }
   }
   
-  private void testUnrecoverableHttpError(int statusCode) throws Exception {
+  private void testUnexpectedHttpErrorKeepsRetrying(int statusCode) throws Exception {
     Handler errorResp = Handlers.status(statusCode);
-    
+
     BlockingQueue<Status> statuses = new LinkedBlockingQueue<>();
     dataSourceUpdates.statusBroadcaster.register(statuses::add);
 
     try (HttpServer server = HttpServer.start(errorResp)) {
       try (StreamProcessor sp = createStreamProcessor(null, server.getUri())) {
-        Future<Void> initFuture = sp.start();       
-        assertFutureIsCompleted(initFuture, 2, TimeUnit.SECONDS);
-        
-        assertFalse(sp.isInitialized());
-        
-        Status newStatus = requireDataSourceStatus(statuses, State.OFF);
+        sp.start();
+
+        // Status stays INITIALIZING (never got past init) with an ERROR_RESPONSE
+        // lastError. The processor does not transition to OFF; it keeps
+        // retrying under extended-regime backoff.
+        Status newStatus = requireDataSourceStatus(statuses, State.INITIALIZING);
         assertEquals(ErrorKind.ERROR_RESPONSE, newStatus.getLastError().getKind());
         assertEquals(statusCode, newStatus.getLastError().getStatusCode());
-        
+
+        // At least one request should have been made.
         server.getRecorder().requireRequest();
-        server.getRecorder().requireNoRequests(50, TimeUnit.MILLISECONDS);
+        assertFalse(sp.isInitialized());
+
+        // Unexpected classifications log at Error level (even though the SDK
+        // will keep retrying). The SDK-emitted classify-and-log line is
+        // distinguished by the "Error in stream connection" prefix.
+        boolean sawErrorForStatus = false;
+        for (LogCapture.Message m : logCapture.getMessages()) {
+          if (m.getText().startsWith("Error in stream connection")
+              && m.getText().contains("HTTP error " + statusCode)) {
+            assertThat(
+                "unexpected-classification HTTP error should log at Error, not " + m.getLevel(),
+                m.getLevel(), equalTo(LDLogLevel.ERROR));
+            sawErrorForStatus = true;
+          }
+        }
+        assertTrue("expected an Error-level SDK log mentioning HTTP error " + statusCode,
+            sawErrorForStatus);
       }
     }
   }
@@ -836,15 +1077,43 @@ public class StreamProcessorTest extends BaseTest {
         // It tries again, and finally gets a valid response (stream2Resp).
         Status successStatus2 = requireDataSourceStatus(statuses, State.VALID);
         assertSame(failureStatus3.getLastError(), successStatus2.getLastError());
+
+        // Normal classifications log at Warn level (not Error). Verify the SDK-emitted
+        // classify-and-log line -- distinguished by the "Error in stream connection"
+        // prefix -- appears at Warn for this status.
+        boolean sawWarnForStatus = false;
+        for (LogCapture.Message m : logCapture.getMessages()) {
+          if (m.getText().startsWith("Error in stream connection")
+              && m.getText().contains("HTTP error " + statusCode)) {
+            assertThat(
+                "normal-classification HTTP error should log at Warn, not " + m.getLevel(),
+                m.getLevel(), equalTo(LDLogLevel.WARN));
+            sawWarnForStatus = true;
+          }
+        }
+        assertTrue("expected a Warn-level SDK log mentioning HTTP error " + statusCode,
+            sawWarnForStatus);
       }
     }
   }
-  
+
   private StreamProcessor createStreamProcessor(URI streamUri) {
     return createStreamProcessor(baseConfig().build(), streamUri, null);
   }
 
   private StreamProcessor createStreamProcessor(LDConfig config, URI streamUri, DiagnosticStore acc) {
+    return createStreamProcessor(config, streamUri, acc,
+        StreamProcessor.DEFAULT_EXTENDED_INITIAL_RECONNECT_DELAY,
+        StreamProcessor.DEFAULT_EXTENDED_STREAM_MAX_RETRY_DELAY,
+        StreamProcessor.DEFAULT_RETRY_RESET_INTERVAL);
+  }
+
+  private StreamProcessor createStreamProcessor(
+      LDConfig config, URI streamUri, DiagnosticStore acc,
+      Duration extendedInitialReconnectDelay,
+      Duration extendedStreamMaxRetryDelay,
+      Duration retryResetInterval
+      ) {
     return new StreamProcessor(
         ComponentsImpl.toHttpProperties(clientContext(SDK_KEY, config == null ? baseConfig().build() : config).getHttp()),
         dataSourceUpdates,
@@ -853,6 +1122,9 @@ public class StreamProcessorTest extends BaseTest {
         streamUri,
         null,
         BRIEF_RECONNECT_DELAY,
+        extendedInitialReconnectDelay,
+        extendedStreamMaxRetryDelay,
+        retryResetInterval,
         testLogger
         );
   }
