@@ -44,7 +44,9 @@ public class TestService {
     "server-side-polling",
     "polling-gzip",
     "fdv1-fallback",
-    "instance-id"
+    "instance-id",
+    "retry-conformance-fdv1-streaming",
+    "retry-conformance-fdv1-polling"
   };
 
   static final Gson gson = new GsonBuilder().serializeNulls().create();
