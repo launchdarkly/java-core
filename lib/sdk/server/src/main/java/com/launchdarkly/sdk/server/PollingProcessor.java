@@ -78,6 +78,7 @@ final class PollingProcessor implements DataSource {
     }
     logger.info("Closing LaunchDarkly PollingProcessor");
     requestor.close();
+    dataSourceUpdates.updateStatus(State.OFF, null);
   }
 
   @Override
