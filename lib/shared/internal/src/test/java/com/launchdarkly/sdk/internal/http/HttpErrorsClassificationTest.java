@@ -16,34 +16,34 @@ import static com.launchdarkly.sdk.internal.http.FailureClass.UNEXPECTED;
 import static org.junit.Assert.assertEquals;
 
 /**
- * Unit coverage for {@link HttpErrors#classifyHTTPFailure(int)} and
+ * Unit coverage for {@link HttpErrors#classifyHttpFailure(int)} and
  * {@link HttpErrors#classifyTransportFailure(Throwable)}.
  */
 @SuppressWarnings("javadoc")
 public class HttpErrorsClassificationTest {
 
   // 400, 408, 429 are NORMAL.
-  @Test public void http400IsNormal()   { assertEquals(NORMAL, HttpErrors.classifyHTTPFailure(400)); }
-  @Test public void http408IsNormal()   { assertEquals(NORMAL, HttpErrors.classifyHTTPFailure(408)); }
-  @Test public void http429IsNormal()   { assertEquals(NORMAL, HttpErrors.classifyHTTPFailure(429)); }
+  @Test public void http400IsNormal()   { assertEquals(NORMAL, HttpErrors.classifyHttpFailure(400)); }
+  @Test public void http408IsNormal()   { assertEquals(NORMAL, HttpErrors.classifyHttpFailure(408)); }
+  @Test public void http429IsNormal()   { assertEquals(NORMAL, HttpErrors.classifyHttpFailure(429)); }
 
   // Other 4xx (including 401, 403) is UNEXPECTED.
-  @Test public void http401IsUnexpected()       { assertEquals(UNEXPECTED, HttpErrors.classifyHTTPFailure(401)); }
-  @Test public void http403IsUnexpected()       { assertEquals(UNEXPECTED, HttpErrors.classifyHTTPFailure(403)); }
-  @Test public void http404IsUnexpected()       { assertEquals(UNEXPECTED, HttpErrors.classifyHTTPFailure(404)); }
-  @Test public void http418IsUnexpected()       { assertEquals(UNEXPECTED, HttpErrors.classifyHTTPFailure(418)); }
-  @Test public void http451IsUnexpected()       { assertEquals(UNEXPECTED, HttpErrors.classifyHTTPFailure(451)); }
+  @Test public void http401IsUnexpected()       { assertEquals(UNEXPECTED, HttpErrors.classifyHttpFailure(401)); }
+  @Test public void http403IsUnexpected()       { assertEquals(UNEXPECTED, HttpErrors.classifyHttpFailure(403)); }
+  @Test public void http404IsUnexpected()       { assertEquals(UNEXPECTED, HttpErrors.classifyHttpFailure(404)); }
+  @Test public void http418IsUnexpected()       { assertEquals(UNEXPECTED, HttpErrors.classifyHttpFailure(418)); }
+  @Test public void http451IsUnexpected()       { assertEquals(UNEXPECTED, HttpErrors.classifyHttpFailure(451)); }
 
   // 5xx is NORMAL.
-  @Test public void http500IsNormal()   { assertEquals(NORMAL, HttpErrors.classifyHTTPFailure(500)); }
-  @Test public void http502IsNormal()   { assertEquals(NORMAL, HttpErrors.classifyHTTPFailure(502)); }
-  @Test public void http503IsNormal()   { assertEquals(NORMAL, HttpErrors.classifyHTTPFailure(503)); }
-  @Test public void http504IsNormal()   { assertEquals(NORMAL, HttpErrors.classifyHTTPFailure(504)); }
-  @Test public void http599IsNormal()   { assertEquals(NORMAL, HttpErrors.classifyHTTPFailure(599)); }
+  @Test public void http500IsNormal()   { assertEquals(NORMAL, HttpErrors.classifyHttpFailure(500)); }
+  @Test public void http502IsNormal()   { assertEquals(NORMAL, HttpErrors.classifyHttpFailure(502)); }
+  @Test public void http503IsNormal()   { assertEquals(NORMAL, HttpErrors.classifyHttpFailure(503)); }
+  @Test public void http504IsNormal()   { assertEquals(NORMAL, HttpErrors.classifyHttpFailure(504)); }
+  @Test public void http599IsNormal()   { assertEquals(NORMAL, HttpErrors.classifyHttpFailure(599)); }
 
   // Unusual non-4xx / non-5xx failure statuses are NORMAL.
-  @Test public void http300IsNormal()   { assertEquals(NORMAL, HttpErrors.classifyHTTPFailure(300)); }
-  @Test public void http0IsNormal()     { assertEquals(NORMAL, HttpErrors.classifyHTTPFailure(0)); }
+  @Test public void http300IsNormal()   { assertEquals(NORMAL, HttpErrors.classifyHttpFailure(300)); }
+  @Test public void http0IsNormal()     { assertEquals(NORMAL, HttpErrors.classifyHttpFailure(0)); }
 
   // Ordinary network I/O failures are NORMAL.
   @Test public void connectExceptionIsNormal() {

@@ -3,7 +3,6 @@ package com.launchdarkly.sdk.internal.http;
 import javax.net.ssl.SSLException;
 
 import java.security.GeneralSecurityException;
-import java.security.cert.CertificateException;
 
 /**
  * Classifies a failure into one of two regimes: {@link #NORMAL} or
@@ -36,7 +35,6 @@ public enum FailureClass {
   static boolean hasTlsOrCertificateCause(Throwable t) {
     for (Throwable c = t; c != null; c = c.getCause()) {
       if (c instanceof SSLException
-          || c instanceof CertificateException
           || c instanceof GeneralSecurityException) {
         return true;
       }

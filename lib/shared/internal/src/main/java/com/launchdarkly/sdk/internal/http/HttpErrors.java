@@ -1,6 +1,7 @@
 package com.launchdarkly.sdk.internal.http;
 
 import com.launchdarkly.logging.LDLogger;
+import com.launchdarkly.logging.LogValues;
 
 /**
  * Contains shared helpers related to HTTP response validation.
@@ -41,7 +42,7 @@ public abstract class HttpErrors {
    * @param statusCode the HTTP status
    * @return true if retrying makes sense; false if it should be considered a permanent failure
    *
-   * @deprecated Prefer {@link #classifyHTTPFailure(int)}, which returns a {@link FailureClass}
+   * @deprecated Prefer {@link #classifyHttpFailure(int)}, which returns a {@link FailureClass}
    *     that lets the caller distinguish an extended-regime backoff signal from an ordinary
    *     transient failure. This boolean method treats {@code false} as "give up permanently",
    *     which does not fit callers that keep retrying regardless of classification.
@@ -72,7 +73,7 @@ public abstract class HttpErrors {
    * @param recoverableMessage a phrase like "will retry" to use if the error is recoverable
    * @return true if the error is recoverable
    *
-   * @deprecated Prefer {@link #classifyAndLogHTTPFailure} and
+   * @deprecated Prefer {@link #classifyAndLogHttpFailure} and
    *     {@link #classifyAndLogTransportFailure}, which return a {@link FailureClass} that lets
    *     the caller distinguish an extended-regime backoff signal from an ordinary transient
    *     failure. This method treats a {@code false} return as "give up permanently", which does
@@ -115,7 +116,7 @@ public abstract class HttpErrors {
    * @param statusCode the HTTP status code
    * @return the classification
    */
-  public static FailureClass classifyHTTPFailure(int statusCode) {
+  public static FailureClass classifyHttpFailure(int statusCode) {
     if (statusCode == 400 || statusCode == 408 || statusCode == 429) {
       return FailureClass.NORMAL;
     }
@@ -141,7 +142,7 @@ public abstract class HttpErrors {
   }
 
   /**
-   * Classifies an HTTP failure per {@link #classifyHTTPFailure(int)}, logs it at the appropriate
+   * Classifies an HTTP failure per {@link #classifyHttpFailure(int)}, logs it at the appropriate
    * level, and returns the classification for the caller to act on. Unexpected classifications
    * log at Error since they typically indicate a customer-side problem (invalid or expired SDK
    * key, misconfiguration); normal classifications log at Warn since they are typically transient.
@@ -152,13 +153,13 @@ public abstract class HttpErrors {
    * @param willRetryMessage a phrase like "will retry" or "will retry at next scheduled poll interval"
    * @return the classification
    */
-  public static FailureClass classifyAndLogHTTPFailure(
+  public static FailureClass classifyAndLogHttpFailure(
       LDLogger logger,
       int statusCode,
       String errorContext,
       String willRetryMessage
       ) {
-    FailureClass failureClass = classifyHTTPFailure(statusCode);
+    FailureClass failureClass = classifyHttpFailure(statusCode);
     String errorDesc = httpErrorDescription(statusCode);
     if (failureClass == FailureClass.UNEXPECTED) {
       logger.error("Error {} ({}): {}", errorContext, willRetryMessage, errorDesc);
@@ -189,9 +190,9 @@ public abstract class HttpErrors {
       ) {
     FailureClass failureClass = classifyTransportFailure(e);
     if (failureClass == FailureClass.UNEXPECTED) {
-      logger.error("Error {} ({}): {}", errorContext, willRetryMessage, e.toString());
+      logger.error("Error {} ({}): {}", errorContext, willRetryMessage, LogValues.exceptionSummary(e));
     } else {
-      logger.warn("Error {} ({}): {}", errorContext, willRetryMessage, e.toString());
+      logger.warn("Error {} ({}): {}", errorContext, willRetryMessage, LogValues.exceptionSummary(e));
     }
     return failureClass;
   }
