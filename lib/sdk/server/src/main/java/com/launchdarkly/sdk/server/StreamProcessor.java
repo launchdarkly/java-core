@@ -412,7 +412,7 @@ final class StreamProcessor implements DataSource {
     ErrorInfo errorInfo;
     if (e instanceof StreamHttpErrorException) {
       int status = ((StreamHttpErrorException)e).getCode();
-      failureClass = HttpErrors.classifyAndLogHTTPFailure(logger, status, ERROR_CONTEXT_MESSAGE, WILL_RETRY_MESSAGE);
+      failureClass = HttpErrors.classifyAndLogHttpFailure(logger, status, ERROR_CONTEXT_MESSAGE, WILL_RETRY_MESSAGE);
       errorInfo = ErrorInfo.fromHttpError(status);
     } else if (e instanceof StreamIOException || e instanceof StreamClosedByServerException) {
       failureClass = HttpErrors.classifyAndLogTransportFailure(logger, e, ERROR_CONTEXT_MESSAGE, WILL_RETRY_MESSAGE);

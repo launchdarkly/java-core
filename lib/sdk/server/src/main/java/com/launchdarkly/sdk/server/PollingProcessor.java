@@ -123,7 +123,7 @@ final class PollingProcessor implements DataSource {
       }
       strategy.onSuccess();
     } catch (HttpErrorException e) {
-      FailureClass failureClass = HttpErrors.classifyAndLogHTTPFailure(
+      FailureClass failureClass = HttpErrors.classifyAndLogHttpFailure(
           logger, e.getStatus(), ERROR_CONTEXT_MESSAGE, WILL_RETRY_MESSAGE);
       dataSourceUpdates.updateStatus(State.INTERRUPTED, ErrorInfo.fromHttpError(e.getStatus()));
       if (strategy.onFailure(failureClass)) {
