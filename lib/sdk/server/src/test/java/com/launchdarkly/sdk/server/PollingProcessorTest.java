@@ -109,7 +109,8 @@ public class PollingProcessorTest extends BaseTest {
   @Test
   public void builderHasDefaultConfiguration() throws Exception {
     ComponentConfigurer<DataSource> f = Components.pollingDataSource();
-    try (PollingProcessor pp = (PollingProcessor)f.build(clientContext(SDK_KEY, baseConfig().build()))) {
+    try (PollingProcessor pp = (PollingProcessor)f.build(clientContext(SDK_KEY, baseConfig().build())
+        .withDataSourceUpdateSink(dataSourceUpdates))) {
       assertThat(((DefaultFeatureRequestor)pp.requestor).pollingUri.toString(), containsString(StandardEndpoints.DEFAULT_POLLING_BASE_URI.toString()));
       assertThat(pp.pollInterval, equalTo(PollingDataSourceBuilder.DEFAULT_POLL_INTERVAL));
     }
@@ -125,7 +126,8 @@ public class PollingProcessorTest extends BaseTest {
     try (PollingProcessor pp = (PollingProcessor) f.build(
         clientContext(
             SDK_KEY,
-            baseConfig().build()))) {
+            baseConfig().build())
+            .withDataSourceUpdateSink(dataSourceUpdates))) {
       assertThat(pp.pollInterval, equalTo(LENGTHY_INTERVAL));
       assertThat(((DefaultFeatureRequestor) pp.requestor).pollingUri.toString(), containsString("filter=myFilter"));
     }
