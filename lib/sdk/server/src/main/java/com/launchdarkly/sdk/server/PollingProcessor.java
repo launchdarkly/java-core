@@ -102,6 +102,13 @@ final class PollingProcessor implements DataSource {
     }
   }
 
+  private void tryUpdateStatus(State newState, ErrorInfo newError) {
+    if (isClosed) {
+      return;
+    }
+    dataSourceUpdates.updateStatus(newState, newError);
+  }
+
   private void poll() {
     try {
       // If we already obtained data earlier, and the poll request returns a cached response, then we don't
@@ -111,10 +118,10 @@ final class PollingProcessor implements DataSource {
       FullDataSet<ItemDescriptor> allData = requestor.getAllData(!alreadyInited);
       if (allData == null) {
         // This means it was cached, and alreadyInited was true
-        dataSourceUpdates.updateStatus(State.VALID, null);
+        tryUpdateStatus(State.VALID, null);
       } else {
         if (dataSourceUpdates.init(allData)) {
-          dataSourceUpdates.updateStatus(State.VALID, null);
+          tryUpdateStatus(State.VALID, null);
           if (!initialized.getAndSet(true)) {
             logger.info("Initialized LaunchDarkly client."); 
             initFuture.complete(null);
@@ -125,25 +132,25 @@ final class PollingProcessor implements DataSource {
     } catch (HttpErrorException e) {
       FailureClass failureClass = HttpErrors.classifyAndLogHttpFailure(
           logger, e.getStatus(), ERROR_CONTEXT_MESSAGE, WILL_RETRY_MESSAGE);
-      dataSourceUpdates.updateStatus(State.INTERRUPTED, ErrorInfo.fromHttpError(e.getStatus()));
+      tryUpdateStatus(State.INTERRUPTED, ErrorInfo.fromHttpError(e.getStatus()));
       if (strategy.onFailure(failureClass)) {
         logger.info("Classified failure as UNEXPECTED; engaging extended backoff.");
       }
     } catch (IOException e) {
       FailureClass failureClass = HttpErrors.classifyAndLogTransportFailure(
           logger, e, ERROR_CONTEXT_MESSAGE, WILL_RETRY_MESSAGE);
-      dataSourceUpdates.updateStatus(State.INTERRUPTED, ErrorInfo.fromException(ErrorKind.NETWORK_ERROR, e));
+      tryUpdateStatus(State.INTERRUPTED, ErrorInfo.fromException(ErrorKind.NETWORK_ERROR, e));
       if (strategy.onFailure(failureClass)) {
         logger.info("Classified failure as UNEXPECTED; engaging extended backoff.");
       }
     } catch (SerializationException e) {
       logger.error("Polling request received malformed data: {}", e.toString());
-      dataSourceUpdates.updateStatus(State.INTERRUPTED, ErrorInfo.fromException(ErrorKind.INVALID_DATA, e));
+      tryUpdateStatus(State.INTERRUPTED, ErrorInfo.fromException(ErrorKind.INVALID_DATA, e));
       strategy.onFailure(FailureClass.NORMAL);
     } catch (Exception e) {
       logger.error("Unexpected error from polling processor: {}", e.toString());
       logger.debug(e.toString(), e);
-      dataSourceUpdates.updateStatus(State.INTERRUPTED, ErrorInfo.fromException(ErrorKind.UNKNOWN, e));
+      tryUpdateStatus(State.INTERRUPTED, ErrorInfo.fromException(ErrorKind.UNKNOWN, e));
       strategy.onFailure(FailureClass.NORMAL);
     } finally {
       // Regardless of poll outcome, schedule the next attempt per strategy.
