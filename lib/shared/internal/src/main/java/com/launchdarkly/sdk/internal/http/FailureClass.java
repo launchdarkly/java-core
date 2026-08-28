@@ -1,8 +1,10 @@
 package com.launchdarkly.sdk.internal.http;
 
-import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLPeerUnverifiedException;
 
-import java.security.GeneralSecurityException;
+import java.security.cert.CertPathBuilderException;
+import java.security.cert.CertPathValidatorException;
+import java.security.cert.CertificateException;
 
 /**
  * Classifies a failure into one of two regimes: {@link #NORMAL} or
@@ -34,8 +36,10 @@ public enum FailureClass {
    */
   static boolean hasTlsOrCertificateCause(Throwable t) {
     for (Throwable c = t; c != null; c = c.getCause()) {
-      if (c instanceof SSLException
-          || c instanceof GeneralSecurityException) {
+      if (c instanceof CertificateException
+          || c instanceof CertPathValidatorException
+          || c instanceof CertPathBuilderException
+          || c instanceof SSLPeerUnverifiedException) {
         return true;
       }
     }

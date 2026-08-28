@@ -2,14 +2,19 @@ package com.launchdarkly.sdk.internal.http;
 
 import org.junit.Test;
 
+import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
 import javax.net.ssl.SSLPeerUnverifiedException;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
+import java.security.cert.CertPathBuilderException;
+import java.security.cert.CertPathValidatorException;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateExpiredException;
+import java.security.cert.CertificateNotYetValidException;
 
 import static com.launchdarkly.sdk.internal.http.FailureClass.NORMAL;
 import static com.launchdarkly.sdk.internal.http.FailureClass.UNEXPECTED;
@@ -57,9 +62,6 @@ public class HttpErrorsClassificationTest {
   }
 
   // TLS / certificate validation failures are UNEXPECTED.
-  @Test public void sslHandshakeIsUnexpected() {
-    assertEquals(UNEXPECTED, HttpErrors.classifyTransportFailure(new SSLHandshakeException("handshake failed")));
-  }
   @Test public void sslPeerUnverifiedIsUnexpected() {
     assertEquals(UNEXPECTED, HttpErrors.classifyTransportFailure(new SSLPeerUnverifiedException("peer not verified")));
   }
@@ -69,10 +71,40 @@ public class HttpErrorsClassificationTest {
   @Test public void certificateExpiredIsUnexpected() {
     assertEquals(UNEXPECTED, HttpErrors.classifyTransportFailure(new CertificateExpiredException("expired")));
   }
+  @Test public void certificateNotYetValidIsUnexpected() {
+    assertEquals(UNEXPECTED,
+        HttpErrors.classifyTransportFailure(new CertificateNotYetValidException("not yet valid")));
+  }
+  @Test public void certPathValidatorFailureIsUnexpected() {
+    assertEquals(UNEXPECTED,
+        HttpErrors.classifyTransportFailure(new CertPathValidatorException("path invalid")));
+  }
+  @Test public void certPathBuilderFailureIsUnexpected() {
+    assertEquals(UNEXPECTED,
+        HttpErrors.classifyTransportFailure(new CertPathBuilderException("cannot build path")));
+  }
+
+  @Test public void untrustedChainWrappedInHandshakeExceptionIsUnexpected() {
+    SSLHandshakeException e = new SSLHandshakeException("PKIX path building failed");
+    e.initCause(new CertPathBuilderException("unable to find valid certification path"));
+    assertEquals(UNEXPECTED, HttpErrors.classifyTransportFailure(e));
+  }
+
+  @Test public void bareSslHandshakeFailureIsNormal() {
+    assertEquals(NORMAL, HttpErrors.classifyTransportFailure(new SSLHandshakeException("handshake failed")));
+  }
+  @Test public void peerClosedMidHandshakeIsNormal() {
+    SSLHandshakeException e = new SSLHandshakeException("Remote host terminated the handshake");
+    e.initCause(new EOFException("SSL peer shut down incorrectly"));
+    assertEquals(NORMAL, HttpErrors.classifyTransportFailure(e));
+  }
+  @Test public void sslExceptionFromConnectionResetIsNormal() {
+    assertEquals(NORMAL, HttpErrors.classifyTransportFailure(new SSLException("Connection reset")));
+  }
 
   // Cause-chain walk finds TLS deep in wrapper exceptions.
-  @Test public void sslCauseWrappedIsUnexpected() {
-    IOException wrapper = new IOException("wrapped", new SSLHandshakeException("real cause"));
+  @Test public void certificateCauseWrappedIsUnexpected() {
+    IOException wrapper = new IOException("wrapped", new CertificateException("real cause"));
     assertEquals(UNEXPECTED, HttpErrors.classifyTransportFailure(wrapper));
   }
 }
