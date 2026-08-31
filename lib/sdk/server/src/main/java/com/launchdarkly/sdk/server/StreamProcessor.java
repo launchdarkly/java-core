@@ -114,6 +114,7 @@ final class StreamProcessor implements DataSource {
   private final AtomicBoolean closed = new AtomicBoolean(false);
   private volatile long esStarted = 0;
   private volatile boolean lastStoreUpdateFailed = false;
+  private final CompletableFuture<Void> initFuture = new CompletableFuture<>();
   private final LDLogger logger;
 
   StreamProcessor(
@@ -178,8 +179,6 @@ final class StreamProcessor implements DataSource {
   
   @Override
   public Future<Void> start() {
-    final CompletableFuture<Void> initFuture = new CompletableFuture<>();
-
     // Notes about the configuration of the EventSource below:
     //
     // 1. Setting streamEventData(true) is an optimization to let us read the event's data field directly
@@ -278,6 +277,7 @@ final class StreamProcessor implements DataSource {
       es.close();
     }
     dataSourceUpdates.updateStatus(State.OFF, null);
+    initFuture.complete(null);
   }
 
   @Override

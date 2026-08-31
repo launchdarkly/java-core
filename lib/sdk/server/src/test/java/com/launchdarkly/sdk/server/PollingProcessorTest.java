@@ -49,6 +49,7 @@ import static com.launchdarkly.testhelpers.ConcurrentHelpers.assertFutureIsCompl
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.greaterThan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -60,6 +61,8 @@ public class PollingProcessorTest extends BaseTest {
   private static final String SDK_KEY = "sdk-key";
   private static final Duration LENGTHY_INTERVAL = Duration.ofSeconds(60);
   private static final Duration BRIEF_INTERVAL = Duration.ofMillis(20);
+  private static final Duration OBSERVABLE_EXTENDED_INITIAL = Duration.ofMillis(500);
+  private static final long EXTENDED_GAP_FLOOR_MILLIS = 150L;
 
   private MockDataSourceUpdates dataSourceUpdates;
 
@@ -294,11 +297,54 @@ public class PollingProcessorTest extends BaseTest {
     testRecoverableHttpError(500);
   }
   
+  @Test
+  public void unexpectedFailureUsesExtendedCadence() throws Exception {
+    TestPollHandler handler = new TestPollHandler();
+    handler.setError(401);
+    try (HttpServer server = HttpServer.start(handler)) {
+      try (PollingProcessor pp = makeProcessor(
+          server.getUri(), BRIEF_INTERVAL, OBSERVABLE_EXTENDED_INITIAL)) {
+        pp.start();
+
+        server.getRecorder().requireRequest(); // poll #1: 401, engages the extended regime
+        long afterFirst = System.currentTimeMillis();
+        server.getRecorder().requireRequest(); // poll #2: arrives after an extended-regime wait
+        long gap = System.currentTimeMillis() - afterFirst;
+
+        assertThat("gap between polls should be on the extended curve rather than the "
+            + BRIEF_INTERVAL.toMillis() + "ms normal cadence; observed " + gap + "ms",
+            gap, greaterThan(EXTENDED_GAP_FLOOR_MILLIS));
+      }
+    }
+  }
+
+  @Test
+  public void oneSuccessfulPollDoesNotLeaveExtendedCadence() throws Exception {
+    TestPollHandler handler = new TestPollHandler();
+    handler.setError(401);
+    try (HttpServer server = HttpServer.start(handler)) {
+      try (PollingProcessor pp = makeProcessor(
+          server.getUri(), BRIEF_INTERVAL, OBSERVABLE_EXTENDED_INITIAL)) {
+        pp.start();
+
+        server.getRecorder().requireRequest(); // poll #1: 401, engages the extended regime
+        handler.setError(0);                   // recover, so poll #2 succeeds
+
+        server.getRecorder().requireRequest(); // poll #2: first success
+        long afterFirstSuccess = System.currentTimeMillis();
+        server.getRecorder().requireRequest(); // poll #3: the confirming success
+        long gap = System.currentTimeMillis() - afterFirstSuccess;
+
+        assertThat("after a single success the SDK should still be on the extended curve; "
+            + "observed " + gap + "ms", gap, greaterThan(EXTENDED_GAP_FLOOR_MILLIS));
+      }
+    }
+  }
+
   private void testUnexpectedHttpErrorKeepsPolling(int statusCode) throws Exception {
-    // 401 / 403 (and other UNEXPECTED 4xx) engage extended-regime backoff via
-    // PollingStrategy but never trigger a permanent State.OFF. Use a small
-    // extendedInitialDelay so the extended-regime waits are observable at ms
-    // scale rather than the 5-minute production default.
+    // 401 / 403 (and other UNEXPECTED 4xx) keep polling and never trigger a permanent
+    // State.OFF. Timing is not asserted here -- see unexpectedFailureUsesExtendedCadence
+    // for the extended-regime cadence.
     TestPollHandler handler = new TestPollHandler();
     handler.setError(statusCode);
     Duration extendedInitial = Duration.ofMillis(30);
@@ -335,6 +381,14 @@ public class PollingProcessorTest extends BaseTest {
           }
           assertTrue("expected an Error-level SDK log mentioning HTTP error " + statusCode,
               sawErrorForStatus);
+
+          boolean sawEngagedLog = false;
+          for (LogCapture.Message m : logCapture.getMessages()) {
+            if (m.getText().contains("engaging extended backoff")) {
+              sawEngagedLog = true;
+            }
+          }
+          assertTrue("expected the extended-backoff engagement log", sawEngagedLog);
         }
       }
     });

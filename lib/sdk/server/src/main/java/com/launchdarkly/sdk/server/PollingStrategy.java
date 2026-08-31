@@ -77,14 +77,8 @@ final class PollingStrategy {
     if (failureClass == FailureClass.UNEXPECTED && !this.inExtended) {
       this.inExtended = true;
       this.n = 1;
-      this.initialDelay = extendedInitialInterval;
-      if (this.initialDelay.compareTo(normalInterval) < 0) {
-        this.initialDelay = normalInterval;
-      }
-      this.maxDelay = EXTENDED_MAX_DELAY;
-      if (this.maxDelay.compareTo(normalInterval) < 0) {
-        this.maxDelay = normalInterval;
-      }
+      this.initialDelay = max(extendedInitialInterval, normalInterval);
+      this.maxDelay = max(EXTENDED_MAX_DELAY, normalInterval);
       return true;
     }
     this.n++;
@@ -136,6 +130,10 @@ final class PollingStrategy {
       waitMs = floorMs;
     }
     return Duration.ofMillis(waitMs);
+  }
+
+  private static Duration max(Duration a, Duration b) {
+    return a.compareTo(b) >= 0 ? a : b;
   }
 
   // Accessors for observability / testing.
