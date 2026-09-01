@@ -50,8 +50,7 @@ public abstract class FDv2PollingInitializerBuilder implements DataSourceBuilder
    * @param payloadFilter the filter to be used
    * @return the builder
    * @deprecated Payload filtering is not supported with the FDv2 data system and this method will be
-   *     removed in a future release. There is no replacement: payload filtering is only
-   *     available with the FDv1 data source.
+   *     removed in a future release.
    */
   @Deprecated
   public FDv2PollingInitializerBuilder payloadFilter(String payloadFilter) {
