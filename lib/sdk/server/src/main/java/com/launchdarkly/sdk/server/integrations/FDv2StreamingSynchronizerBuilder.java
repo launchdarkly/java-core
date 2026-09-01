@@ -78,8 +78,8 @@ public abstract class FDv2StreamingSynchronizerBuilder implements DataSourceBuil
    * @param payloadFilter the filter to be used
    * @return the builder
    * @deprecated Payload filtering is not supported with the FDv2 data system and this method will be
-   *     removed in a future release. Use {@link StreamingDataSourceBuilder#payloadFilter(String)}
-   *     with the FDv1 data source instead.
+   *     removed in a future release. There is no replacement: payload filtering is only
+   *     available with the FDv1 data source.
    */
   @Deprecated
   public FDv2StreamingSynchronizerBuilder payloadFilter(String payloadFilter) {
