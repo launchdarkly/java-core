@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.16.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.15.0...launchdarkly-java-server-sdk-7.16.0) (2026-09-01)
+
+
+### Features
+
+* conform FDv1 streaming and polling data sources to the RETRY specification ([dd7b0cd](https://github.com/launchdarkly/java-core/commit/dd7b0cd3eddc62cfce937251128b45ea0fa5049b))
+
 ## [7.15.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.14.0...launchdarkly-java-server-sdk-7.15.0) (2026-07-21)
 
 
