@@ -9,6 +9,7 @@ import com.launchdarkly.eventsource.EventSource;
 import com.launchdarkly.eventsource.FaultEvent;
 import com.launchdarkly.eventsource.HttpConnectStrategy;
 import com.launchdarkly.eventsource.MessageEvent;
+import com.launchdarkly.eventsource.RetryDelayStrategy;
 import com.launchdarkly.eventsource.StreamClosedByCallerException;
 import com.launchdarkly.eventsource.StreamClosedByServerException;
 import com.launchdarkly.eventsource.StreamClosedWithIncompleteMessageException;
@@ -19,7 +20,9 @@ import com.launchdarkly.eventsource.StreamIOException;
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.logging.LogValues;
 import com.launchdarkly.sdk.internal.events.DiagnosticStore;
+import com.launchdarkly.sdk.internal.http.FailureClass;
 import com.launchdarkly.sdk.internal.http.HttpConsts;
+import com.launchdarkly.sdk.internal.http.HttpErrors;
 import com.launchdarkly.sdk.internal.http.HttpHelpers;
 import com.launchdarkly.sdk.internal.http.HttpProperties;
 import com.launchdarkly.sdk.server.StreamProcessorEvents.DeleteData;
@@ -45,9 +48,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
-import static com.launchdarkly.sdk.internal.http.HttpErrors.checkIfErrorIsRecoverableAndLog;
-import static com.launchdarkly.sdk.internal.http.HttpErrors.httpErrorDescription;
-
 import okhttp3.Headers;
 
 /**
@@ -67,12 +67,14 @@ import okhttp3.Headers;
  * 2b. If the data store doesn't support status notifications (which is normally only true of the in-memory store)
  * then we don't know the significance of the error, but we must assume that updates have been lost, so we'll
  * restart the stream.
- * 3. If we receive an unrecoverable error like HTTP 401, we close the stream and don't retry, and set the state
- * to OFF. Any other HTTP error or network error causes a retry with backoff, with a state of INTERRUPTED.
- * 4. We set the Future returned by start() to tell the client initialization logic that initialization has either
- * succeeded (we got an initial payload and successfully stored it) or permanently failed (we got a 401, etc.).
- * Otherwise, the client initialization method may time out but we will still be retrying in the background, and
- * if we succeed then the client can detect that we're initialized now by calling our Initialized method.
+ * 3. HTTP-level and transport-level failures do not permanently stop the stream processor.
+ * Any HTTP error or network error causes a retry with backoff, with a state of INTERRUPTED. Failures classified
+ * as unexpected engage the extended-regime backoff via activateRetryDelayStrategy on the underlying EventSource;
+ * the library reverts to normal-regime backoff automatically after a healthy-op reset threshold of continuous
+ * connectivity.
+ * 4. We set the Future returned by start() to tell the client initialization logic that initialization has
+ * succeeded. Initialization failures do not permanently fail the SDK, the stream keeps retrying
+ * in the background.
  */
 final class StreamProcessor implements DataSource {
   private static final String PUT = "put";
@@ -82,6 +84,12 @@ final class StreamProcessor implements DataSource {
   private static final String ERROR_CONTEXT_MESSAGE = "in stream connection";
   private static final String WILL_RETRY_MESSAGE = "will retry";
 
+  private static final Duration STREAM_MAX_RETRY_DELAY = Duration.ofSeconds(30);
+  // Package-private defaults so others can pass them as constructor arguments
+  static final Duration DEFAULT_EXTENDED_INITIAL_RECONNECT_DELAY = Duration.ofMinutes(5);
+  static final Duration DEFAULT_EXTENDED_STREAM_MAX_RETRY_DELAY = Duration.ofHours(1);
+  static final Duration DEFAULT_RETRY_RESET_INTERVAL = Duration.ofSeconds(60);
+
   private final DataSourceUpdateSink dataSourceUpdates;
   private final HttpProperties httpProperties;
   private final Headers headers;
@@ -89,14 +97,24 @@ final class StreamProcessor implements DataSource {
   final URI streamUri;
   @VisibleForTesting
   final Duration initialReconnectDelay;
+  private final Duration extendedInitialReconnectDelay;
+  private final Duration extendedStreamMaxRetryDelay;
+  private final Duration retryResetInterval;
   private final DiagnosticStore diagnosticAccumulator;
   private final int threadPriority;
   private final DataStoreStatusProvider.StatusListener statusListener;
   private volatile EventSource es;
+  // extendedRegime is the retry-delay strategy the SDK activates on the underlying
+  // EventSource when a failure is classified as unexpected.
+  private volatile RetryDelayStrategy extendedRegime;
+  // loggedActivatedExtended gates the "engaging extended backoff" info log so it
+  // fires at most once.
+  private volatile boolean loggedActivatedExtended = false;
   private final AtomicBoolean initialized = new AtomicBoolean(false);
   private final AtomicBoolean closed = new AtomicBoolean(false);
   private volatile long esStarted = 0;
   private volatile boolean lastStoreUpdateFailed = false;
+  private final CompletableFuture<Void> initFuture = new CompletableFuture<>();
   private final LDLogger logger;
 
   StreamProcessor(
@@ -107,12 +125,18 @@ final class StreamProcessor implements DataSource {
       URI streamUri,
       String payloadFilter,
       Duration initialReconnectDelay,
+      Duration extendedInitialReconnectDelay,
+      Duration extendedStreamMaxRetryDelay,
+      Duration retryResetInterval,
       LDLogger logger) {
     this.dataSourceUpdates = dataSourceUpdates;
     this.httpProperties = httpProperties;
     this.diagnosticAccumulator = diagnosticAccumulator;
     this.threadPriority = threadPriority;
     this.initialReconnectDelay = initialReconnectDelay;
+    this.extendedInitialReconnectDelay = extendedInitialReconnectDelay;
+    this.extendedStreamMaxRetryDelay = extendedStreamMaxRetryDelay;
+    this.retryResetInterval = retryResetInterval;
     this.logger = logger;
 
     URI tempUri = HttpHelpers.concatenateUriPath(streamUri, StandardEndpoints.STREAMING_REQUEST_PATH);
@@ -155,8 +179,6 @@ final class StreamProcessor implements DataSource {
   
   @Override
   public Future<Void> start() {
-    final CompletableFuture<Void> initFuture = new CompletableFuture<>();
-
     // Notes about the configuration of the EventSource below:
     //
     // 1. Setting streamEventData(true) is an optimization to let us read the event's data field directly
@@ -177,6 +199,16 @@ final class StreamProcessor implements DataSource {
         // Set readTimeout last, to ensure that this hard-coded value overrides any other read
         // timeout that might have been set by httpProperties (see comment about readTimeout above).
         .readTimeout(DEAD_CONNECTION_INTERVAL.toMillis(), TimeUnit.MILLISECONDS);
+
+    RetryDelayStrategy normalRegime = RetryDelayStrategy.defaultStrategy()
+        .initialDelay(initialReconnectDelay.toMillis(), TimeUnit.MILLISECONDS)
+        .maxDelay(STREAM_MAX_RETRY_DELAY.toMillis(), TimeUnit.MILLISECONDS);
+    RetryDelayStrategy extendedRegime = RetryDelayStrategy.defaultStrategy()
+        .initialDelay(extendedInitialReconnectDelay.toMillis(), TimeUnit.MILLISECONDS)
+        .maxDelay(extendedStreamMaxRetryDelay.toMillis(), TimeUnit.MILLISECONDS);
+    this.extendedRegime = extendedRegime;
+    loggedActivatedExtended = false;
+
     EventSource.Builder builder = new EventSource.Builder(eventSourceHttpConfig)
         .errorStrategy(ErrorStrategy.alwaysContinue())
           // alwaysContinue means we want EventSource to give us a FaultEvent rather
@@ -184,8 +216,10 @@ final class StreamProcessor implements DataSource {
         .logger(logger)
         .readBufferSize(5000)
         .streamEventData(true)
-        .expectFields("event")        
-        .retryDelay(initialReconnectDelay.toMillis(), TimeUnit.MILLISECONDS);
+        .expectFields("event")
+        .retryDelayStrategy(normalRegime)   // first call sets default
+        .retryDelayStrategy(extendedRegime) // subsequent call adds extended-regime
+        .retryDelayResetThreshold(retryResetInterval.toMillis(), TimeUnit.MILLISECONDS);
     es = builder.build();
     
     Thread thread = new Thread(() -> {
@@ -243,6 +277,7 @@ final class StreamProcessor implements DataSource {
       es.close();
     }
     dataSourceUpdates.updateStatus(State.OFF, null);
+    initFuture.complete(null);
   }
 
   @Override
@@ -250,13 +285,13 @@ final class StreamProcessor implements DataSource {
     return initialized.get();
   }
 
-  // Handles a single StreamEvent and returns true if we should keep the stream alive,
-  // or false if we should shut down permanently.
+  // Handles a single StreamEvent. Returns true to keep the stream alive; returns false
+  // only after this StreamProcessor has been closed.
   private boolean handleEvent(StreamEvent event, CompletableFuture<Void> initFuture) {
     if (closed.get()) {
       return false;
     }
-    logger.debug("Received StreamEvent: {}", event);    
+    logger.debug("Received StreamEvent: {}", event);
     if (event instanceof MessageEvent) {
       handleMessage((MessageEvent)event, initFuture);
     } else if (event instanceof FaultEvent) {
@@ -367,38 +402,40 @@ final class StreamProcessor implements DataSource {
   }
 
   private boolean handleError(StreamException e, CompletableFuture<Void> initFuture) {
-    boolean streamFailed = true;
-    if (e instanceof StreamClosedByCallerException) {
-      // This indicates that we ourselves deliberately restarted the stream, so we don't
-      // treat that as a failure in our analytics.
-      streamFailed = false;
-    } else {
-      logger.warn("Encountered EventSource error: {}", LogValues.exceptionSummary(e));      
+    boolean streamFailed = !(e instanceof StreamClosedByCallerException);
+    if (streamFailed) {
+      logger.warn("Encountered EventSource error: {}", LogValues.exceptionSummary(e));
     }
     recordStreamInit(streamFailed);
-    
+
+    FailureClass failureClass;
+    ErrorInfo errorInfo;
     if (e instanceof StreamHttpErrorException) {
       int status = ((StreamHttpErrorException)e).getCode();
-      ErrorInfo errorInfo = ErrorInfo.fromHttpError(status);
+      failureClass = HttpErrors.classifyAndLogHttpFailure(logger, status, ERROR_CONTEXT_MESSAGE, WILL_RETRY_MESSAGE);
+      errorInfo = ErrorInfo.fromHttpError(status);
+    } else if (e instanceof StreamIOException || e instanceof StreamClosedByServerException) {
+      failureClass = HttpErrors.classifyAndLogTransportFailure(logger, e, ERROR_CONTEXT_MESSAGE, WILL_RETRY_MESSAGE);
+      errorInfo = ErrorInfo.fromException(ErrorKind.NETWORK_ERROR, e);
+    } else {
+      // StreamClosedByCallerException or any other exception: classify NORMAL
+      // and don't emit a separate classify-and-log line (either self-inflicted or unknown).
+      failureClass = FailureClass.NORMAL;
+      errorInfo = ErrorInfo.fromException(ErrorKind.UNKNOWN, e);
+    }
 
-      boolean recoverable = checkIfErrorIsRecoverableAndLog(logger, httpErrorDescription(status),
-          ERROR_CONTEXT_MESSAGE, status, WILL_RETRY_MESSAGE);       
-      if (recoverable) {
-        dataSourceUpdates.updateStatus(State.INTERRUPTED, errorInfo);
-        esStarted = System.currentTimeMillis();
-        return true; // allow reconnect
-      } else {
-        dataSourceUpdates.updateStatus(State.OFF, errorInfo);
-        initFuture.complete(null); // if client is initializing, make it stop waiting; has no effect if already inited
-        return false; // don't reconnect
+    // Transition into extended regime on UNEXPECTED classification.
+    if (failureClass == FailureClass.UNEXPECTED) {
+      es.activateRetryDelayStrategy(extendedRegime);
+      if (!loggedActivatedExtended) {
+        logger.info("Classified failure as UNEXPECTED; engaging extended backoff.");
+        loggedActivatedExtended = true;
       }
     }
 
-    boolean isNetworkError = e instanceof StreamIOException || e instanceof StreamClosedByServerException;
-    checkIfErrorIsRecoverableAndLog(logger, e.toString(), ERROR_CONTEXT_MESSAGE, 0, WILL_RETRY_MESSAGE);
-    ErrorInfo errorInfo = ErrorInfo.fromException(isNetworkError ? ErrorKind.NETWORK_ERROR : ErrorKind.UNKNOWN, e);
     dataSourceUpdates.updateStatus(State.INTERRUPTED, errorInfo);
-    return true; // allow reconnect  
+    esStarted = System.currentTimeMillis();
+    return true; // always try reconnect
   }
   
   private static <T> T parseStreamJson(Function<JsonReader, T> parser, Reader r) throws StreamInputException {

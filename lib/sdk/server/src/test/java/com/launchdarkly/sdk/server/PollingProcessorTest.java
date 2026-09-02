@@ -1,5 +1,7 @@
 package com.launchdarkly.sdk.server;
 
+import com.launchdarkly.logging.LDLogLevel;
+import com.launchdarkly.logging.LogCapture;
 import com.launchdarkly.sdk.server.DataModel.FeatureFlag;
 import com.launchdarkly.sdk.server.DataStoreTestTypes.DataBuilder;
 import com.launchdarkly.sdk.server.TestComponents.MockDataSourceUpdates;
@@ -47,6 +49,7 @@ import static com.launchdarkly.testhelpers.ConcurrentHelpers.assertFutureIsCompl
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.greaterThan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -58,6 +61,8 @@ public class PollingProcessorTest extends BaseTest {
   private static final String SDK_KEY = "sdk-key";
   private static final Duration LENGTHY_INTERVAL = Duration.ofSeconds(60);
   private static final Duration BRIEF_INTERVAL = Duration.ofMillis(20);
+  private static final Duration OBSERVABLE_EXTENDED_INITIAL = Duration.ofMillis(500);
+  private static final long EXTENDED_GAP_FLOOR_MILLIS = 150L;
 
   private MockDataSourceUpdates dataSourceUpdates;
 
@@ -68,8 +73,13 @@ public class PollingProcessorTest extends BaseTest {
   }
 
   private PollingProcessor makeProcessor(URI baseUri, Duration pollInterval) {
+    return makeProcessor(baseUri, pollInterval, PollingProcessor.DEFAULT_EXTENDED_INITIAL_DELAY);
+  }
+
+  private PollingProcessor makeProcessor(URI baseUri, Duration pollInterval, Duration extendedInitialDelay) {
     FeatureRequestor requestor = new DefaultFeatureRequestor(defaultHttpProperties(), baseUri, null, testLogger);
-    return new PollingProcessor(requestor, dataSourceUpdates, sharedExecutor, pollInterval, testLogger);
+    return new PollingProcessor(
+        requestor, dataSourceUpdates, sharedExecutor, pollInterval, extendedInitialDelay, testLogger);
   }
 
   private static class TestPollHandler implements Handler {
@@ -102,7 +112,8 @@ public class PollingProcessorTest extends BaseTest {
   @Test
   public void builderHasDefaultConfiguration() throws Exception {
     ComponentConfigurer<DataSource> f = Components.pollingDataSource();
-    try (PollingProcessor pp = (PollingProcessor)f.build(clientContext(SDK_KEY, baseConfig().build()))) {
+    try (PollingProcessor pp = (PollingProcessor)f.build(clientContext(SDK_KEY, baseConfig().build())
+        .withDataSourceUpdateSink(dataSourceUpdates))) {
       assertThat(((DefaultFeatureRequestor)pp.requestor).pollingUri.toString(), containsString(StandardEndpoints.DEFAULT_POLLING_BASE_URI.toString()));
       assertThat(pp.pollInterval, equalTo(PollingDataSourceBuilder.DEFAULT_POLL_INTERVAL));
     }
@@ -118,7 +129,8 @@ public class PollingProcessorTest extends BaseTest {
     try (PollingProcessor pp = (PollingProcessor) f.build(
         clientContext(
             SDK_KEY,
-            baseConfig().build()))) {
+            baseConfig().build())
+            .withDataSourceUpdateSink(dataSourceUpdates))) {
       assertThat(pp.pollInterval, equalTo(LENGTHY_INTERVAL));
       assertThat(((DefaultFeatureRequestor) pp.requestor).pollingUri.toString(), containsString("filter=myFilter"));
     }
@@ -258,14 +270,16 @@ public class PollingProcessorTest extends BaseTest {
     testRecoverableHttpError(400);
   }
   
+  // 401 / 403 engage the extended-regime backoff and keep polling instead of
+  // triggering a permanent stop.
   @Test
-  public void http401ErrorIsUnrecoverable() throws Exception {
-    testUnrecoverableHttpError(401);
+  public void http401TriggersExtendedRegimeAndKeepsPolling() throws Exception {
+    testUnexpectedHttpErrorKeepsPolling(401);
   }
 
   @Test
-  public void http403ErrorIsUnrecoverable() throws Exception {
-    testUnrecoverableHttpError(403);
+  public void http403TriggersExtendedRegimeAndKeepsPolling() throws Exception {
+    testUnexpectedHttpErrorKeepsPolling(403);
   }
 
   @Test
@@ -283,51 +297,98 @@ public class PollingProcessorTest extends BaseTest {
     testRecoverableHttpError(500);
   }
   
-  private void testUnrecoverableHttpError(int statusCode) throws Exception {
+  @Test
+  public void unexpectedFailureUsesExtendedCadence() throws Exception {
     TestPollHandler handler = new TestPollHandler();
+    handler.setError(401);
+    try (HttpServer server = HttpServer.start(handler)) {
+      try (PollingProcessor pp = makeProcessor(
+          server.getUri(), BRIEF_INTERVAL, OBSERVABLE_EXTENDED_INITIAL)) {
+        pp.start();
 
-    // Test a scenario where the very first request gets this error
-    handler.setError(statusCode);
-    withStatusQueue(statuses -> {
-      try (HttpServer server = HttpServer.start(handler)) {
-        try (PollingProcessor pollingProcessor = makeProcessor(server.getUri(), BRIEF_INTERVAL)) {
-          long startTime = System.currentTimeMillis();
-          Future<Void> initFuture = pollingProcessor.start();
-           
-          assertFutureIsCompleted(initFuture, 2, TimeUnit.SECONDS);
-          assertTrue((System.currentTimeMillis() - startTime) < 9000);
-          assertTrue(initFuture.isDone());
-          assertFalse(pollingProcessor.isInitialized());
-          
-          verifyHttpErrorCausedShutdown(statuses, statusCode);
-          
-          server.getRecorder().requireRequest();
-          server.getRecorder().requireNoRequests(100, TimeUnit.MILLISECONDS);
-        }
+        server.getRecorder().requireRequest(); // poll #1: 401, engages the extended regime
+        long afterFirst = System.currentTimeMillis();
+        server.getRecorder().requireRequest(); // poll #2: arrives after an extended-regime wait
+        long gap = System.currentTimeMillis() - afterFirst;
+
+        assertThat("gap between polls should be on the extended curve rather than the "
+            + BRIEF_INTERVAL.toMillis() + "ms normal cadence; observed " + gap + "ms",
+            gap, greaterThan(EXTENDED_GAP_FLOOR_MILLIS));
       }
-    });
-    
-    // Now test a scenario where we have a successful startup, but a subsequent poll gets the error
-    handler.setError(0);
-    dataSourceUpdates = TestComponents.dataSourceUpdates(new InMemoryDataStore(), new MockDataStoreStatusProvider());
+    }
+  }
+
+  @Test
+  public void oneSuccessfulPollDoesNotLeaveExtendedCadence() throws Exception {
+    TestPollHandler handler = new TestPollHandler();
+    handler.setError(401);
+    try (HttpServer server = HttpServer.start(handler)) {
+      try (PollingProcessor pp = makeProcessor(
+          server.getUri(), BRIEF_INTERVAL, OBSERVABLE_EXTENDED_INITIAL)) {
+        pp.start();
+
+        server.getRecorder().requireRequest(); // poll #1: 401, engages the extended regime
+        handler.setError(0);                   // recover, so poll #2 succeeds
+
+        server.getRecorder().requireRequest(); // poll #2: first success
+        long afterFirstSuccess = System.currentTimeMillis();
+        server.getRecorder().requireRequest(); // poll #3: the confirming success
+        long gap = System.currentTimeMillis() - afterFirstSuccess;
+
+        assertThat("after a single success the SDK should still be on the extended curve; "
+            + "observed " + gap + "ms", gap, greaterThan(EXTENDED_GAP_FLOOR_MILLIS));
+      }
+    }
+  }
+
+  private void testUnexpectedHttpErrorKeepsPolling(int statusCode) throws Exception {
+    // 401 / 403 (and other UNEXPECTED 4xx) keep polling and never trigger a permanent
+    // State.OFF. Timing is not asserted here -- see unexpectedFailureUsesExtendedCadence
+    // for the extended-regime cadence.
+    TestPollHandler handler = new TestPollHandler();
+    handler.setError(statusCode);
+    Duration extendedInitial = Duration.ofMillis(30);
     withStatusQueue(statuses -> {
       try (HttpServer server = HttpServer.start(handler)) {
-        try (PollingProcessor pollingProcessor = makeProcessor(server.getUri(), BRIEF_INTERVAL)) {
-          Future<Void> initFuture = pollingProcessor.start();
-         
-          assertFutureIsCompleted(initFuture, 2, TimeUnit.SECONDS);
-          assertTrue(initFuture.isDone());
-          assertTrue(pollingProcessor.isInitialized());
-          requireDataSourceStatus(statuses, State.VALID);
+        try (PollingProcessor pollingProcessor = makeProcessor(server.getUri(), BRIEF_INTERVAL, extendedInitial)) {
+          pollingProcessor.start();
 
-          // now make it so polls fail
-          handler.setError(statusCode);
-          
-          verifyHttpErrorCausedShutdown(statuses, statusCode);
-          while (server.getRecorder().count() > 0) {
-            server.getRecorder().requireRequest();
+          // Should observe multiple requests as extended-regime backoff continues to retry.
+          server.getRecorder().requireRequest();
+          server.getRecorder().requireRequest();
+          server.getRecorder().requireRequest();
+
+          // State stays INITIALIZING (never got past init because every response
+          // was an error) with an ERROR_RESPONSE lastError. The processor does
+          // not transition to OFF; it keeps retrying under extended-regime backoff.
+          Status status = requireDataSourceStatus(statuses, State.INITIALIZING);
+          assertNotNull(status.getLastError());
+          assertEquals(ErrorKind.ERROR_RESPONSE, status.getLastError().getKind());
+          assertEquals(statusCode, status.getLastError().getStatusCode());
+          assertFalse(pollingProcessor.isInitialized());
+
+          // Unexpected classifications log at Error level. The SDK-emitted classify-
+          // and-log line is distinguished by the "Error on polling request" prefix.
+          boolean sawErrorForStatus = false;
+          for (LogCapture.Message m : logCapture.getMessages()) {
+            if (m.getText().startsWith("Error on polling request")
+                && m.getText().contains("HTTP error " + statusCode)) {
+              assertThat(
+                  "unexpected-classification HTTP error should log at Error, not " + m.getLevel(),
+                  m.getLevel(), equalTo(LDLogLevel.ERROR));
+              sawErrorForStatus = true;
+            }
           }
-          server.getRecorder().requireNoRequests(100, TimeUnit.MILLISECONDS);
+          assertTrue("expected an Error-level SDK log mentioning HTTP error " + statusCode,
+              sawErrorForStatus);
+
+          boolean sawEngagedLog = false;
+          for (LogCapture.Message m : logCapture.getMessages()) {
+            if (m.getText().contains("engaging extended backoff")) {
+              sawEngagedLog = true;
+            }
+          }
+          assertTrue("expected the extended-backoff engagement log", sawEngagedLog);
         }
       }
     });
@@ -364,6 +425,21 @@ public class PollingProcessorTest extends BaseTest {
           assertNotNull(status0.getLastError());
           assertEquals(ErrorKind.ERROR_RESPONSE, status0.getLastError().getKind());
           assertEquals(statusCode, status0.getLastError().getStatusCode());
+
+          // Normal classifications log at Warn level (not Error). The SDK-emitted
+          // classify-and-log line is distinguished by the "Error on polling request" prefix.
+          boolean sawWarnForStatus = false;
+          for (LogCapture.Message m : logCapture.getMessages()) {
+            if (m.getText().startsWith("Error on polling request")
+                && m.getText().contains("HTTP error " + statusCode)) {
+              assertThat(
+                  "normal-classification HTTP error should log at Warn, not " + m.getLevel(),
+                  m.getLevel(), equalTo(LDLogLevel.WARN));
+              sawWarnForStatus = true;
+            }
+          }
+          assertTrue("expected a Warn-level SDK log mentioning HTTP error " + statusCode,
+              sawWarnForStatus);
 
           // and then that it succeeded
           requireDataSourceStatusEventually(statuses, State.VALID, State.INITIALIZING);
