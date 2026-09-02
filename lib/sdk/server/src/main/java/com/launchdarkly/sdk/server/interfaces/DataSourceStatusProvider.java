@@ -91,8 +91,8 @@ public interface DataSourceStatusProvider {
      * The initial state of the data source when the SDK is being initialized.
      * <p>
      * If it encounters an error that requires it to retry initialization, the state will remain at
-     * {@link #INITIALIZING} until it either succeeds and becomes {@link #VALID}, or permanently fails and
-     * becomes {@link #OFF}.
+     * {@link #INITIALIZING} until it either succeeds and becomes {@link #VALID}, or the datasource is
+     * shut down and it becomes {@link #OFF}.
      */
     INITIALIZING,
     
@@ -110,17 +110,16 @@ public interface DataSourceStatusProvider {
      * Indicates that the data source encountered an error that it will attempt to recover from.
      * <p>
      * In streaming mode, this means that the stream connection failed, or had to be dropped due to some
-     * other error, and will be retried after a backoff delay. In polling mode, it means that the last poll
-     * request failed, and a new poll request will be made after the configured polling interval.
+     * other error, and will be retried after a backoff delay. In polling mode, it means that the last
+     * poll request failed; the next poll will be scheduled at the configured polling interval (or in
+     * rare cases, an extended backoff).
      */
     INTERRUPTED,
     
     /**
      * Indicates that the data source has been permanently shut down.
      * <p>
-     * This could be because it encountered an unrecoverable error (for instance, the LaunchDarkly service
-     * rejected the SDK key; an invalid SDK key will never become valid), or because the SDK client was
-     * explicitly shut down.
+     * This could be because the SDK client was explicitly shut down.
      */
     OFF;
   }
@@ -326,8 +325,7 @@ public interface DataSourceStatusProvider {
      * state, after previously having been either {@link State#INITIALIZING} or {@link State#INTERRUPTED}.
      * <li> For {@link State#INTERRUPTED}, it is the time that the data source most recently entered an
      * error state, after previously having been {@link State#VALID}.
-     * <li> For {@link State#OFF}, it is the time that the data source encountered an unrecoverable error
-     * or that the SDK was explicitly shut down.
+     * <li> For {@link State#OFF}, it is the time that the data source stopped operation.
      * </ul>
      *  
      * @return the timestamp of the last state change

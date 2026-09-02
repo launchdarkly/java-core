@@ -158,7 +158,7 @@ public final class LDClient implements LDClientInterface {
    * constructor will not throw an exception for any error condition that could only be
    * detected after making a request to LaunchDarkly (such as an SDK key that is simply
    * wrong despite being valid ASCII, so it is invalid but not illegal); those are logged
-   * and treated as an unsuccessful initialization, as described above.
+   * and the SDK will keep retrying in the background as described above.
    *
    * @param sdkKey the SDK key for your LaunchDarkly environment
    * @param config a client configuration object
