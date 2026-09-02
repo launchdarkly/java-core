@@ -18,9 +18,20 @@ import static com.launchdarkly.sdk.server.ComponentsImpl.toHttpProperties;
  */
 public final class DataSystemComponents {
 
+  private static final String DEPRECATED_PAYLOAD_FILTER_MESSAGE =
+      "Payload filtering is not supported with the FDv2 data system;"
+          + " the configured payload filter will stop being applied in a future release";
+
+  private static void warnIfPayloadFilterConfigured(String payloadFilter, DataSourceBuildInputs context) {
+    if (payloadFilter != null) {
+      context.getBaseLogger().warn(DEPRECATED_PAYLOAD_FILTER_MESSAGE);
+    }
+  }
+
   static class FDv2PollingInitializerBuilderImpl extends FDv2PollingInitializerBuilder {
     @Override
     public Initializer build(DataSourceBuildInputs context) {
+      warnIfPayloadFilterConfigured(payloadFilter, context);
       ServiceEndpoints endpoints = serviceEndpointsOverride != null
               ? serviceEndpointsOverride
               : context.getServiceEndpoints();
@@ -48,6 +59,7 @@ public final class DataSystemComponents {
   static class FDv2PollingSynchronizerBuilderImpl extends FDv2PollingSynchronizerBuilder {
     @Override
     public Synchronizer build(DataSourceBuildInputs context) {
+      warnIfPayloadFilterConfigured(payloadFilter, context);
       ServiceEndpoints endpoints = serviceEndpointsOverride != null
               ? serviceEndpointsOverride
               : context.getServiceEndpoints();
@@ -77,6 +89,7 @@ public final class DataSystemComponents {
   static class FDv2StreamingSynchronizerBuilderImpl extends FDv2StreamingSynchronizerBuilder {
     @Override
     public Synchronizer build(DataSourceBuildInputs context) {
+      warnIfPayloadFilterConfigured(payloadFilter, context);
       ServiceEndpoints endpoints = serviceEndpointsOverride != null
               ? serviceEndpointsOverride
               : context.getServiceEndpoints();
