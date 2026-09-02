@@ -39,6 +39,25 @@
         "variationDetail": { "introduced": "4.3" },
         "webProxy": { "introduced": "1.0" }
       }
+    },
+    "java-server-sdk-ai": {
+      "name": "Java Server AI SDK",
+      "type": "ai",
+      "path": "lib/sdk/server-ai",
+      "languages": [
+        "Java"
+      ],
+      "aiSdkNames": ["launchdarkly-java-server-sdk-ai"],
+      "releases": {
+        "tag-prefix": "launchdarkly-java-server-sdk-ai-"
+      },
+      "features": {
+        "aiAgentConfig": { "introduced": "0.2" },
+        "aiAgentGraph": { "introduced": "0.2" },
+        "aiCompletionConfig": { "introduced": "0.2" },
+        "aiJudgeConfig": { "introduced": "0.2" },
+        "aiTrackMetrics": { "introduced": "0.2" }
+      }
     }
   }
 }
