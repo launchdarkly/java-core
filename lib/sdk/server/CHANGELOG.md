@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.17.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.16.0...launchdarkly-java-server-sdk-7.17.0) (2026-09-03)
+
+
+### Features
+
+* deprecate FDv2 payload filter builder methods ([#209](https://github.com/launchdarkly/java-core/issues/209)) ([ffc5a4c](https://github.com/launchdarkly/java-core/commit/ffc5a4c6b69ed31ec5ca5f938bc76030f2979a32))
+
 ## [7.16.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.15.0...launchdarkly-java-server-sdk-7.16.0) (2026-09-01)
 
 
