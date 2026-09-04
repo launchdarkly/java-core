@@ -18,6 +18,11 @@ on:
 jobs:
   nightly-contract-tests:
     runs-on: ubuntu-latest
+    # The long-running tests wait on real RETRY backoff timing, so this job runs
+    # roughly an hour. A regression that stops retrying makes every scenario burn
+    # its full timeout instead of returning early, so leave headroom -- while
+    # staying well under the 6-hour default that would otherwise apply.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v3
         with:
@@ -37,6 +42,10 @@ jobs:
         shell: bash
         run: make start-contract-test-service-bg -C lib/sdk/server
 
+      - name: Create JUnit output directory
+        shell: bash
+        run: mkdir -p junit
+
       - name: Contract Tests (v2)
         uses: launchdarkly/gh-actions/actions/contract-tests@contract-tests-v1
         with:
@@ -45,7 +54,7 @@ jobs:
           debug_logging: 'true'
           stop_service: 'false'
           enable_persistence_tests: 'false'
-          extra_params: '-skip-from=lib/sdk/server/contract-tests/test-suppressions.txt'
+          extra_params: '-skip-from=lib/sdk/server/contract-tests/test-suppressions.txt -enable-long-running-tests -junit junit/contract-tests-v2.xml'
 
       - name: Contract Tests v3 (with long-running tests)
         uses: launchdarkly/gh-actions/actions/contract-tests@contract-tests-v1
@@ -56,11 +65,29 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           debug_logging: 'true'
           enable_persistence_tests: 'false'
-          extra_params: '-skip-from=lib/sdk/server/contract-tests/test-suppressions-fdv2.txt -enable-long-running-tests'
+          extra_params: '-skip-from=lib/sdk/server/contract-tests/test-suppressions-fdv2.txt -enable-long-running-tests -junit junit/contract-tests-v3.xml'
+
+      - name: Upload contract test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-test-results
+          path: junit/
+          if-no-files-found: warn
+
+      - name: Upload contract test service log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-test-service-log
+          path: /tmp/sdk-test-service.log
+          if-no-files-found: warn
 
   notify-slack-on-failure:
     runs-on: ubuntu-latest
-    if: ${{ always() && needs.nightly-contract-tests.result == 'failure' }}
+    # Any outcome that is not a clean pass, not just 'failure' -- this also
+    # covers a timeout or an infrastructure cancellation.
+    if: ${{ always() && needs.nightly-contract-tests.result != 'success' }}
     needs:
       - nightly-contract-tests
     steps:
@@ -76,7 +103,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": ":warning: *Nightly Contract Tests Failed* :warning:\nThe nightly contract tests (with long-running tests enabled) failed on `${{ github.ref_name }}`."
+                    "text": ":warning: *Nightly Contract Tests Did Not Pass* :warning:\nThe nightly contract tests (with long-running tests enabled) finished with result `${{ needs.nightly-contract-tests.result }}` on `${{ github.ref_name }}`."
                   },
                   "accessory": {
                     "type": "button",
