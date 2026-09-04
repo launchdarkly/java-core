@@ -429,7 +429,8 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
   
   private boolean applyFullChangeSetToLegacyStore(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> unsortedChangeset) {
     // Convert ChangeSet to FullDataSet for legacy init path, preserving shouldPersist flag
-    return init(new FullDataSet<>(unsortedChangeset.getData(), unsortedChangeset.shouldPersist()));
+    return init(new FullDataSet<>(unsortedChangeset.getData(), unsortedChangeset.shouldPersist(),
+        unsortedChangeset.getEnvironmentId()));
   }
   
   private boolean applyPartialChangeSetToLegacyStore(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet) {

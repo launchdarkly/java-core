@@ -6,6 +6,7 @@ import com.launchdarkly.sdk.EvaluationReason;
 import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.LDValueType;
+import com.launchdarkly.sdk.server.integrations.EvaluationSeriesContext;
 import com.launchdarkly.sdk.server.integrations.Hook;
 import com.launchdarkly.sdk.server.integrations.HookMetadata;
 import org.junit.Test;
@@ -47,7 +48,7 @@ public class EvaluatorWithHookTest {
       assertTrue(beforeCalled.get());
       return Collections.emptyMap();
     });
-    EvaluatorWithHooks evaluatorUnderTest = new EvaluatorWithHooks(mockEvaluator, Collections.singletonList(mockHook), LDLogger.none());
+    EvaluatorWithHooks evaluatorUnderTest = new EvaluatorWithHooks(mockEvaluator, Collections.singletonList(mockHook), LDLogger.none(), () -> null);
     evaluatorUnderTest.evalAndFlag("aMethod", "aKey", LDContext.create("aKey"), LDValue.of("aDefault"), LDValueType.STRING, EvaluationOptions.NO_EVENTS);
   }
 
@@ -61,7 +62,7 @@ public class EvaluatorWithHookTest {
     when(mockHook.beforeEvaluation(any(), any())).thenReturn(Collections.emptyMap());
     when(mockHook.afterEvaluation(any(), any(), any())).thenReturn(Collections.emptyMap());
 
-    EvaluatorWithHooks evaluatorUnderTest = new EvaluatorWithHooks(mockEvaluator, Collections.singletonList(mockHook), LDLogger.none());
+    EvaluatorWithHooks evaluatorUnderTest = new EvaluatorWithHooks(mockEvaluator, Collections.singletonList(mockHook), LDLogger.none(), () -> null);
     evaluatorUnderTest.evalAndFlag("aMethod", "aKey", LDContext.create("aKey"), LDValue.of("aDefault"), LDValueType.STRING, EvaluationOptions.NO_EVENTS);
 
     verify(mockHook).afterEvaluation(any(), any(), eq(EvaluationDetail.fromValue(LDValue.of("aValue"), 0, EvaluationReason.fallthrough())));
@@ -95,7 +96,7 @@ public class EvaluatorWithHookTest {
       return Collections.emptyMap();
     });
 
-    EvaluatorWithHooks evaluatorUnderTest = new EvaluatorWithHooks(mockEvaluator, Arrays.asList(mockHookA, mockHookB), LDLogger.none());
+    EvaluatorWithHooks evaluatorUnderTest = new EvaluatorWithHooks(mockEvaluator, Arrays.asList(mockHookA, mockHookB), LDLogger.none(), () -> null);
     evaluatorUnderTest.evalAndFlag("aMethod", "aKey", LDContext.create("aKey"), LDValue.of("aDefault"), LDValueType.STRING, EvaluationOptions.NO_EVENTS);
     assertEquals(calls, Arrays.asList("hookABefore", "hookBBefore", "hookBAfter", "hookAAfter"));
   }
@@ -110,7 +111,7 @@ public class EvaluatorWithHookTest {
     when(mockHook.beforeEvaluation(any(), any())).thenReturn(Collections.emptyMap());
     when(mockHook.afterEvaluation(any(), any(), eq(evalResult.getResult().getAnyType()))).thenReturn(Collections.emptyMap());
 
-    EvaluatorWithHooks evaluatorUnderTest = new EvaluatorWithHooks(mockEvaluator, Collections.singletonList(mockHook), LDLogger.none());
+    EvaluatorWithHooks evaluatorUnderTest = new EvaluatorWithHooks(mockEvaluator, Collections.singletonList(mockHook), LDLogger.none(), () -> null);
     evaluatorUnderTest.evalAndFlag("aMethod", "aKey", LDContext.create("aKey"), LDValue.of("aDefault"), LDValueType.STRING, EvaluationOptions.NO_EVENTS);
 
     verify(mockHook).beforeEvaluation(any(), eq(Collections.emptyMap()));
@@ -128,7 +129,7 @@ public class EvaluatorWithHookTest {
     when(mockHook.beforeEvaluation(any(), any())).thenReturn(mockData);
     when(mockHook.afterEvaluation(any(), any(), any())).thenReturn(Collections.emptyMap());
 
-    EvaluatorWithHooks evaluatorUnderTest = new EvaluatorWithHooks(mockEvaluator, Collections.singletonList(mockHook), LDLogger.none());
+    EvaluatorWithHooks evaluatorUnderTest = new EvaluatorWithHooks(mockEvaluator, Collections.singletonList(mockHook), LDLogger.none(), () -> null);
     evaluatorUnderTest.evalAndFlag("aMethod", "aKey", LDContext.create("aKey"), LDValue.of("aDefault"), LDValueType.STRING, EvaluationOptions.NO_EVENTS);
 
     verify(mockHook).afterEvaluation(any(), eq(mockData), any());
@@ -147,7 +148,7 @@ public class EvaluatorWithHookTest {
     when(mockHook.getMetadata()).thenReturn(new HookMetadata("mockHookName") {});
     when(mockHook.afterEvaluation(any(), any(), any())).thenReturn(Collections.emptyMap());
 
-    EvaluatorWithHooks evaluatorUnderTest = new EvaluatorWithHooks(mockEvaluator, Collections.singletonList(mockHook), LDLogger.none());
+    EvaluatorWithHooks evaluatorUnderTest = new EvaluatorWithHooks(mockEvaluator, Collections.singletonList(mockHook), LDLogger.none(), () -> null);
     evaluatorUnderTest.evalAndFlag("aMethod", "aKey", LDContext.create("aKey"), LDValue.of("aDefault"), LDValueType.STRING, EvaluationOptions.NO_EVENTS);
 
     verify(mockHook, times(1)).getMetadata();
@@ -186,11 +187,34 @@ public class EvaluatorWithHookTest {
       return Collections.emptyMap();
     });
 
-    EvaluatorWithHooks evaluatorUnderTest = new EvaluatorWithHooks(mockEvaluator, Arrays.asList(mockHookA, mockHookB), LDLogger.none());
+    EvaluatorWithHooks evaluatorUnderTest = new EvaluatorWithHooks(mockEvaluator, Arrays.asList(mockHookA, mockHookB), LDLogger.none(), () -> null);
     evaluatorUnderTest.evalAndFlag("aMethod", "aKey", LDContext.create("aKey"), LDValue.of("aDefault"), LDValueType.STRING, EvaluationOptions.NO_EVENTS);
     assertEquals(calls, Arrays.asList("hookABefore", "hookBBefore", "hookBAfter", "hookAAfter"));
 
     verify(mockHookA).afterEvaluation(any(), eq(Collections.emptyMap()), any());
     verify(mockHookB).afterEvaluation(any(), eq(mockData), any());
+  }
+  @Test
+  public void environmentIdIsProvidedToSeriesContext() {
+    EvalResultAndFlag evalResult = new EvalResultAndFlag(EvalResult.of(LDValue.of("aValue"), 0, EvaluationReason.fallthrough()), null);
+    EvaluatorInterface mockEvaluator = mock(EvaluatorInterface.class);
+    when(mockEvaluator.evalAndFlag(any(), any(), any(), any(), any(), any())).thenReturn(evalResult);
+
+    Hook mockHook = mock(Hook.class);
+    List<String> environmentIds = new ArrayList<>();
+    when(mockHook.beforeEvaluation(any(), any())).thenAnswer((Answer<Map<String, Object>>) invocation -> {
+      environmentIds.add(((EvaluationSeriesContext)invocation.getArgument(0)).environmentId);
+      return Collections.emptyMap();
+    });
+    when(mockHook.afterEvaluation(any(), any(), any())).thenAnswer((Answer<Map<String, Object>>) invocation -> {
+      environmentIds.add(((EvaluationSeriesContext)invocation.getArgument(0)).environmentId);
+      return Collections.emptyMap();
+    });
+
+    EvaluatorWithHooks evaluatorUnderTest = new EvaluatorWithHooks(mockEvaluator, Collections.singletonList(mockHook),
+        LDLogger.none(), () -> "the-environment-id");
+    evaluatorUnderTest.evalAndFlag("aMethod", "aKey", LDContext.create("aKey"), LDValue.of("aDefault"), LDValueType.STRING, EvaluationOptions.NO_EVENTS);
+
+    assertEquals(Arrays.asList("the-environment-id", "the-environment-id"), environmentIds);
   }
 }

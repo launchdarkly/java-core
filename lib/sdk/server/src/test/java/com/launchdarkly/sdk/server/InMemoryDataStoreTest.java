@@ -105,6 +105,24 @@ public class InMemoryDataStoreTest extends DataStoreTestBase {
   }
 
   @Test
+  public void environmentIdIsRetainedFromDataAndNotClearedByLaterData() {
+    assertNull(typedStore().getEnvironmentId());
+
+    typedStore().init(new FullDataSet<>(ImmutableList.of(), true, "env-id"));
+    assertEquals("env-id", typedStore().getEnvironmentId());
+
+    typedStore().init(new FullDataSet<>(ImmutableList.of(), true, null));
+    assertEquals("env-id", typedStore().getEnvironmentId());
+
+    typedStore().apply(new ChangeSet<>(ChangeSetType.Full, Selector.make(1, "state1"), ImmutableList.of(), "", true));
+    assertEquals("env-id", typedStore().getEnvironmentId());
+
+    typedStore().apply(new ChangeSet<>(ChangeSetType.Full, Selector.make(2, "state2"), ImmutableList.of(),
+        "other-env-id", true));
+    assertEquals("other-env-id", typedStore().getEnvironmentId());
+  }
+
+  @Test
   public void applyWithFullChangeSetSetsSelector() {
     Selector selector = Selector.make(42, "test-state");
     ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = new ChangeSet<>(
