@@ -1,6 +1,7 @@
 package com.launchdarkly.sdk.server;
 
 import com.launchdarkly.logging.LDLogger;
+import com.launchdarkly.logging.LogValues;
 import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.LDValueType;
@@ -82,7 +83,8 @@ class EvaluatorWithHooks implements EvaluatorInterface {
     try {
       return environmentIdSupplier.get();
     } catch (Exception e) {
-      logger.error("During evaluation of flag \"{}\". Unable to determine the environment ID for hooks: {}", featureKey, e.toString());
+      logger.error("During evaluation of flag \"{}\". Unable to determine the environment ID for hooks: {}", featureKey,
+          LogValues.exceptionSummary(e));
       return null;
     }
   }
