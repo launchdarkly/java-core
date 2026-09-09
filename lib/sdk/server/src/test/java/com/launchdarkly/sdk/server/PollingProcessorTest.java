@@ -37,6 +37,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.launchdarkly.sdk.server.TestComponents.clientContext;
 import static com.launchdarkly.sdk.server.TestComponents.dataStoreThatThrowsException;
@@ -523,23 +524,43 @@ public class PollingProcessorTest extends BaseTest {
   }
 
   @Test
-  public void environmentIdIsRetainedAfterPollFailure() throws Exception {
-    TestPollHandler handler = new TestPollHandler();
-    Handler pollingHandler = Handlers.all(
-        Handlers.header("x-ld-envid", "env-from-poll"),
-        handler
-        );
-
-    try (HttpServer server = HttpServer.start(pollingHandler)) {
-      try (PollingProcessor pollingProcessor = makeProcessor(server.getUri(), BRIEF_INTERVAL)) {
-        assertFutureIsCompleted(pollingProcessor.start(), 1, TimeUnit.SECONDS);
-        assertEquals("env-from-poll", dataStore.getEnvironmentId());
-
-        handler.setError(503);
-        Thread.sleep(100);
-
-        assertEquals("env-from-poll", dataStore.getEnvironmentId());
+  public void environmentIdIsOnlyTakenFromSuccessfulPollResponses() throws Exception {
+    // Error responses deliberately carry a different environment ID, so this test fails if an ID is
+    // ever taken from an unsuccessful response.
+    TestPollHandler successHandler = new TestPollHandler();
+    AtomicInteger errorStatus = new AtomicInteger(503);
+    Handler pollingHandler = ctx -> {
+      int err = errorStatus.get();
+      if (err == 0) {
+        Handlers.header("x-ld-envid", "env-from-poll").apply(ctx);
+        successHandler.apply(ctx);
+      } else {
+        Handlers.header("x-ld-envid", "env-from-error").apply(ctx);
+        ctx.setStatus(err);
       }
-    }
+    };
+
+    withStatusQueue(statuses -> {
+      try (HttpServer server = HttpServer.start(pollingHandler)) {
+        try (PollingProcessor pollingProcessor = makeProcessor(server.getUri(), BRIEF_INTERVAL)) {
+          pollingProcessor.start();
+
+          // the first poll fails: nothing is taken from the error response
+          Status status0 = requireDataSourceStatus(statuses, State.INITIALIZING);
+          assertEquals(ErrorKind.ERROR_RESPONSE, status0.getLastError().getKind());
+          assertNull(dataStore.getEnvironmentId());
+
+          // now a poll succeeds
+          errorStatus.set(0);
+          requireDataSourceStatusEventually(statuses, State.VALID, State.INITIALIZING);
+          assertEquals("env-from-poll", dataStore.getEnvironmentId());
+
+          // subsequent failures do not change the retained value
+          errorStatus.set(503);
+          requireDataSourceStatus(statuses, State.INTERRUPTED);
+          assertEquals("env-from-poll", dataStore.getEnvironmentId());
+        }
+      }
+    });
   }
 }

@@ -1,5 +1,6 @@
 package com.launchdarkly.sdk.server;
 
+import com.launchdarkly.sdk.fdv2.ChangeSetType;
 import com.launchdarkly.sdk.fdv2.SourceResultType;
 import com.launchdarkly.sdk.fdv2.SourceSignal;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
@@ -7,6 +8,7 @@ import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.DataStoreTestTypes.DataBuilder;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 
 import org.junit.After;
 import org.junit.Test;
@@ -21,6 +23,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static com.launchdarkly.sdk.server.DataModel.FEATURES;
+import static com.launchdarkly.sdk.server.ModelBuilders.flagBuilder;
 import static org.junit.Assert.*;
 
 @SuppressWarnings("javadoc")
@@ -321,6 +325,39 @@ public class DataSourceSynchronizerAdapterTest extends BaseTest {
         FDv2SourceResult result = nextFuture.get(2, TimeUnit.SECONDS);
         assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
         assertEquals("env-from-fdv1", result.getChangeSet().getEnvironmentId());
+
+        adapter.close();
+    }
+
+    /**
+     * Test that the environment ID from a full data set is retained and carried on the partial change
+     * sets produced for subsequent upserts, and on later full data sets that do not report one.
+     */
+    @Test
+    public void environmentIdIsRetainedForSubsequentChangeSets() throws Exception {
+        AtomicReference<DataSourceUpdateSink> capturedSink = new AtomicReference<>();
+
+        DataSourceSynchronizerAdapter adapter = new DataSourceSynchronizerAdapter(sink -> {
+            capturedSink.set(sink);
+            return new MockDataSource(new CountDownLatch(1), null);
+        });
+        resourcesToClose.add(adapter);
+
+        CompletableFuture<FDv2SourceResult> initFuture = adapter.next();
+        capturedSink.get().init(new FullDataSet<>(DataBuilder.forStandardTypes().build().getData(), true,
+                "env-from-fdv1"));
+        assertEquals("env-from-fdv1", initFuture.get(2, TimeUnit.SECONDS).getChangeSet().getEnvironmentId());
+
+        CompletableFuture<FDv2SourceResult> upsertFuture = adapter.next();
+        capturedSink.get().upsert(FEATURES, "flag1", new ItemDescriptor(1, flagBuilder("flag1").version(1).build()));
+        FDv2SourceResult upsertResult = upsertFuture.get(2, TimeUnit.SECONDS);
+        assertEquals(SourceResultType.CHANGE_SET, upsertResult.getResultType());
+        assertEquals(ChangeSetType.Partial, upsertResult.getChangeSet().getType());
+        assertEquals("env-from-fdv1", upsertResult.getChangeSet().getEnvironmentId());
+
+        CompletableFuture<FDv2SourceResult> reinitFuture = adapter.next();
+        capturedSink.get().init(new FullDataSet<>(DataBuilder.forStandardTypes().build().getData(), true, null));
+        assertEquals("env-from-fdv1", reinitFuture.get(2, TimeUnit.SECONDS).getChangeSet().getEnvironmentId());
 
         adapter.close();
     }

@@ -58,6 +58,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 @SuppressWarnings("javadoc")
 public class DataSourceUpdatesImplTest {
@@ -169,9 +170,7 @@ public class DataSourceUpdatesImplTest {
     @Override
     public void init(FullDataSet<ItemDescriptor> allData) {
       data.clear();
-      if (allData.getEnvironmentId() != null) {
-        environmentId = allData.getEnvironmentId();
-      }
+      environmentId = allData.getEnvironmentId(); // recorded verbatim; retention is a store's responsibility
       for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> kindEntry : allData.getData()) {
         DataKind kind = kindEntry.getKey();
         Map<String, ItemDescriptor> items = new HashMap<>();
@@ -1048,8 +1047,10 @@ public class DataSourceUpdatesImplTest {
     assertThat(retrievedFlag1, is(org.hamcrest.Matchers.notNullValue()));
     assertEquals("test-env-id", legacyStore.getEnvironmentId());
 
-    // A later change set without an environment ID does not clear the retained value.
+    // The environment ID is passed through exactly as it appears on the change set. Whether an absent
+    // value clears a previously retained ID is decided by the store (see InMemoryDataStoreTest and
+    // PersistentDataStoreWrapperTest), not here.
     updates.apply(new ChangeSet<>(ChangeSetType.Full, Selector.make(2, "state2"), data, null, true));
-    assertEquals("test-env-id", legacyStore.getEnvironmentId());
+    assertNull(legacyStore.getEnvironmentId());
   }
 }

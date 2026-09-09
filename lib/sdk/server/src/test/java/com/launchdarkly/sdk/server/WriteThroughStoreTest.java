@@ -54,6 +54,10 @@ public class WriteThroughStoreTest {
   }
 
   private ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> createFullChangeSet() {
+    return createFullChangeSet(null);
+  }
+
+  private ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> createFullChangeSet(String environmentId) {
     Map<DataKind, KeyedItems<ItemDescriptor>> changeSetData = ImmutableMap.of(
         TEST_ITEMS,
         new KeyedItems<>(ImmutableList.of(
@@ -66,7 +70,7 @@ public class WriteThroughStoreTest {
         ChangeSetType.Full,
         Selector.make(1, "state1"),
         changeSetData.entrySet(),
-        null,
+        environmentId,
         true
     );
   }
@@ -957,6 +961,72 @@ public class WriteThroughStoreTest {
 
   // Mock Stores
 
+  // Environment ID Tests
+
+  @Test
+  public void environmentIdIsNullBeforeInitializingPayloadEvenIfPersistentStoreIsInitialized() {
+    MockPersistentStore persistentStore = new MockPersistentStore();
+    persistentStore.setData(TEST_ITEMS, "key1", new ItemDescriptor(10, item1));
+    persistentStore.setInitialized(true);
+    store = new WriteThroughStore(new InMemoryDataStore(), persistentStore, DataStoreMode.READ_WRITE);
+
+    // Reads are served by the persistent store, which cannot know the environment ID.
+    assertTrue(store.isInitialized());
+    assertNotNull(store.get(TEST_ITEMS, "key1"));
+    assertNull(store.getEnvironmentId());
+  }
+
+  @Test
+  public void environmentIdFromInitIsExposedAndForwardedToPersistentStore() {
+    MockPersistentStore persistentStore = new MockPersistentStore();
+    store = new WriteThroughStore(new InMemoryDataStore(), persistentStore, DataStoreMode.READ_WRITE);
+
+    store.init(new FullDataSet<>(createTestDataSet().getData(), true, "env-from-init"));
+
+    assertEquals("env-from-init", store.getEnvironmentId());
+    assertEquals("env-from-init", persistentStore.lastInit.getEnvironmentId());
+  }
+
+  @Test
+  public void environmentIdFromFullChangeSetIsExposedAndForwardedToLegacyPersistentStore() {
+    MockPersistentStore persistentStore = new MockPersistentStore();
+    store = new WriteThroughStore(new InMemoryDataStore(), persistentStore, DataStoreMode.READ_WRITE);
+
+    store.apply(createFullChangeSet("env-from-change-set"));
+
+    assertEquals("env-from-change-set", store.getEnvironmentId());
+    assertEquals("env-from-change-set", persistentStore.lastInit.getEnvironmentId());
+  }
+
+  @Test
+  public void environmentIdIsExposedButNotWrittenToPersistentStoreInReadOnlyMode() {
+    MockPersistentStore persistentStore = new MockPersistentStore();
+    store = new WriteThroughStore(new InMemoryDataStore(), persistentStore, DataStoreMode.READ_ONLY);
+
+    store.apply(createFullChangeSet("env-from-change-set"));
+
+    assertEquals("env-from-change-set", store.getEnvironmentId());
+    assertFalse(persistentStore.wasInitCalled);
+  }
+
+  @Test
+  public void environmentIdMatchesMemoryDataWhenPersistentWriteFails() {
+    MockPersistentStore persistentStore = new MockPersistentStore();
+    persistentStore.throwOnInit = true;
+    store = new WriteThroughStore(new InMemoryDataStore(), persistentStore, DataStoreMode.READ_WRITE);
+
+    try {
+      store.apply(createFullChangeSet("env-from-change-set"));
+      fail("expected exception");
+    } catch (RuntimeException e) {
+      // expected: the persistent write failed
+    }
+
+    // Reads now come from the memory store, which holds the data that carried this ID.
+    assertNotNull(store.get(TEST_ITEMS, "key1"));
+    assertEquals("env-from-change-set", store.getEnvironmentId());
+  }
+
   private static class MockPersistentStore implements DataStore {
     private final Map<DataKind, Map<String, ItemDescriptor>> data = new HashMap<>();
     private final Set<String> keysToFailOn = new HashSet<>();
@@ -970,6 +1040,7 @@ public class WriteThroughStoreTest {
     public boolean failUpsert;
     public boolean throwOnInit;
     public boolean statusMonitoringEnabledValue;
+    public FullDataSet<ItemDescriptor> lastInit;
 
     public void setUpsertFailureForKey(String key) {
       keysToFailOn.add(key);
@@ -994,6 +1065,7 @@ public class WriteThroughStoreTest {
     @Override
     public void init(FullDataSet<ItemDescriptor> allData) {
       wasInitCalled = true;
+      lastInit = allData;
       if (throwOnInit) {
         throw new RuntimeException("Init failed");
       }

@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -216,5 +217,32 @@ public class EvaluatorWithHookTest {
     evaluatorUnderTest.evalAndFlag("aMethod", "aKey", LDContext.create("aKey"), LDValue.of("aDefault"), LDValueType.STRING, EvaluationOptions.NO_EVENTS);
 
     assertEquals(Arrays.asList("the-environment-id", "the-environment-id"), environmentIds);
+  }
+
+  @Test
+  public void environmentIdSupplierExceptionDoesNotPreventEvaluation() {
+    EvalResultAndFlag evalResult = new EvalResultAndFlag(EvalResult.of(LDValue.of("aValue"), 0, EvaluationReason.fallthrough()), null);
+    EvaluatorInterface mockEvaluator = mock(EvaluatorInterface.class);
+    when(mockEvaluator.evalAndFlag(any(), any(), any(), any(), any(), any())).thenReturn(evalResult);
+
+    Hook mockHook = mock(Hook.class);
+    when(mockHook.getMetadata()).thenReturn(new HookMetadata("mockHookName") {});
+    List<String> environmentIds = new ArrayList<>();
+    when(mockHook.beforeEvaluation(any(), any())).thenAnswer((Answer<Map<String, Object>>) invocation -> {
+      environmentIds.add(((EvaluationSeriesContext)invocation.getArgument(0)).environmentId);
+      return Collections.emptyMap();
+    });
+    when(mockHook.afterEvaluation(any(), any(), any())).thenAnswer((Answer<Map<String, Object>>) invocation -> {
+      environmentIds.add(((EvaluationSeriesContext)invocation.getArgument(0)).environmentId);
+      return Collections.emptyMap();
+    });
+
+    EvaluatorWithHooks evaluatorUnderTest = new EvaluatorWithHooks(mockEvaluator, Collections.singletonList(mockHook),
+        LDLogger.none(), () -> { throw new IllegalStateException("environment ID unavailable"); });
+    EvalResultAndFlag result = evaluatorUnderTest.evalAndFlag("aMethod", "aKey", LDContext.create("aKey"), LDValue.of("aDefault"), LDValueType.STRING, EvaluationOptions.NO_EVENTS);
+
+    // The evaluation still completes, and both stages of the hook run with an unknown environment ID.
+    assertSame(evalResult, result);
+    assertEquals(Arrays.asList(new String[] { null, null }), environmentIds);
   }
 }

@@ -838,4 +838,63 @@ public class PersistentDataStoreWrapperTest extends BaseTest {
     core.fakeError = null;
     core.unavailable = false;
   }
+
+  @Test
+  public void environmentIdIsRetainedFromSuccessfulInit() {
+    assertNull(wrapper.getEnvironmentId());
+
+    wrapper.init(makeDataSetWithEnvironmentId("env-1"));
+    assertThat(wrapper.getEnvironmentId(), equalTo("env-1"));
+
+    // absent or empty values never clear a retained ID
+    wrapper.init(makeDataSetWithEnvironmentId(null));
+    assertThat(wrapper.getEnvironmentId(), equalTo("env-1"));
+    wrapper.init(makeDataSetWithEnvironmentId(""));
+    assertThat(wrapper.getEnvironmentId(), equalTo("env-1"));
+
+    wrapper.init(makeDataSetWithEnvironmentId("env-2"));
+    assertThat(wrapper.getEnvironmentId(), equalTo("env-2"));
+  }
+
+  @Test
+  public void environmentIdIsNotRetainedWhenInitFailsAndCacheIsNotIndefinite() {
+    assumeThat(testMode.isCachedIndefinitely(), is(false));
+
+    core.fakeError = FAKE_ERROR;
+    try {
+      wrapper.init(makeDataSetWithEnvironmentId("env-1"));
+      fail("expected exception");
+    } catch (RuntimeException e) {
+      assertThat(e, is(FAKE_ERROR));
+    }
+    core.fakeError = null;
+
+    // The data that carried this ID was never applied, so hooks must not be told about it.
+    assertNull(wrapper.getEnvironmentId());
+    assertThat(wrapper.isInitialized(), is(false));
+  }
+
+  @Test
+  public void environmentIdIsRetainedWhenInitFailsButCacheIsIndefinite() {
+    assumeThat(testMode.isCachedIndefinitely(), is(true));
+
+    core.fakeError = FAKE_ERROR;
+    try {
+      wrapper.init(makeDataSetWithEnvironmentId("env-1"));
+      fail("expected exception");
+    } catch (RuntimeException e) {
+      assertThat(e, is(FAKE_ERROR));
+    }
+    core.fakeError = null;
+
+    // With an infinite cache TTL the new data is served from the cache even though the underlying store
+    // failed, so the environment ID that came with it is retained too.
+    assertThat(wrapper.getEnvironmentId(), equalTo("env-1"));
+    assertThat(wrapper.isInitialized(), is(true));
+  }
+
+  private static FullDataSet<ItemDescriptor> makeDataSetWithEnvironmentId(String environmentId) {
+    return new FullDataSet<>(new DataBuilder().add(TEST_ITEMS, new TestItem("key", 1)).build().getData(),
+        true, environmentId);
+  }
 }
