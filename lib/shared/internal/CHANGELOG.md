@@ -2,6 +2,20 @@
 
 All notable changes to the project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [1.11.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.11.0...launchdarkly-java-sdk-internal-1.11.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* **internal:** narrow TLS classification to certificate failures only ([#206](https://github.com/launchdarkly/java-core/issues/206)) ([e76ff16](https://github.com/launchdarkly/java-core/commit/e76ff1616079caa4446277a4171f5d0cc35dc23f))
+
+## [1.11.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.10.0...launchdarkly-java-sdk-internal-1.11.0) (2026-08-25)
+
+
+### Features
+
+* **internal:** add FailureClass enum and classifier helpers to HttpErrors (SDK-2789) ([#204](https://github.com/launchdarkly/java-core/issues/204)) ([79766a1](https://github.com/launchdarkly/java-core/commit/79766a1ea917a018ab4a0bb8baf19fb11b77d80a))
+
 ## [1.10.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.9.0...launchdarkly-java-sdk-internal-1.10.0) (2026-07-21)
 
 

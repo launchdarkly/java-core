@@ -29,6 +29,7 @@ import static com.launchdarkly.sdk.server.ModelBuilders.flagBuilder;
 import static com.launchdarkly.testhelpers.httptest.Handlers.bodyJson;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -100,22 +101,32 @@ public class LDClientEndToEndTest extends BaseTest {
     }
   }
 
+  // A 401 does not permanently stop polling; the SDK keeps retrying. We can't
+  // observe multiple extended-regime polls in a fast test because the extended
+  // initial delay is a fixed 5-minute default -- the key assertion is that at
+  // least one poll happened and the SDK did not transition to a permanent-off
+  // state.
   @Test
-  public void clientFailsInPollingModeWith401Error() throws Exception {
+  public void clientInPollingModeKeepsRetryingOn401Error() throws Exception {
     try (HttpServer server = HttpServer.start(makeInvalidSdkKeyResponse())) {
       LDConfig config = baseConfig()
           .serviceEndpoints(Components.serviceEndpoints().polling(server.getUri()))
-          .dataSource(Components.pollingDataSourceInternal()
-              .pollIntervalWithNoMinimum(Duration.ofMillis(5))) // use small interval so we'll know if it does not stop permanently
+          .dataSource(Components.pollingDataSource())
+          .startWait(Duration.ofMillis(500))
           .events(noEvents())
           .build();
-      
+
       try (LDClient client = new LDClient(sdkKey, config)) {
         assertFalse(client.isInitialized());
         assertFalse(client.boolVariation(flagKey, user, false));
-        
+
+        // State should NOT be OFF; the data source is still trying (waiting
+        // out the extended-regime backoff between polls).
+        assertThat(client.getDataSourceStatusProvider().getStatus().getState(),
+            not(equalTo(DataSourceStatusProvider.State.OFF)));
+
+        // At least one request should have been made.
         server.getRecorder().requireRequest();
-        server.getRecorder().requireNoRequests(100, TimeUnit.MILLISECONDS);
       }
     }
   }
@@ -174,35 +185,28 @@ public class LDClientEndToEndTest extends BaseTest {
     }
   }
 
+  // A 401 does not permanently stop streaming; the SDK engages extended-regime
+  // backoff and keeps retrying.
   @Test
-  public void clientFailsInStreamingModeWith401Error() throws Exception {
+  public void clientInStreamingModeKeepsRetryingOn401Error() throws Exception {
     try (HttpServer server = HttpServer.start(makeInvalidSdkKeyResponse())) {
       LDConfig config = baseConfig()
           .serviceEndpoints(Components.serviceEndpoints().streaming(server.getUri()))
           .dataSource(Components.streamingDataSource().initialReconnectDelay(Duration.ZERO))
-          // use zero reconnect delay so we'll know if it does not stop permanently
+          .startWait(Duration.ofMillis(200))
           .events(noEvents())
           .build();
-      
+
       try (LDClient client = new LDClient(sdkKey, config)) {
         assertFalse(client.isInitialized());
         assertFalse(client.boolVariation(flagKey, user, false));
-        
-        BlockingQueue<DataSourceStatusProvider.Status> statuses = new LinkedBlockingQueue<>();
-        client.getDataSourceStatusProvider().addStatusListener(statuses::add);
 
-        Thread.sleep(100); // make sure it didn't retry the connection
+        // State should NOT be OFF; the data source is still trying.
         assertThat(client.getDataSourceStatusProvider().getStatus().getState(),
-            equalTo(DataSourceStatusProvider.State.OFF));
-        while (!statuses.isEmpty()) {
-          // The status listener may or may not have been registered early enough to receive
-          // the OFF notification, but we should at least not see any *other* statuses.
-          assertThat(statuses.take().getState(), equalTo(DataSourceStatusProvider.State.OFF)); 
-        }
-        assertThat(statuses.isEmpty(), equalTo(true));
-        
+            not(equalTo(DataSourceStatusProvider.State.OFF)));
+
+        // At least one request should have been made.
         server.getRecorder().requireRequest();
-        server.getRecorder().requireNoRequests(100, TimeUnit.MILLISECONDS);
       }
     }
   }

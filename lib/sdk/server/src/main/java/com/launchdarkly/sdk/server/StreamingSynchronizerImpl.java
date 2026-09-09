@@ -6,6 +6,7 @@ import com.launchdarkly.eventsource.EventSource;
 import com.launchdarkly.eventsource.FaultEvent;
 import com.launchdarkly.eventsource.HttpConnectStrategy;
 import com.launchdarkly.eventsource.MessageEvent;
+import com.launchdarkly.eventsource.RetryDelayStrategy;
 import com.launchdarkly.eventsource.StreamClosedByCallerException;
 import com.launchdarkly.eventsource.StreamEvent;
 import com.launchdarkly.eventsource.StreamException;
@@ -147,7 +148,8 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 .readBufferSize(5000)
                 .streamEventData(true)
                 .expectFields("event")
-                .retryDelay(initialReconnectDelay.toMillis(), TimeUnit.MILLISECONDS);
+                .retryDelayStrategy(RetryDelayStrategy.defaultStrategy()
+                    .initialDelay(initialReconnectDelay.toMillis(), TimeUnit.MILLISECONDS));
 
         eventSource = builder.build();
 

@@ -74,10 +74,13 @@ public abstract class FDv2StreamingSynchronizerBuilder implements DataSourceBuil
   /**
    * Sets the Payload Filter that will be used to filter the objects (flags, segments, etc.)
    * from this synchronizer.
-   * 
+   *
    * @param payloadFilter the filter to be used
    * @return the builder
+   * @deprecated Payload filtering is not supported with the FDv2 data system and this method will be
+   *     removed in a future release.
    */
+  @Deprecated
   public FDv2StreamingSynchronizerBuilder payloadFilter(String payloadFilter) {
     this.payloadFilter = payloadFilter;
     return this;

@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-ai-0.2.0...launchdarkly-java-server-sdk-ai-0.3.0) (2026-08-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* Make AgentGraph traversal topological ([#199](https://github.com/launchdarkly/java-core/issues/199))
+
+### Features
+
+* **server-ai:** stamp model metadata on AI usage events ([#192](https://github.com/launchdarkly/java-core/issues/192)) ([58f3c25](https://github.com/launchdarkly/java-core/commit/58f3c25e352bd5e1624bc397c580a5b14549880c))
+
+
+### Bug Fixes
+
+* Make AgentGraph traversal topological ([#199](https://github.com/launchdarkly/java-core/issues/199)) ([a100712](https://github.com/launchdarkly/java-core/commit/a100712f6c38f2607b79efb3f9fd768bbc6abac0))
+
 ## [0.2.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-ai-0.1.0...launchdarkly-java-server-sdk-ai-0.2.0) (2026-07-13)
 
 
