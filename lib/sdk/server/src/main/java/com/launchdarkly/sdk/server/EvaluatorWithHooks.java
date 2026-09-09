@@ -46,7 +46,7 @@ class EvaluatorWithHooks implements EvaluatorInterface {
     List<Map> seriesDataList = new ArrayList<>(size);
 
     EvaluationSeriesContext seriesContext = new EvaluationSeriesContext(method, featureKey, context, defaultValue,
-        environmentIdSupplier.get());
+        getEnvironmentId(featureKey));
     Map<String, Object> emptyMap = Collections.emptyMap();
     for (int i = 0; i < size; i++) {
       Hook currentHook = hooks.get(i);
@@ -72,6 +72,19 @@ class EvaluatorWithHooks implements EvaluatorInterface {
     }
 
     return result;
+  }
+
+  /**
+   * Gets the current environment ID from the supplier. The supplier ultimately reads from the data store,
+   * which may be a customer-provided implementation, so a failure here must not prevent the evaluation.
+   */
+  private String getEnvironmentId(String featureKey) {
+    try {
+      return environmentIdSupplier.get();
+    } catch (Exception e) {
+      logger.error("During evaluation of flag \"{}\". Unable to determine the environment ID for hooks: {}", featureKey, e.toString());
+      return null;
+    }
   }
 
   @Override
