@@ -34,6 +34,7 @@ public class TestService {
     "event-gzip",
     "event-sampling",
     "filtering",
+    "hook-environment-id",
     "inline-context-all",
     "migrations",
     "optional-event-gzip",

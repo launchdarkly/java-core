@@ -233,8 +233,10 @@ public final class LDClient implements LDClientInterface {
       this.evaluator = evaluator;
       this.migrationEvaluator = new MigrationStageEnforcingEvaluator(evaluator, evaluationLogger);
     } else {
-      this.evaluator = new EvaluatorWithHooks(evaluator, allHooks, this.baseLogger.subLogger(Loggers.HOOKS_LOGGER_NAME));
-      this.migrationEvaluator = new EvaluatorWithHooks(new MigrationStageEnforcingEvaluator(evaluator, evaluationLogger), allHooks, this.baseLogger.subLogger(Loggers.HOOKS_LOGGER_NAME));
+      this.evaluator = new EvaluatorWithHooks(evaluator, allHooks, this.baseLogger.subLogger(Loggers.HOOKS_LOGGER_NAME),
+          this.dataSystem::getEnvironmentId);
+      this.migrationEvaluator = new EvaluatorWithHooks(new MigrationStageEnforcingEvaluator(evaluator, evaluationLogger), allHooks,
+          this.baseLogger.subLogger(Loggers.HOOKS_LOGGER_NAME), this.dataSystem::getEnvironmentId);
     }
 
     // Create FlagTracker using the dataSystem's flag change notifier

@@ -40,7 +40,7 @@ final class PersistentDataStoreConverter {
     }
 
     // Preserve shouldPersist flag when converting formats
-    return new FullDataSet<>(builder.build(), inMemoryData.shouldPersist());
+    return new FullDataSet<>(builder.build(), inMemoryData.shouldPersist(), inMemoryData.getEnvironmentId());
   }
 
   /**

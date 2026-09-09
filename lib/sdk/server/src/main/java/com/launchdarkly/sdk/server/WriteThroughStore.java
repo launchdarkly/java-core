@@ -132,6 +132,11 @@ final class WriteThroughStore implements DataStore, TransactionalDataStore {
   }
 
   @Override
+  public String getEnvironmentId() {
+    return memoryStore.getEnvironmentId();
+  }
+
+  @Override
   public void close() throws IOException {
     memoryStore.close();
     if (hasPersistence) {
@@ -182,7 +187,8 @@ final class WriteThroughStore implements DataStore, TransactionalDataStore {
    */
   private void applyFullChangeSetToLegacyStore(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> sortedChangeSet) {
     // Preserve shouldPersist flag when converting ChangeSet to FullDataSet
-    persistentStore.init(new FullDataSet<>(sortedChangeSet.getData(), sortedChangeSet.shouldPersist()));
+    persistentStore.init(new FullDataSet<>(sortedChangeSet.getData(), sortedChangeSet.shouldPersist(),
+        sortedChangeSet.getEnvironmentId()));
   }
 
   /**

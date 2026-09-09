@@ -37,6 +37,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.launchdarkly.sdk.server.TestComponents.clientContext;
 import static com.launchdarkly.sdk.server.TestComponents.dataStoreThatThrowsException;
@@ -53,6 +54,7 @@ import static org.hamcrest.Matchers.greaterThan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -65,11 +67,12 @@ public class PollingProcessorTest extends BaseTest {
   private static final long EXTENDED_GAP_FLOOR_MILLIS = 150L;
 
   private MockDataSourceUpdates dataSourceUpdates;
+  private InMemoryDataStore dataStore;
 
   @Before
   public void setup() {
-    DataStore store = new InMemoryDataStore();
-    dataSourceUpdates = TestComponents.dataSourceUpdates(store, new MockDataStoreStatusProvider());
+    dataStore = new InMemoryDataStore();
+    dataSourceUpdates = TestComponents.dataSourceUpdates(dataStore, new MockDataStoreStatusProvider());
   }
 
   private PollingProcessor makeProcessor(URI baseUri, Duration pollInterval) {
@@ -485,5 +488,79 @@ public class PollingProcessorTest extends BaseTest {
     } finally {
       dataSourceUpdates.statusBroadcaster.unregister(addStatus);
     }
+  }
+  @Test
+  public void environmentIdIsCapturedFromPollResponseHeader() throws Exception {
+    Handler pollingHandler = Handlers.all(
+        Handlers.header("x-ld-envid", "env-from-poll"),
+        new TestPollHandler()
+        );
+
+    try (HttpServer server = HttpServer.start(pollingHandler)) {
+      try (PollingProcessor pollingProcessor = makeProcessor(server.getUri(), LENGTHY_INTERVAL)) {
+        assertNull(dataStore.getEnvironmentId());
+
+        assertFutureIsCompleted(pollingProcessor.start(), 1, TimeUnit.SECONDS);
+
+        assertEquals("env-from-poll", dataStore.getEnvironmentId());
+      }
+    }
+  }
+
+  @Test
+  public void environmentIdIsNullIfHeaderIsEmpty() throws Exception {
+    Handler pollingHandler = Handlers.all(
+        Handlers.header("x-ld-envid", ""),
+        new TestPollHandler()
+        );
+
+    try (HttpServer server = HttpServer.start(pollingHandler)) {
+      try (PollingProcessor pollingProcessor = makeProcessor(server.getUri(), LENGTHY_INTERVAL)) {
+        assertFutureIsCompleted(pollingProcessor.start(), 1, TimeUnit.SECONDS);
+
+        assertNull(dataStore.getEnvironmentId());
+      }
+    }
+  }
+
+  @Test
+  public void environmentIdIsOnlyTakenFromSuccessfulPollResponses() throws Exception {
+    // Error responses deliberately carry a different environment ID, so this test fails if an ID is
+    // ever taken from an unsuccessful response.
+    TestPollHandler successHandler = new TestPollHandler();
+    AtomicInteger errorStatus = new AtomicInteger(503);
+    Handler pollingHandler = ctx -> {
+      int err = errorStatus.get();
+      if (err == 0) {
+        Handlers.header("x-ld-envid", "env-from-poll").apply(ctx);
+        successHandler.apply(ctx);
+      } else {
+        Handlers.header("x-ld-envid", "env-from-error").apply(ctx);
+        ctx.setStatus(err);
+      }
+    };
+
+    withStatusQueue(statuses -> {
+      try (HttpServer server = HttpServer.start(pollingHandler)) {
+        try (PollingProcessor pollingProcessor = makeProcessor(server.getUri(), BRIEF_INTERVAL)) {
+          pollingProcessor.start();
+
+          // the first poll fails: nothing is taken from the error response
+          Status status0 = requireDataSourceStatus(statuses, State.INITIALIZING);
+          assertEquals(ErrorKind.ERROR_RESPONSE, status0.getLastError().getKind());
+          assertNull(dataStore.getEnvironmentId());
+
+          // now a poll succeeds
+          errorStatus.set(0);
+          requireDataSourceStatusEventually(statuses, State.VALID, State.INITIALIZING);
+          assertEquals("env-from-poll", dataStore.getEnvironmentId());
+
+          // subsequent failures do not change the retained value
+          errorStatus.set(503);
+          requireDataSourceStatus(statuses, State.INTERRUPTED);
+          assertEquals("env-from-poll", dataStore.getEnvironmentId());
+        }
+      }
+    });
   }
 }

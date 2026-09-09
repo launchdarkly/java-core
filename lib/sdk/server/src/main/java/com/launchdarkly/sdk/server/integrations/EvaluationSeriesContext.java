@@ -33,15 +33,35 @@ public class EvaluationSeriesContext {
   public final LDValue defaultValue;
 
   /**
+   * The ID of the LaunchDarkly environment the evaluated data came from, or null if it is not
+   * known. It is not known before the SDK has received a successful response from LaunchDarkly,
+   * or when the data came from a source other than LaunchDarkly.
+   */
+  public final String environmentId;
+
+  /**
    * @param method       the variation method that was used to invoke the evaluation.
    * @param key          the key of the feature flag being evaluated.
    * @param context      the context the evaluation was for.
    * @param defaultValue the user-provided default value for the evaluation.
    */
   public EvaluationSeriesContext(String method, String key, LDContext context, LDValue defaultValue) {
+    this(method, key, context, defaultValue, null);
+  }
+
+  /**
+   * @param method        the variation method that was used to invoke the evaluation.
+   * @param key           the key of the feature flag being evaluated.
+   * @param context       the context the evaluation was for.
+   * @param defaultValue  the user-provided default value for the evaluation.
+   * @param environmentId the ID of the LaunchDarkly environment, or null if it is not known.
+   */
+  public EvaluationSeriesContext(String method, String key, LDContext context, LDValue defaultValue,
+      String environmentId) {
     this.flagKey = key;
     this.context = context;
     this.defaultValue = defaultValue;
     this.method = method;
+    this.environmentId = environmentId;
   }
 }

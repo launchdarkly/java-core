@@ -33,10 +33,11 @@ class InMemoryDataStore implements DataStore, TransactionalDataStore, CacheExpor
   private final Object selectorLock = new Object();
   private volatile Selector selector = Selector.EMPTY;
   private volatile boolean shouldPersist = false;
+  private volatile String environmentId = null;
 
   @Override
   public void init(FullDataSet<ItemDescriptor> allData) {
-    applyFullPayload(allData.getData(), null, Selector.EMPTY, allData.shouldPersist());
+    applyFullPayload(allData.getData(), allData.getEnvironmentId(), Selector.EMPTY, allData.shouldPersist());
   }
 
   @Override
@@ -128,7 +129,8 @@ class InMemoryDataStore implements DataStore, TransactionalDataStore, CacheExpor
         applyFullPayload(changeSet.getData(), changeSet.getEnvironmentId(), changeSet.getSelector(), changeSet.shouldPersist());
         break;
       case Partial:
-        applyPartialData(changeSet.getData(), changeSet.getSelector(), changeSet.shouldPersist());
+        applyPartialData(changeSet.getData(), changeSet.getEnvironmentId(), changeSet.getSelector(),
+            changeSet.shouldPersist());
         break;
       case None:
         break;
@@ -152,8 +154,19 @@ class InMemoryDataStore implements DataStore, TransactionalDataStore, CacheExpor
     }
   }
 
+  @Override
+  public String getEnvironmentId() {
+    return this.environmentId;
+  }
+
+  private void setEnvironmentId(String newEnvironmentId) {
+    if (newEnvironmentId != null && !newEnvironmentId.isEmpty()) {
+      this.environmentId = newEnvironmentId;
+    }
+  }
+
   private void applyPartialData(Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data,
-      Selector selector, boolean shouldPersist) {
+      String environmentId, Selector selector, boolean shouldPersist) {
     synchronized (this.writeLock) {
       // Build the complete updated dictionary before assigning to Items for transactional update
       ImmutableMap.Builder<DataKind, Map<String, ItemDescriptor>> itemsBuilder = ImmutableMap.builder();
@@ -192,6 +205,7 @@ class InMemoryDataStore implements DataStore, TransactionalDataStore, CacheExpor
 
       this.allData = itemsBuilder.build();
       this.shouldPersist = shouldPersist;
+      setEnvironmentId(environmentId);
       setSelector(selector);
     }
   }
@@ -214,6 +228,7 @@ class InMemoryDataStore implements DataStore, TransactionalDataStore, CacheExpor
       this.allData = newItems;
       this.initialized = true;
       this.shouldPersist = shouldPersist;
+      setEnvironmentId(environmentId);
       setSelector(selector);
     }
   }
@@ -231,7 +246,7 @@ class InMemoryDataStore implements DataStore, TransactionalDataStore, CacheExpor
       }
 
       // Preserve the shouldPersist value that was set when data was provided to this store
-      return new FullDataSet<>(builder.build(), this.shouldPersist);
+      return new FullDataSet<>(builder.build(), this.shouldPersist, this.environmentId);
     }
   }
 }

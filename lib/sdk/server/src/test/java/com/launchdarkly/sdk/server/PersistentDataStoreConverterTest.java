@@ -468,4 +468,18 @@ public class PersistentDataStoreConverterTest {
     assertEquals(2, deletedCount);
     assertEquals(2, regularCount);
   }
+
+  @Test
+  public void toSerializedFormatPreservesEnvironmentId() {
+    FullDataSet<ItemDescriptor> data = new FullDataSet<>(
+        ImmutableList.of(new AbstractMap.SimpleEntry<>(TEST_DATA_KIND,
+            new KeyedItems<>(ImmutableList.of(new AbstractMap.SimpleEntry<>("key1",
+                new ItemDescriptor(1, new TestItem("item1"))))))),
+        true, "env-id");
+
+    FullDataSet<SerializedItemDescriptor> result = PersistentDataStoreConverter.toSerializedFormat(data);
+
+    assertEquals("env-id", result.getEnvironmentId());
+    assertTrue(result.shouldPersist());
+  }
 }

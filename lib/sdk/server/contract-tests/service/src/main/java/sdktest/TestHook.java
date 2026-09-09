@@ -44,6 +44,7 @@ class TestHook extends Hook {
     seriesContextParam.context = seriesContext.context;
     seriesContextParam.defaultValue = seriesContext.defaultValue;
     seriesContextParam.method = seriesContext.method;
+    seriesContextParam.environmentId = seriesContext.environmentId;
     params.evaluationSeriesContext = seriesContextParam;
 
     params.evaluationSeriesData = data;
@@ -72,6 +73,7 @@ class TestHook extends Hook {
     seriesContextParam.context = seriesContext.context;
     seriesContextParam.defaultValue = seriesContext.defaultValue;
     seriesContextParam.method = seriesContext.method;
+    seriesContextParam.environmentId = seriesContext.environmentId;
     params.evaluationSeriesContext = seriesContextParam;
 
     params.evaluationSeriesData = data;

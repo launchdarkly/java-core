@@ -156,6 +156,11 @@ final class FDv1DataSystem implements DataSystem, Closeable {
   }
 
   @Override
+  public String getEnvironmentId() {
+    return dataStore.getEnvironmentId();
+  }
+
+  @Override
   public void close() throws IOException {
     if (disposed) {
       return;
