@@ -1,5 +1,6 @@
 package com.launchdarkly.sdk.server;
 
+import com.launchdarkly.logging.LDLogLevel;
 import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.server.integrations.MockPersistentDataStore;
@@ -424,6 +425,30 @@ public class LDClientTest extends BaseTest {
 
     upsertFlag(testDataStore, flagWithValue("key", LDValue.of(1)));
     assertFalse(client.isFlagKnown("key"));
+    mocks.verifyAll();
+  }
+
+  @Test
+  public void isFlagKnownLogsCachedDataWarningOnlyOnce() throws Exception {
+    DataStore testDataStore = initedDataStore();
+    LDConfig.Builder config = new LDConfig.Builder()
+            .startWait(Duration.ZERO)
+            .dataStore(specificComponent(testDataStore));
+    expect(dataSource.start()).andReturn(initFuture);
+    expect(dataSource.isInitialized()).andReturn(false).times(2);
+    mocks.replayAll();
+
+    client = createMockClient(config);
+
+    upsertFlag(testDataStore, flagWithValue("key", LDValue.of(1)));
+    assertTrue(client.isFlagKnown("key"));
+    assertTrue(client.isFlagKnown("key"));
+
+    long warningCount = logCapture.getMessages().stream()
+        .filter(m -> m.getLevel() == LDLogLevel.WARN
+            && m.getText().contains("using last known values from data store"))
+        .count();
+    assertEquals(1, warningCount);
     mocks.verifyAll();
   }
 
