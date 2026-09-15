@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.17.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.0...launchdarkly-java-server-sdk-7.17.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* Log the isFlagKnown cached-data warning only once per client ([#213](https://github.com/launchdarkly/java-core/issues/213)) ([48215ba](https://github.com/launchdarkly/java-core/commit/48215bade071879be34d2c2390091771efdc5834))
+
 ## [7.17.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.16.0...launchdarkly-java-server-sdk-7.17.0) (2026-09-10)
 
 
