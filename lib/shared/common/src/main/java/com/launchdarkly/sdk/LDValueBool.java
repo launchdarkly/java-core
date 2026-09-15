@@ -38,4 +38,10 @@ final class LDValueBool extends LDValue {
   void write(JsonWriter writer) throws IOException {
     writer.value(value);
   }
+
+  // Preserve singleton identity after Java deserialization, since equals() for booleans
+  // relies on TRUE and FALSE being singletons.
+  private Object readResolve() {
+    return fromBoolean(value);
+  }
 }
