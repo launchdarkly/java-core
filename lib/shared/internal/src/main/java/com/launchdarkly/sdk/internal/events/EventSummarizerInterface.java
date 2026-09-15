@@ -13,7 +13,7 @@ import java.util.List;
  * Note that implementations are deliberately not thread-safe, as they should always
  * be called from EventProcessor's single message-processing thread.
  */
-interface EventSummarizerInterface {
+public interface EventSummarizerInterface {
   /**
    * Adds information about an evaluation to the summary.
    *

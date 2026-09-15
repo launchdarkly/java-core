@@ -25,18 +25,28 @@ import static com.launchdarkly.sdk.internal.GsonHelpers.gsonInstance;
  * handling of context data and private attribute redaction is implemented in EventContextFormatter
  * and tested in more detail in EventContextFormatterTest.
  */
-final class EventOutputFormatter {
+public final class EventOutputFormatter {
   private final EventContextFormatter contextFormatter;
   private final boolean redactAnonymousAllEvents;
 
-  EventOutputFormatter(EventsConfiguration config) {
+  public EventOutputFormatter(EventsConfiguration config) {
     this.contextFormatter = new EventContextFormatter(
         config.allAttributesPrivate,
         config.privateAttributes.toArray(new AttributeRef[config.privateAttributes.size()]));
     this.redactAnonymousAllEvents = config.redactAnonymousAllEvents;
   }
 
-  int writeOutputEvents(Event[] events, List<EventSummarizer.EventSummary> summaries, Writer writer) throws IOException {
+  /**
+   * Writes events and summaries as the JSON array that makes up a request body.
+   *
+   * @param events the individual events to write
+   * @param summaries the summaries to write; empty ones are skipped
+   * @param writer where to write the JSON
+   * @return how many output events were written, counting each summary as one
+   * @throws IOException if the writer failed
+   */
+  public int writeOutputEvents(Event[] events, List<EventSummarizer.EventSummary> summaries, Writer writer)
+      throws IOException {
     int count = 0;
     JsonWriter jsonWriter = new JsonWriter(writer);
     jsonWriter.beginArray();
