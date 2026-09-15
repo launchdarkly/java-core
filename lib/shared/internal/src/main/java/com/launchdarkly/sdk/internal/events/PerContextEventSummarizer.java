@@ -19,10 +19,10 @@ import java.util.Map;
  * Note that the methods of this class are deliberately not thread-safe, because they should
  * always be called from EventProcessor's single message-processing thread.
  */
-final class PerContextEventSummarizer implements EventSummarizerInterface {
+public final class PerContextEventSummarizer implements EventSummarizerInterface {
   private final Map<LDContext, EventSummarizer> summarizersByContext;
 
-  PerContextEventSummarizer() {
+  public PerContextEventSummarizer() {
     this.summarizersByContext = new HashMap<>();
   }
 
