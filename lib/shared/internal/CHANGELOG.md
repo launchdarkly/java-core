@@ -2,6 +2,13 @@
 
 All notable changes to the project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [1.12.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.11.1...launchdarkly-java-sdk-internal-1.12.0) (2026-09-15)
+
+
+### Features
+
+* **events:** make event serialization usable from another package ([#214](https://github.com/launchdarkly/java-core/issues/214)) ([185dfbb](https://github.com/launchdarkly/java-core/commit/185dfbb776f0d607076baaddeb0ffa6fe4530fff))
+
 ## [1.11.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.11.0...launchdarkly-java-sdk-internal-1.11.1) (2026-08-28)
 
 
