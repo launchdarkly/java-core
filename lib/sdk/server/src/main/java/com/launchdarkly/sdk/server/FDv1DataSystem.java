@@ -6,6 +6,8 @@ import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider;
 import com.launchdarkly.sdk.server.interfaces.FlagChangeEvent;
 import com.launchdarkly.sdk.server.interfaces.FlagChangeListener;
 import com.launchdarkly.sdk.server.subsystems.ComponentConfigurer;
+import com.launchdarkly.sdk.server.integrations.SynchronizerChangeContext;
+import com.launchdarkly.sdk.server.interfaces.DataSourceDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
 import com.launchdarkly.sdk.server.subsystems.LoggingConfiguration;
@@ -26,6 +28,8 @@ final class FDv1DataSystem implements DataSystem, Closeable {
   private final FlagChangeNotifier flagChanged;
   private final DataSourceStatusProvider dataSourceStatusProvider;
   private final DataStoreStatusProvider dataStoreStatusProvider;
+  private final DataSourceUpdatesImpl dataSourceUpdates;
+  private final DataSourceLifecycleListener lifecycleListener;
   private boolean disposed = false;
 
   /**
@@ -54,8 +58,12 @@ final class FDv1DataSystem implements DataSystem, Closeable {
       DataStoreStatusProvider dataStoreStatusProvider,
       DataSourceStatusProvider dataSourceStatusProvider,
       DataSource dataSource,
-      FlagChangeNotifier flagChanged
+      FlagChangeNotifier flagChanged,
+      DataSourceUpdatesImpl dataSourceUpdates,
+      DataSourceLifecycleListener lifecycleListener
   ) {
+    this.dataSourceUpdates = dataSourceUpdates;
+    this.lifecycleListener = lifecycleListener;
     this.dataStoreStatusProvider = dataStoreStatusProvider;
     this.dataSourceStatusProvider = dataSourceStatusProvider;
     this.store = new ReadonlyStoreFacade(store);
@@ -116,12 +124,16 @@ final class FDv1DataSystem implements DataSystem, Closeable {
 
     FlagChangeNotifier flagChanged = new FlagChangedFacade(dataSourceUpdates);
 
+    dataSourceUpdates.setLifecycleListener(clientContext.hookRunner);
+
     return new FDv1DataSystem(
         dataStore,
         dataStoreStatusProvider,
         dataSourceStatusProvider,
         dataSource,
-        flagChanged
+        flagChanged,
+        dataSourceUpdates,
+        clientContext.hookRunner
     );
   }
 
@@ -132,6 +144,18 @@ final class FDv1DataSystem implements DataSystem, Closeable {
 
   @Override
   public Future<Void> start() {
+    if (lifecycleListener != null) {
+      // A single data source keeps data up to date in the same way as a synchronizer. Report it once
+      // so that hooks get the same component identity as with a data system.
+      DataSourceDescriptor descriptor = dataSource.describe();
+      if (descriptor.isDefined()) {
+        lifecycleListener.synchronizerChanged(new SynchronizerChangeContext(
+            DataSourceDescriptor.empty(), descriptor, SynchronizerChangeContext.Reason.INITIAL, null));
+      }
+      // The first status invocation carries the initial status, so that a hook has a status before
+      // the first change.
+      dataSourceUpdates.reportInitialStatus();
+    }
     return dataSource.start();
   }
 

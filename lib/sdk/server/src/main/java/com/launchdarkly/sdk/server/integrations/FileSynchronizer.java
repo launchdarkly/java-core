@@ -5,6 +5,7 @@ import com.launchdarkly.logging.LogValues;
 import com.launchdarkly.sdk.internal.collections.IterableAsyncQueue;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
+import com.launchdarkly.sdk.server.interfaces.DataSourceDescriptor;
 import com.launchdarkly.sdk.server.integrations.FileDataSourceBuilder.SourceInfo;
 
 import java.io.IOException;
@@ -63,7 +64,12 @@ final class FileSynchronizer extends FileDataSourceBase implements Synchronizer 
 
     @Override
     public String name() {
-        return "FileSynchronizer(V2)";
+        return "file";
+    }
+
+    @Override
+    public DataSourceDescriptor describe() {
+        return DataSourceDescriptor.of(null, DataSourceDescriptor.Transport.FILE, name());
     }
 
     @Override

@@ -5,11 +5,14 @@ import com.launchdarkly.sdk.internal.collections.IterableAsyncQueue;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.SelectorSource;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
+import com.launchdarkly.sdk.server.interfaces.DataSourceDescriptor;
 
 import java.time.Duration;
 import java.util.concurrent.*;
 
 class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
+    static final String DEFAULT_NAME = "polling";
+    private final String name;
     private final CompletableFuture<FDv2SourceResult> shutdownFuture = new CompletableFuture<>();
     private final SelectorSource selectorSource;
 
@@ -24,7 +27,19 @@ class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
             ScheduledExecutorService sharedExecutor,
             Duration pollInterval
     ) {
+        this(requestor, logger, selectorSource, sharedExecutor, pollInterval, null);
+    }
+
+    public PollingSynchronizerImpl(
+            FDv2Requestor requestor,
+            LDLogger logger,
+            SelectorSource selectorSource,
+            ScheduledExecutorService sharedExecutor,
+            Duration pollInterval,
+            String name
+    ) {
         super(requestor, logger.subLogger(Loggers.POLLING_SYNCHRONIZER));
+        this.name = name == null || name.isEmpty() ? DEFAULT_NAME : name;
         this.selectorSource = selectorSource;
 
         synchronized (this) {
@@ -38,7 +53,12 @@ class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
 
     @Override
     public String name() {
-        return "PollingSynchronizer(V2)";
+        return name;
+    }
+
+    @Override
+    public DataSourceDescriptor describe() {
+        return DataSourceDescriptor.of(DataSourceDescriptor.Protocol.FDV2, DataSourceDescriptor.Transport.POLLING, name);
     }
 
     private void doPoll() {

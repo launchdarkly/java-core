@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * The internal component that processes and delivers analytics events.
@@ -61,6 +62,8 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
   private ScheduledFuture<?> contextKeysFlushTask;
   private ScheduledFuture<?> periodicDiagnosticEventTask;
   private volatile boolean inputCapacityExceeded = false;
+  // Events discarded because the inbox was full. Reported with the next flush.
+  private final AtomicLong inboxDroppedCount = new AtomicLong(0);
   private final LDLogger logger;
 
   /**
@@ -94,6 +97,7 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
         inBackground,
         offline,
         closed,
+        inboxDroppedCount,
         logger
         );
     // we don't need to save a reference to this - we communicate with it entirely through the inbox queue.
@@ -218,7 +222,9 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
   }
 
   private void postMessageAsync(MessageType type, Event event) {
-    postToChannel(new EventProcessorMessage(type, event, false));
+    if (!postToChannel(new EventProcessorMessage(type, event, false)) && type == MessageType.EVENT) {
+      inboxDroppedCount.incrementAndGet();
+    }
   }
 
   private void postMessageAndWait(MessageType type, Event event) {
@@ -321,6 +327,7 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
     private final AtomicBoolean disabled = new AtomicBoolean(false);
     private final AtomicBoolean didSendInitEvent = new AtomicBoolean(false);
     final DiagnosticStore diagnosticStore; // visible for testing
+    private final AtomicLong inboxDroppedCount;
     private final EventContextDeduplicator contextDeduplicator;
     private final ExecutorService sharedExecutor;
     private final LDLogger logger;
@@ -335,6 +342,7 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
         AtomicBoolean inBackground,
         AtomicBoolean offline,
         AtomicBoolean closed,
+        AtomicLong inboxDroppedCount,
         LDLogger logger
         ) {
       this.eventsConfig = eventsConfig;
@@ -344,6 +352,7 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
       this.closed = closed;
       this.sharedExecutor = sharedExecutor;
       this.diagnosticStore = eventsConfig.diagnosticStore;
+      this.inboxDroppedCount = inboxDroppedCount;
       this.busyFlushWorkersCount = new AtomicInteger(0);
       this.logger = logger;
 
@@ -606,7 +615,10 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
       if (disabled.get() || outbox.isEmpty()) {
         return;
       }
-      FlushPayload payload = outbox.getPayload();
+      // Events discarded since the previous flush ride along with this payload, so that the flush
+      // listener reports them once the attempt completes.
+      long droppedCount = outbox.getAndClearDroppedSinceFlush() + inboxDroppedCount.getAndSet(0);
+      FlushPayload payload = outbox.getPayload(droppedCount);
       if (diagnosticStore != null) {
         int summaryCount = 0;
         for (EventSummary summary : payload.summaries) {
@@ -625,6 +637,7 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
         logger.debug("Skipped flushing because all workers are busy");
         // All the workers are busy so we can't flush now; keep the events in our state
         outbox.summarizer.restoreTo(payload.summaries);
+        outbox.restoreDropped(droppedCount);
         synchronized(busyFlushWorkersCount) {
           busyFlushWorkersCount.decrementAndGet();
           busyFlushWorkersCount.notify();
@@ -672,6 +685,7 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
     private final LDLogger logger;
     private boolean capacityExceeded = false;
     private long droppedEventCount = 0;
+    private long droppedSinceFlush = 0;
 
     EventBuffer(int capacity, boolean perContextSummarization, LDLogger logger) {
       this.capacity = capacity;
@@ -688,6 +702,7 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
           logger.warn("Exceeded event queue capacity. Increase capacity to avoid dropping events.");
         }
         droppedEventCount++;
+        droppedSinceFlush++;
       } else {
         capacityExceeded = false;
         events.add(e);
@@ -716,10 +731,20 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
       return res;
     }
 
-    FlushPayload getPayload() {
+    long getAndClearDroppedSinceFlush() {
+      long res = droppedSinceFlush;
+      droppedSinceFlush = 0;
+      return res;
+    }
+
+    void restoreDropped(long count) {
+      droppedSinceFlush += count;
+    }
+
+    FlushPayload getPayload(long droppedCount) {
       Event[] eventsOut = events.toArray(new Event[events.size()]);
       List<EventSummarizer.EventSummary> summaries = summarizer.getSummariesAndReset();
-      return new FlushPayload(eventsOut, summaries);
+      return new FlushPayload(eventsOut, summaries, droppedCount);
     }
 
     void clear() {
@@ -731,10 +756,12 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
   private static final class FlushPayload {
     final Event[] events;
     final List<EventSummary> summaries;
+    final long droppedCount;
 
-    FlushPayload(Event[] events, List<EventSummary> summaries) {
+    FlushPayload(Event[] events, List<EventSummary> summaries, long droppedCount) {
       this.events = events;
       this.summaries = summaries;
+      this.droppedCount = droppedCount;
     }
   }
 
@@ -785,12 +812,23 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
           Writer writer = new BufferedWriter(new OutputStreamWriter(buffer, Charset.forName("UTF-8")), INITIAL_OUTPUT_BUFFER_SIZE);
           int outputEventCount = formatter.writeOutputEvents(payload.events, payload.summaries, writer);
           writer.flush();
+          byte[] data = buffer.toByteArray();
+          long startTime = System.currentTimeMillis();
           EventSender.Result result = eventsConfig.eventSender.sendAnalyticsEvents(
-              buffer.toByteArray(),
+              data,
               outputEventCount,
               eventsConfig.eventsUri
               );
           responseListener.handleResponse(result);
+          if (eventsConfig.flushListener != null) {
+            eventsConfig.flushListener.flushCompleted(new EventFlushResult(
+                outputEventCount,
+                data.length,
+                result.isSuccess(),
+                result.getStatusCode(),
+                System.currentTimeMillis() - startTime,
+                payload.droppedCount));
+          }
         } catch (Exception e) {
           logger.error("Unexpected error in event processor: {}", LogValues.exceptionSummary(e));
           logger.debug(LogValues.exceptionTrace(e));

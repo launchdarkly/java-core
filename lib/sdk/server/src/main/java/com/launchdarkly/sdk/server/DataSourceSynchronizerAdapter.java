@@ -4,6 +4,7 @@ import com.launchdarkly.sdk.internal.collections.IterableAsyncQueue;
 import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
+import com.launchdarkly.sdk.server.interfaces.DataSourceDescriptor;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
@@ -63,7 +64,12 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
 
     @Override
     public String name() {
-        return "AdaptedSynchronizer(V1->V2)";
+        return "fdv1_polling";
+    }
+
+    @Override
+    public DataSourceDescriptor describe() {
+        return DataSourceDescriptor.of(DataSourceDescriptor.Protocol.FDV1, DataSourceDescriptor.Transport.POLLING, name());
     }
 
     @Override

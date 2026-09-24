@@ -1,5 +1,7 @@
 package com.launchdarkly.sdk.server.datasources;
 
+import com.launchdarkly.sdk.server.interfaces.DataSourceDescriptor;
+
 import java.io.Closeable;
 import java.util.concurrent.CompletableFuture;
 
@@ -44,6 +46,15 @@ import java.util.concurrent.CompletableFuture;
  *
  */
 public interface Initializer extends Closeable {
+    /**
+     * Identifies this initializer to hooks. The default identifies it by {@link #name()} only.
+     *
+     * @return the descriptor
+     */
+    default DataSourceDescriptor describe() {
+        return DataSourceDescriptor.named(name());
+    }
+
     /**
      * Run the initializer to completion.
      * <p>

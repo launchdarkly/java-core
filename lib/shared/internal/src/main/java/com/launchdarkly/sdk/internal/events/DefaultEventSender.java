@@ -174,6 +174,7 @@ public final class DefaultEventSender implements EventSender {
     CompressionResult<byte[]> compressionResult = compressData(data);
     RequestBody body = RequestBody.create(compressionResult.data, JSON_CONTENT_TYPE);
     boolean mustShutDown = false;
+    int lastStatusCode = 0;
 
     if (compressionResult.wasCompressed) {
       headersBuilder.add("Content-Encoding", "gzip");
@@ -206,8 +207,9 @@ public final class DefaultEventSender implements EventSender {
         long endTime = System.currentTimeMillis();
         logger.debug("{} delivery took {} ms, response status {}", description, endTime - startTime, response.code());
 
+        lastStatusCode = response.code();
         if (response.isSuccessful()) {
-          return new Result(true, false, parseResponseDate(response));
+          return new Result(true, false, parseResponseDate(response), response.code());
         }
 
         String errorDesc = httpErrorDescription(response.code());
@@ -227,7 +229,7 @@ public final class DefaultEventSender implements EventSender {
       }
     }
 
-    return new Result(false, mustShutDown, null);
+    return new Result(false, mustShutDown, null, lastStatusCode);
   }
 
   private final Date parseResponseDate(Response response) {

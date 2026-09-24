@@ -8,6 +8,7 @@ import com.launchdarkly.sdk.internal.http.HttpErrors.HttpErrorException;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.ErrorInfo;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.ErrorKind;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.State;
+import com.launchdarkly.sdk.server.interfaces.DataSourceDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
@@ -62,6 +63,11 @@ final class PollingProcessor implements DataSource {
   @Override
   public boolean isInitialized() {
     return initialized.get();
+  }
+
+  @Override
+  public DataSourceDescriptor describe() {
+    return DataSourceDescriptor.of(DataSourceDescriptor.Protocol.FDV1, DataSourceDescriptor.Transport.POLLING, "polling");
   }
 
   @Override

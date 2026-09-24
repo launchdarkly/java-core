@@ -44,6 +44,7 @@ public interface EventSender extends Closeable {
     private boolean success;
     private boolean mustShutDown;
     private Date timeFromServer;
+    private int statusCode;
     
     /**
      * Constructs an instance.
@@ -55,9 +56,29 @@ public interface EventSender extends Closeable {
      *   if any; this is used to compensate for differences between the application's time and server time
      */
     public Result(boolean success, boolean mustShutDown, Date timeFromServer) {
+      this(success, mustShutDown, timeFromServer, 0);
+    }
+
+    /**
+     * Constructs an instance that records the HTTP status of the last response.
+     *
+     * @param success true if the events were delivered
+     * @param mustShutDown true if the event sender should shut down
+     * @param timeFromServer the server time from the response, or null
+     * @param statusCode the HTTP status of the last response, or 0 if no response was received
+     */
+    public Result(boolean success, boolean mustShutDown, Date timeFromServer, int statusCode) {
       this.success = success;
       this.mustShutDown = mustShutDown;
       this.timeFromServer = timeFromServer;
+      this.statusCode = statusCode;
+    }
+
+    /**
+     * @return the HTTP status of the last response, or 0 if no response was received
+     */
+    public int getStatusCode() {
+      return statusCode;
     }
 
     /**

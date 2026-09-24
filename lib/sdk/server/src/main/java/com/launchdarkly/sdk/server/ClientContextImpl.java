@@ -30,6 +30,8 @@ final class ClientContextImpl extends ClientContext {
   final DiagnosticStore diagnosticStore;
   final DataSourceUpdateSink dataSourceUpdateSink;
   final DataStoreUpdateSink dataStoreUpdateSink;
+  // Delivers handler invocations to the hooks; null when no hooks are configured.
+  final HookRunner hookRunner;
 
   private ClientContextImpl(
       ClientContext baseContext,
@@ -43,6 +45,7 @@ final class ClientContextImpl extends ClientContext {
     this.diagnosticStore = diagnosticStore;
     this.dataSourceUpdateSink = null;
     this.dataStoreUpdateSink = null;
+    this.hookRunner = null;
   }
 
   private ClientContextImpl(
@@ -55,6 +58,20 @@ final class ClientContextImpl extends ClientContext {
     this.dataStoreUpdateSink = dataStoreUpdateSink;
     this.diagnosticStore = copyFrom.diagnosticStore;
     this.sharedExecutor = copyFrom.sharedExecutor;
+    this.hookRunner = copyFrom.hookRunner;
+  }
+
+  private ClientContextImpl(ClientContextImpl copyFrom, HookRunner hookRunner) {
+    super(copyFrom);
+    this.dataSourceUpdateSink = copyFrom.dataSourceUpdateSink;
+    this.dataStoreUpdateSink = copyFrom.dataStoreUpdateSink;
+    this.diagnosticStore = copyFrom.diagnosticStore;
+    this.sharedExecutor = copyFrom.sharedExecutor;
+    this.hookRunner = hookRunner;
+  }
+
+  ClientContextImpl withHookRunner(HookRunner hookRunner) {
+    return new ClientContextImpl(this, hookRunner);
   }
   
   ClientContextImpl withDataSourceUpdateSink(DataSourceUpdateSink newDataSourceUpdateSink) {

@@ -61,6 +61,7 @@ public final class LDClient implements LDClientInterface {
   final EventProcessor eventProcessor;
   @VisibleForTesting
   final DataSystem dataSystem;
+  private final HookRunner hookRunner;
   private final FlagTrackerImpl flagTracker;
   private final BigSegmentStoreStatusProvider bigSegmentStoreStatusProvider;
   private final BigSegmentStoreWrapper bigSegmentStoreWrapper;
@@ -181,13 +182,39 @@ public final class LDClient implements LDClientInterface {
 
     this.sharedExecutor = createSharedExecutor(config);
 
-    final ClientContextImpl context = ClientContextImpl.fromConfig(
+    final ClientContextImpl baseContext = ClientContextImpl.fromConfig(
         sdkKey,
         config,
         sharedExecutor
     );
-    this.baseLogger = context.getBaseLogger();
+    this.baseLogger = baseContext.getBaseLogger();
     this.evaluationLogger = this.baseLogger.subLogger(Loggers.EVALUATION_LOGGER_NAME);
+
+    // build environment metadata for plugins
+    SdkMetadata sdkMetadata;
+    if (config.wrapperInfo == null) {
+      sdkMetadata = new SdkMetadata("JavaClient", Version.SDK_VERSION);
+    } else {
+      sdkMetadata = new SdkMetadata("JavaClient", Version.SDK_VERSION, config.wrapperInfo.getWrapperName(), config.wrapperInfo.getWrapperVersion());
+    }
+    EnvironmentMetadata environmentMetadata = new EnvironmentMetadata(config.applicationInfo, sdkMetadata, sdkKey);
+
+    // add plugin hooks
+    List<Hook> allHooks = new ArrayList<>(config.hooks.getHooks());
+    for (Plugin plugin : config.plugins.getPlugins()) {
+      try {
+        allHooks.addAll(plugin.getHooks(environmentMetadata));
+      } catch (Exception e) {
+        baseLogger.error("Exception thrown getting hooks for plugin " + plugin.getMetadata().getName() + ". Unable to get hooks, plugin will not be registered.");
+      }
+    }
+    allHooks = Collections.unmodifiableList(allHooks);
+
+    // The hook runner delivers data source and event delivery handler invocations. The components
+    // that produce them get it through the client context.
+    this.hookRunner = allHooks.isEmpty() ? null
+        : new HookRunner(allHooks, this.baseLogger.subLogger(Loggers.HOOKS_LOGGER_NAME));
+    final ClientContextImpl context = baseContext.withHookRunner(this.hookRunner);
 
     this.eventProcessor = config.events.build(context);
 
@@ -210,26 +237,6 @@ public final class LDClient implements LDClientInterface {
     }
 
     EvaluatorInterface evaluator = new InputValidatingEvaluator(this.dataSystem.getStore(), bigSegmentStoreWrapper, eventProcessor, evaluationLogger);
-
-    // build environment metadata for plugins
-    SdkMetadata sdkMetadata;
-    if (config.wrapperInfo == null) {
-      sdkMetadata = new SdkMetadata("JavaClient", Version.SDK_VERSION);
-    } else {
-      sdkMetadata = new SdkMetadata("JavaClient", Version.SDK_VERSION, config.wrapperInfo.getWrapperName(), config.wrapperInfo.getWrapperVersion());
-    }
-    EnvironmentMetadata environmentMetadata = new EnvironmentMetadata(config.applicationInfo, sdkMetadata, sdkKey);
-
-    // add plugin hooks
-    List<Hook> allHooks = new ArrayList<>(config.hooks.getHooks());
-    for (Plugin plugin : config.plugins.getPlugins()) {
-      try {
-        allHooks.addAll(plugin.getHooks(environmentMetadata));
-      } catch (Exception e) {
-        baseLogger.error("Exception thrown getting hooks for plugin " + plugin.getMetadata().getName() + ". Unable to get hooks, plugin will not be registered.");
-      }
-    }
-    allHooks = Collections.unmodifiableList(allHooks);
 
     // decorate evaluator with hooks if hooks were provided
     if (allHooks.isEmpty()) {
@@ -495,6 +502,11 @@ public final class LDClient implements LDClientInterface {
     this.eventProcessor.close();
     if (this.bigSegmentStoreWrapper != null) {
       this.bigSegmentStoreWrapper.close();
+    }
+    // Hooks close last. The data system and the event processor deliver their final handler
+    // invocations while they close.
+    if (this.hookRunner != null) {
+      this.hookRunner.close();
     }
     this.sharedExecutor.shutdownNow();
   }

@@ -30,6 +30,20 @@ import java.time.Duration;
  */
 public abstract class FDv2PollingSynchronizerBuilder implements DataSourceBuilder<Synchronizer>, DiagnosticDescription {
   /**
+   * Sets the name of this component. The name identifies the component in log messages and in the
+   * data the SDK reports to hooks. An empty name keeps the default name, which is {@code "polling"}.
+   *
+   * @param name the component name
+   * @return the builder
+   * @since 7.18.0
+   */
+  public FDv2PollingSynchronizerBuilder name(String name) {
+    this.name = name;
+    return this;
+  }
+
+  protected String name;
+  /**
    * The default value for {@link #pollInterval(Duration)}: 30 seconds.
    */
   public static final Duration DEFAULT_POLL_INTERVAL = Duration.ofSeconds(30);

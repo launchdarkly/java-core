@@ -23,6 +23,7 @@ import com.launchdarkly.sdk.internal.http.HttpProperties;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.SelectorSource;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
+import com.launchdarkly.sdk.server.interfaces.DataSourceDescriptor;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.fdv2.ChangeSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes;
@@ -51,6 +52,8 @@ import static com.launchdarkly.sdk.internal.http.HttpErrors.checkIfErrorIsRecove
  * Maintains a long-running streaming connection and queues results as they arrive.
  */
 class StreamingSynchronizerImpl implements Synchronizer {
+    static final String DEFAULT_NAME = "streaming";
+    private final String name;
     private static final Duration DEAD_CONNECTION_INTERVAL = Duration.ofSeconds(300);
 
     private final HttpProperties httpProperties;
@@ -83,6 +86,23 @@ class StreamingSynchronizerImpl implements Synchronizer {
             int threadPriority,
             DiagnosticStore diagnosticStore
     ) {
+        this(httpProperties, baseUri, requestPath, logger, selectorSource, payloadFilter,
+                initialReconnectDelaySeconds, threadPriority, diagnosticStore, null);
+    }
+
+    public StreamingSynchronizerImpl(
+            HttpProperties httpProperties,
+            URI baseUri,
+            String requestPath,
+            LDLogger logger,
+            SelectorSource selectorSource,
+            String payloadFilter,
+            Duration initialReconnectDelaySeconds,
+            int threadPriority,
+            DiagnosticStore diagnosticStore,
+            String name
+    ) {
+        this.name = name == null || name.isEmpty() ? DEFAULT_NAME : name;
         this.httpProperties = httpProperties;
         this.selectorSource = selectorSource;
         this.logger = logger.subLogger(Loggers.STREAMING_SYNCHRONIZER);
@@ -97,7 +117,12 @@ class StreamingSynchronizerImpl implements Synchronizer {
 
     @Override
     public String name() {
-        return "StreamingSynchronizer(V2)";
+        return name;
+    }
+
+    @Override
+    public DataSourceDescriptor describe() {
+        return DataSourceDescriptor.of(DataSourceDescriptor.Protocol.FDV2, DataSourceDescriptor.Transport.STREAMING, name);
     }
 
     private void startStream() {

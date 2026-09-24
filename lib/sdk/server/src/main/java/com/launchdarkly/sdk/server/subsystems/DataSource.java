@@ -1,5 +1,7 @@
 package com.launchdarkly.sdk.server.subsystems;
 
+import com.launchdarkly.sdk.server.interfaces.DataSourceDescriptor;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.concurrent.Future;
@@ -23,6 +25,16 @@ import java.util.concurrent.Future;
  * @since 5.0.0
  */
 public interface DataSource extends Closeable {
+  /**
+   * Identifies this data source to hooks. The default is an empty descriptor.
+   *
+   * @return the descriptor
+   * @since 7.18.0
+   */
+  default DataSourceDescriptor describe() {
+    return DataSourceDescriptor.empty();
+  }
+
   /**
    * Starts the client.
    * @return {@link Future}'s completion status indicates the client has been initialized.

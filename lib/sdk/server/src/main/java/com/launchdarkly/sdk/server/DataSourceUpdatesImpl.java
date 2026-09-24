@@ -55,6 +55,7 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
   private final DataStore store;
   private final EventBroadcasterImpl<FlagChangeListener, FlagChangeEvent> flagChangeEventNotifier;
   private final EventBroadcasterImpl<StatusListener, Status> dataSourceStatusNotifier;
+  private volatile DataSourceLifecycleListener lifecycleListener;
   private final DataModelDependencies.DependencyTracker dependencyTracker = new DataModelDependencies.DependencyTracker();
   private final DataStoreStatusProvider dataStoreStatusProvider;
   private final OutageTracker outageTracker;
@@ -152,9 +153,11 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
     }
     
     Status statusToBroadcast = null;
+    Status previousStatus = null;
     
     synchronized (stateLock) {
       Status oldStatus = currentStatus;
+      previousStatus = oldStatus;
       
       if (newState == State.INTERRUPTED && oldStatus.getState() == State.INITIALIZING) {
         newState = State.INITIALIZING; // see comment on updateStatus in the DataSourceUpdates interface
@@ -175,7 +178,35 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
     
     if (statusToBroadcast != null) {
       dataSourceStatusNotifier.broadcast(statusToBroadcast);
+      if (lifecycleListener != null) {
+        // Hooks receive the change in order, on the thread that made it, after the status API shows it.
+        lifecycleListener.dataSourceStatusChanged(previousStatus, statusToBroadcast);
+      }
     }
+  }
+
+  /**
+   * Registers the listener that receives each status change. Set before the data source starts.
+   *
+   * @param listener the listener, or null
+   */
+  void setLifecycleListener(DataSourceLifecycleListener listener) {
+    this.lifecycleListener = listener;
+  }
+
+  /**
+   * Reports the current status as the first status, with no previous status. The data system calls
+   * this once when the data source starts, so that hooks have a status before the first change.
+   */
+  void reportInitialStatus() {
+    if (lifecycleListener == null) {
+      return;
+    }
+    Status current;
+    synchronized (stateLock) {
+      current = currentStatus;
+    }
+    lifecycleListener.dataSourceStatusChanged(null, current);
   }
 
   // package-private - called from DataSourceStatusProviderImpl

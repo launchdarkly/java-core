@@ -5,6 +5,7 @@ import com.launchdarkly.sdk.fdv2.SourceResultType;
 import com.launchdarkly.sdk.fdv2.SourceSignal;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Initializer;
+import com.launchdarkly.sdk.server.interfaces.DataSourceDescriptor;
 import com.launchdarkly.sdk.server.integrations.FileDataSourceBuilder.SourceInfo;
 
 import java.io.IOException;
@@ -35,7 +36,12 @@ final class FileInitializer implements Initializer {
 
     @Override
     public String name() {
-        return "FileInitializer(V2)";
+        return "file";
+    }
+
+    @Override
+    public DataSourceDescriptor describe() {
+        return DataSourceDescriptor.of(null, DataSourceDescriptor.Transport.FILE, name());
     }
 
     @Override

@@ -253,7 +253,8 @@ abstract class ComponentsImpl {
           false,
           privateAttributes,
           false, // perContextSummarization: server-side SDKs summarize across contexts
-          true); // redactAnonymousAllEvents: server-side SDKs inline & redact custom/migration-op contexts
+          true, // redactAnonymousAllEvents: server-side SDKs inline & redact custom/migration-op contexts
+          ClientContextImpl.get(context).hookRunner); // reports each delivery attempt to the hooks
       return new DefaultEventProcessorWrapper(context, eventsConfig);
     }
     

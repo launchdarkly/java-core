@@ -1,5 +1,7 @@
 package com.launchdarkly.sdk.server.datasources;
 
+import com.launchdarkly.sdk.server.interfaces.DataSourceDescriptor;
+
 import java.io.Closeable;
 import java.util.concurrent.CompletableFuture;
 
@@ -47,6 +49,15 @@ import java.util.concurrent.CompletableFuture;
  *     └────────────────────────────────────────────┘
  */
 public interface Synchronizer extends Closeable {
+    /**
+     * Identifies this synchronizer to hooks. The default identifies it by {@link #name()} only.
+     *
+     * @return the descriptor
+     */
+    default DataSourceDescriptor describe() {
+        return DataSourceDescriptor.named(name());
+    }
+
     /**
      * Get the next result from the stream.
      * <p>

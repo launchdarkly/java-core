@@ -51,7 +51,8 @@ public final class DataSystemComponents {
       return new PollingInitializerImpl(
               requestor,
               context.getBaseLogger(),
-              context.getSelectorSource()
+              context.getSelectorSource(),
+              name
       );
     }
   }
@@ -81,7 +82,8 @@ public final class DataSystemComponents {
               context.getBaseLogger(),
               context.getSelectorSource(),
               context.getSharedExecutor(),
-              pollInterval
+              pollInterval,
+              name
       );
     }
   }
@@ -108,7 +110,8 @@ public final class DataSystemComponents {
               payloadFilter,
               initialReconnectDelay,
               context.getThreadPriority(),
-              context.getDiagnosticStore()
+              context.getDiagnosticStore(),
+              name
       );
     }
   }

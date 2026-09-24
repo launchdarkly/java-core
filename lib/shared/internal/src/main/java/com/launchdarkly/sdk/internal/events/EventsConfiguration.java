@@ -32,6 +32,7 @@ public final class EventsConfiguration {
   final List<AttributeRef> privateAttributes;
   final boolean perContextSummarization;
   final boolean redactAnonymousAllEvents;
+  final EventFlushListener flushListener;
 
   /**
    * Creates an instance.
@@ -147,6 +148,48 @@ public final class EventsConfiguration {
       boolean perContextSummarization,
       boolean redactAnonymousAllEvents
       ) {
+    this(allAttributesPrivate, capacity, contextDeduplicator, diagnosticRecordingIntervalMillis,
+        diagnosticStore, eventSender, eventSendingThreadPoolSize, eventsUri, flushIntervalMillis,
+        initiallyInBackground, initiallyOffline, privateAttributes, perContextSummarization,
+        redactAnonymousAllEvents, null);
+  }
+
+  /**
+   * Creates an instance.
+   *
+   * @param allAttributesPrivate true if all attributes are private
+   * @param capacity the event buffer capacity
+   * @param contextDeduplicator the context deduplicator, or null
+   * @param diagnosticRecordingIntervalMillis the diagnostic recording interval
+   * @param diagnosticStore the diagnostic store, or null
+   * @param eventSender the event sender
+   * @param eventSendingThreadPoolSize the number of event sending threads
+   * @param eventsUri the events base URI
+   * @param flushIntervalMillis the flush interval
+   * @param initiallyInBackground true if the SDK starts in the background
+   * @param initiallyOffline true if the SDK starts offline
+   * @param privateAttributes the private attributes
+   * @param perContextSummarization true to summarize per context
+   * @param redactAnonymousAllEvents true to redact anonymous contexts in all events
+   * @param flushListener receives the outcome of each delivery attempt, or null
+   */
+  public EventsConfiguration(
+      boolean allAttributesPrivate,
+      int capacity,
+      EventContextDeduplicator contextDeduplicator,
+      long diagnosticRecordingIntervalMillis,
+      DiagnosticStore diagnosticStore,
+      EventSender eventSender,
+      int eventSendingThreadPoolSize,
+      URI eventsUri,
+      long flushIntervalMillis,
+      boolean initiallyInBackground,
+      boolean initiallyOffline,
+      Collection<AttributeRef> privateAttributes,
+      boolean perContextSummarization,
+      boolean redactAnonymousAllEvents,
+      EventFlushListener flushListener
+      ) {
     super();
     this.allAttributesPrivate = allAttributesPrivate;
     this.capacity = capacity >= 0 ? capacity : 1;
@@ -163,5 +206,6 @@ public final class EventsConfiguration {
     this.privateAttributes = privateAttributes == null ? Collections.emptyList() : new ArrayList<>(privateAttributes);
     this.perContextSummarization = perContextSummarization;
     this.redactAnonymousAllEvents = redactAnonymousAllEvents;
+    this.flushListener = flushListener;
   }
 }

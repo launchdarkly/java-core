@@ -91,4 +91,51 @@ public abstract class Hook {
     // default implementation is no-op
     return seriesData;
   }
+
+  /**
+   * Handler invoked when the data source status changes, or when the data source reports a new
+   * error while its state stays the same. The SDK also invokes it once with the initial status,
+   * with a null previous status, when the data source starts.
+   * <p>
+   * Invocations arrive in the order in which the changes occurred, one at a time.
+   *
+   * @param statusContext the previous and current status
+   */
+  public void dataSourceStatusChanged(DataSourceStatusContext statusContext) {
+  }
+
+  /**
+   * Handler invoked once after each attempt to deliver a batch of analytics events, with the final
+   * outcome of the attempt. Two attempts can run at the same time, so two invocations can overlap.
+   *
+   * @param flushContext the outcome of the attempt
+   */
+  public void eventFlushCompleted(EventFlushContext flushContext) {
+  }
+
+  /**
+   * Handler invoked after each attempt to obtain data from an initializer, for every outcome.
+   *
+   * @param initializerContext the initializer and how its attempt ended
+   */
+  public void initializerCompleted(InitializerContext initializerContext) {
+  }
+
+  /**
+   * Handler invoked when a synchronizer starts, before it reports its first status, and when the
+   * data system has no synchronizer left to start.
+   *
+   * @param changeContext the synchronizers involved and the reason for the change
+   */
+  public void synchronizerChanged(SynchronizerChangeContext changeContext) {
+  }
+
+  /**
+   * Handler invoked exactly once, when the data system first has data or determines that it cannot
+   * obtain data.
+   *
+   * @param initializationContext the outcome of initialization
+   */
+  public void initializationCompleted(InitializationContext initializationContext) {
+  }
 }

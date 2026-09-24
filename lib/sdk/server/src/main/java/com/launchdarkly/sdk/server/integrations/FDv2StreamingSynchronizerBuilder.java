@@ -29,6 +29,20 @@ import java.time.Duration;
  */
 public abstract class FDv2StreamingSynchronizerBuilder implements DataSourceBuilder<Synchronizer>, DiagnosticDescription {
   /**
+   * Sets the name of this component. The name identifies the component in log messages and in the
+   * data the SDK reports to hooks. An empty name keeps the default name, which is {@code "streaming"}.
+   *
+   * @param name the component name
+   * @return the builder
+   * @since 7.18.0
+   */
+  public FDv2StreamingSynchronizerBuilder name(String name) {
+    this.name = name;
+    return this;
+  }
+
+  protected String name;
+  /**
    * The default value for {@link #initialReconnectDelay(Duration)}: 1000 milliseconds.
    */
   public static final Duration DEFAULT_INITIAL_RECONNECT_DELAY = Duration.ofSeconds(1);

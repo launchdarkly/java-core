@@ -7,10 +7,15 @@ import com.launchdarkly.sdk.fdv2.SourceSignal;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
+import com.launchdarkly.sdk.server.integrations.InitializationContext;
+import com.launchdarkly.sdk.server.integrations.InitializerContext;
+import com.launchdarkly.sdk.server.integrations.SynchronizerChangeContext;
+import com.launchdarkly.sdk.server.interfaces.DataSourceDescriptor;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSinkV2;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -51,6 +56,16 @@ class FDv2DataSource implements DataSource {
     private final LDLogger logger;
 
     private volatile boolean closed = false;
+    // Reports lifecycle events to the hooks. Never null; a no-op stands in when no hooks are configured.
+    private final DataSourceLifecycleListener lifecycleListener;
+    private volatile long startTimeMillis;
+    // The component that most recently ran. Reported with the end of initialization when no
+    // component provided data.
+    private volatile DataSourceDescriptor lastSource = DataSourceDescriptor.empty();
+    // The synchronizer that reports statuses now, and why the next one starts.
+    private DataSourceDescriptor activeSynchronizer = DataSourceDescriptor.empty();
+    private SynchronizerChangeContext.Reason nextSynchronizerReason = SynchronizerChangeContext.Reason.INITIAL;
+    private volatile DataSourceStatusProvider.ErrorInfo lastErrorInfo;
 
     /**
      * Avoid duplicate orchestration logs for the same synchronizer and {@link SourceSignal}.
@@ -79,8 +94,30 @@ class FDv2DataSource implements DataSource {
             threadPriority,
             logger,
             sharedExecutor,
+            null
+        );
+    }
+
+    public FDv2DataSource(
+        ImmutableList<DataSourceFactory<Initializer>> initializers,
+        ImmutableList<DataSourceFactory<Synchronizer>> synchronizers,
+        DataSourceFactory<Synchronizer> fdv1DataSourceFactory,
+        DataSourceUpdateSinkV2 dataSourceUpdates,
+        int threadPriority,
+        LDLogger logger,
+        ScheduledExecutorService sharedExecutor,
+        DataSourceLifecycleListener lifecycleListener
+    ) {
+        this(initializers,
+            synchronizers,
+            fdv1DataSourceFactory,
+            dataSourceUpdates,
+            threadPriority,
+            logger,
+            sharedExecutor,
             defaultFallbackTimeoutSeconds,
-            defaultRecoveryTimeout
+            defaultRecoveryTimeout,
+            lifecycleListener
         );
     }
 
@@ -95,6 +132,23 @@ class FDv2DataSource implements DataSource {
         long fallbackTimeout,
         long recoveryTimeout
     ) {
+        this(initializers, synchronizers, fdv1DataSourceFactory, dataSourceUpdates, threadPriority, logger,
+            sharedExecutor, fallbackTimeout, recoveryTimeout, null);
+    }
+
+    public FDv2DataSource(
+        ImmutableList<DataSourceFactory<Initializer>> initializers,
+        ImmutableList<DataSourceFactory<Synchronizer>> synchronizers,
+        DataSourceFactory<Synchronizer> fdv1DataSourceFactory,
+        DataSourceUpdateSinkV2 dataSourceUpdates,
+        int threadPriority,
+        LDLogger logger,
+        ScheduledExecutorService sharedExecutor,
+        long fallbackTimeout,
+        long recoveryTimeout,
+        DataSourceLifecycleListener lifecycleListener
+    ) {
+        this.lifecycleListener = lifecycleListener != null ? lifecycleListener : NO_LIFECYCLE_LISTENER;
         List<SynchronizerFactoryWithState> synchronizerFactories = synchronizers
             .stream()
             .map(SynchronizerFactoryWithState::new)
@@ -123,6 +177,7 @@ class FDv2DataSource implements DataSource {
     }
 
     private void run() {
+        startTimeMillis = System.currentTimeMillis();
         Thread runThread = new Thread(() -> {
             if (!sourceManager.hasAvailableSources()) {
                 // There are not any initializer or synchronizers, so we are at the best state that
@@ -130,8 +185,8 @@ class FDv2DataSource implements DataSource {
                 logger.warn(
                     "LaunchDarkly client will not connect to LaunchDarkly for feature flag data due to no initializers or synchronizers configured."
                 );
-                dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
-                startFuture.complete(true);
+                updateStatus(DataSourceStatusProvider.State.VALID, null);
+                completeInitialization(true);
                 return;
             }
 
@@ -149,12 +204,13 @@ class FDv2DataSource implements DataSource {
                 sourceManager.fdv1Fallback();
                 if (sourceManager.hasFDv1Fallback()) {
                     logger.warn("Initializer requested fallback to FDv1; switching to FDv1 fallback synchronizer.");
+                    nextSynchronizerReason = SynchronizerChangeContext.Reason.FDV1_FALLBACK;
                 } else {
                     logger.warn("Initializer requested fallback to FDv1, but no FDv1 fallback synchronizer is configured.");
-                    dataSourceUpdates.updateStatus(
+                    updateStatus(
                         DataSourceStatusProvider.State.OFF,
                         initializerOutcome.errorInfo);
-                    startFuture.complete(false);
+                    completeInitialization(false);
                     return;
                 }
             }
@@ -167,7 +223,7 @@ class FDv2DataSource implements DataSource {
                     maybeReportUnexpectedExhaustion("All initializers exhausted and there are no available synchronizers.");
                 }
                 // If already completed has no effect.
-                startFuture.complete(false);
+                completeInitialization(false);
                 return;
             }
 
@@ -180,7 +236,7 @@ class FDv2DataSource implements DataSource {
             }
 
             // If we had initialized at some point, then the future will already be complete and this will be ignored.
-            startFuture.complete(false);
+            completeInitialization(false);
         });
         runThread.setName("LaunchDarkly-SDK-Server-FDv2DataSource");
         runThread.setDaemon(true);
@@ -204,12 +260,22 @@ class FDv2DataSource implements DataSource {
         Initializer initializer = sourceManager.getNextInitializerAndSetActive();
         while (initializer != null) {
             String initializerName = initializer.name();
+            DataSourceDescriptor source = initializer.describe();
+            lastSource = source;
             logger.info("Initializer '{}' is starting.", initializerName);
+            long attemptStart = System.currentTimeMillis();
             try {
                 try (FDv2SourceResult result = initializer.run().get()) {
                     DataSourceStatusProvider.ErrorInfo fallbackErrorInfo = null;
                     switch (result.getResultType()) {
                         case CHANGE_SET:
+                            // Hooks learn which initializer provided the data before the status that the
+                            // data produces. Applying a basis can itself report the VALID status.
+                            reportInitializer(source, result.isFdv1Fallback() ? InitializerContext.Outcome.FALLBACK
+                                : result.getChangeSet().getSelector().isEmpty()
+                                    ? InitializerContext.Outcome.SUCCEEDED_WITHOUT_SELECTOR
+                                    : InitializerContext.Outcome.SUCCEEDED,
+                                null, attemptStart, true);
                             dataSourceUpdates.apply(result.getChangeSet());
                             anyDataReceived = true;
                             logger.info("Initialized via '{}'.", initializerName);
@@ -220,8 +286,8 @@ class FDv2DataSource implements DataSource {
                                 // also enough to consider initialization complete (see the post-loop
                                 // block below); but mid-chain we don't yet flip to VALID, so a later
                                 // initializer can still produce a selectorful basis if one is available.
-                                dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
-                                startFuture.complete(true);
+                                updateStatus(DataSourceStatusProvider.State.VALID, null);
+                                completeInitialization(true);
                                 if (result.isFdv1Fallback()) {
                                     return InitializerOutcome.fallbackToFDv1(null);
                                 }
@@ -237,9 +303,11 @@ class FDv2DataSource implements DataSource {
                                         initializerName,
                                         detailForError(status.getErrorInfo()));
                                     fallbackErrorInfo = status.getErrorInfo();
+                                    reportInitializer(source, result.isFdv1Fallback() ? InitializerContext.Outcome.FALLBACK
+                                        : InitializerContext.Outcome.FAILED, status.getErrorInfo(), attemptStart, false);
                                     // The data source updates handler will filter the state during initializing, but this
                                     // will make the error information available.
-                                    dataSourceUpdates.updateStatus(
+                                    updateStatus(
                                         // While the error was terminal to the individual initializer, it isn't terminal
                                         // to the data source as a whole.
                                         DataSourceStatusProvider.State.INTERRUPTED,
@@ -249,6 +317,9 @@ class FDv2DataSource implements DataSource {
                                 case GOODBYE:
                                     // We don't need to inform anyone of these statuses.
                                     logger.debug("Ignoring status {} from initializer", result.getStatus().getState());
+                                    reportInitializer(source, status.getState() == SourceSignal.SHUTDOWN
+                                        ? InitializerContext.Outcome.CANCELLED : InitializerContext.Outcome.NO_DATA,
+                                        null, attemptStart, false);
                                     break;
                             }
                             break;
@@ -263,14 +334,14 @@ class FDv2DataSource implements DataSource {
                     }
                 }
             } catch (ExecutionException | InterruptedException | CancellationException e) {
+                DataSourceStatusProvider.ErrorInfo errorInfo = new DataSourceStatusProvider.ErrorInfo(
+                    DataSourceStatusProvider.ErrorKind.UNKNOWN, 0, e.toString(), new Date().toInstant());
+                reportInitializer(source, closed || e instanceof CancellationException
+                    ? InitializerContext.Outcome.CANCELLED : InitializerContext.Outcome.FAILED,
+                    errorInfo, attemptStart, false);
                 // The data source updates handler will filter the state during initializing, but this
                 // will make the error information available.
-                dataSourceUpdates.updateStatus(
-                    DataSourceStatusProvider.State.INTERRUPTED,
-                    new DataSourceStatusProvider.ErrorInfo(DataSourceStatusProvider.ErrorKind.UNKNOWN,
-                        0,
-                        e.toString(),
-                        new Date().toInstant()));
+                updateStatus(DataSourceStatusProvider.State.INTERRUPTED, errorInfo);
                 Throwable root = e instanceof ExecutionException && e.getCause() != null ? e.getCause() : e;
                 logger.error("Error running initializer '{}': {}",
                     initializerName,
@@ -285,8 +356,8 @@ class FDv2DataSource implements DataSource {
         // there. Without this, an SDK configured with only selectorless initializers and no
         // synchronizer would never transition out of INITIALIZING.
         if (anyDataReceived) {
-            dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
-            startFuture.complete(true);
+            updateStatus(DataSourceStatusProvider.State.VALID, null);
+            completeInitialization(true);
         }
         return InitializerOutcome.completed();
     }
@@ -350,7 +421,7 @@ class FDv2DataSource implements DataSource {
     private boolean runSynchronizers() {
         // When runSynchronizers exists, no matter how it exits, the synchronizerStateManager will be closed.
         try {
-            Synchronizer synchronizer = sourceManager.getNextAvailableSynchronizerAndSetActive();
+            Synchronizer synchronizer = activateNextSynchronizer();
 
             // We want to continue running synchronizers for as long as any are available.
             while (synchronizer != null) {
@@ -376,6 +447,7 @@ class FDv2DataSource implements DataSource {
                                             "Fallback condition met, falling back from synchronizer '{}'.",
                                             synchronizer.name()
                                         );
+                                        nextSynchronizerReason = SynchronizerChangeContext.Reason.FALLBACK;
                                         break;
                                     case RECOVERY:
                                         // For recovery, we will start at the first available synchronizer.
@@ -385,6 +457,7 @@ class FDv2DataSource implements DataSource {
                                             "Recovery condition met, moving from synchronizer '{}' to primary synchronizer.",
                                             synchronizer.name()
                                         );
+                                        nextSynchronizerReason = SynchronizerChangeContext.Reason.RECOVER;
                                         break;
                                 }
                                 // A running synchronizer will only have fallback and recovery conditions that it can act on.
@@ -406,10 +479,10 @@ class FDv2DataSource implements DataSource {
                                         // A data update breaks the "in a row" streak for status deduplication.
                                         resetSynchronizerStatusDedupe();
                                         dataSourceUpdates.apply(result.getChangeSet());
-                                        dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
+                                        updateStatus(DataSourceStatusProvider.State.VALID, null);
                                         // This could have been completed by any data source. But if it has not been completed before
                                         // now, then we complete it.
-                                        startFuture.complete(true);
+                                        completeInitialization(true);
                                         break;
                                     case STATUS:
                                         FDv2SourceResult.Status status = result.getStatus();
@@ -420,7 +493,7 @@ class FDv2DataSource implements DataSource {
                                                     status.getState()
                                                 );
                                                 // Handled by conditions.
-                                                dataSourceUpdates.updateStatus(
+                                                updateStatus(
                                                     DataSourceStatusProvider.State.INTERRUPTED,
                                                     status.getErrorInfo());
                                                 break;
@@ -443,7 +516,8 @@ class FDv2DataSource implements DataSource {
                                                     synchronizer.name()
                                                 );
                                                 running = false;
-                                                dataSourceUpdates.updateStatus(
+                                                nextSynchronizerReason = SynchronizerChangeContext.Reason.REMOVED;
+                                                updateStatus(
                                                     DataSourceStatusProvider.State.INTERRUPTED,
                                                     status.getErrorInfo());
                                                 break;
@@ -465,6 +539,7 @@ class FDv2DataSource implements DataSource {
                                     if (sourceManager.hasFDv1Fallback()) {
                                         logger.info("Falling back to an FDv1 fallback synchronizer.");
                                         running = false;
+                                        nextSynchronizerReason = SynchronizerChangeContext.Reason.FDV1_FALLBACK;
                                     } else {
                                         // When the directive is signalled but no FDv1 fallback synchronizer
                                         // is configured, halt the data system entirely. Surface OFF with
@@ -476,10 +551,10 @@ class FDv2DataSource implements DataSource {
                                         );
                                         DataSourceStatusProvider.ErrorInfo offError =
                                             result.getStatus() != null ? result.getStatus().getErrorInfo() : null;
-                                        dataSourceUpdates.updateStatus(
+                                        updateStatus(
                                             DataSourceStatusProvider.State.OFF,
                                             offError);
-                                        startFuture.complete(false);
+                                        completeInitialization(false);
                                         return true;
                                     }
                                 }
@@ -487,7 +562,7 @@ class FDv2DataSource implements DataSource {
                         }
                     }
                 } catch (ExecutionException | InterruptedException | CancellationException e) {
-                    dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.INTERRUPTED,
+                    updateStatus(DataSourceStatusProvider.State.INTERRUPTED,
                         new DataSourceStatusProvider.ErrorInfo(
                             DataSourceStatusProvider.ErrorKind.UNKNOWN,
                             0,
@@ -499,9 +574,10 @@ class FDv2DataSource implements DataSource {
                         synchronizer.name(),
                         root.getMessage() != null ? root.getMessage() : LogValues.exceptionSummary(root));
                     // Move to the next synchronizer.
+                    nextSynchronizerReason = SynchronizerChangeContext.Reason.FALLBACK;
                 }
                 // Get the next available synchronizer and set it active
-                synchronizer = sourceManager.getNextAvailableSynchronizerAndSetActive();
+                synchronizer = activateNextSynchronizer();
             }
             if (!closed) {
                 logger.warn("No more synchronizers available.");
@@ -570,15 +646,79 @@ class FDv2DataSource implements DataSource {
         // it detects shutdown, it will exit the loop.
         sourceManager.close();
 
-        dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.OFF, null);
+        updateStatus(DataSourceStatusProvider.State.OFF, null);
 
         // If this is already set, then this has no impact.
-        startFuture.complete(false);
+        completeInitialization(false);
     }
+
+    private void updateStatus(DataSourceStatusProvider.State state, DataSourceStatusProvider.ErrorInfo errorInfo) {
+        if (errorInfo != null) {
+            lastErrorInfo = errorInfo;
+        }
+        dataSourceUpdates.updateStatus(state, errorInfo);
+    }
+
+    /**
+     * Completes the start future and, on the first completion only, reports the end of initialization
+     * to the hooks with the component that most recently ran.
+     */
+    private void completeInitialization(boolean succeeded) {
+        if (startFuture.complete(succeeded)) {
+            lifecycleListener.initializationCompleted(new InitializationContext(lastSource,
+                Duration.ofMillis(System.currentTimeMillis() - startTimeMillis), succeeded));
+        }
+    }
+
+    private void reportInitializer(DataSourceDescriptor source, InitializerContext.Outcome outcome,
+        DataSourceStatusProvider.ErrorInfo errorInfo, long attemptStart, boolean applied) {
+        lifecycleListener.initializerCompleted(new InitializerContext(source, outcome, errorInfo,
+            Duration.ofMillis(System.currentTimeMillis() - attemptStart), applied));
+    }
+
+    /**
+     * Gets the next available synchronizer, makes it active, and reports the change to the hooks before
+     * the synchronizer reports its first status. When none is left, and the data source is not closing,
+     * the exhaustion is reported with an empty current synchronizer.
+     */
+    private Synchronizer activateNextSynchronizer() {
+        Synchronizer synchronizer = sourceManager.getNextAvailableSynchronizerAndSetActive();
+        DataSourceDescriptor previous = activeSynchronizer;
+        if (synchronizer != null) {
+            DataSourceDescriptor current = synchronizer.describe();
+            activeSynchronizer = current;
+            lastSource = current;
+            lifecycleListener.synchronizerChanged(
+                new SynchronizerChangeContext(previous, current, nextSynchronizerReason, lastErrorInfo));
+        } else if (!closed) {
+            activeSynchronizer = DataSourceDescriptor.empty();
+            lifecycleListener.synchronizerChanged(new SynchronizerChangeContext(previous,
+                DataSourceDescriptor.empty(), SynchronizerChangeContext.Reason.EXHAUSTED, lastErrorInfo));
+        }
+        return synchronizer;
+    }
+
+    private static final DataSourceLifecycleListener NO_LIFECYCLE_LISTENER = new DataSourceLifecycleListener() {
+        @Override
+        public void dataSourceStatusChanged(DataSourceStatusProvider.Status previous, DataSourceStatusProvider.Status current) {
+        }
+
+        @Override
+        public void initializerCompleted(InitializerContext initializerContext) {
+        }
+
+        @Override
+        public void synchronizerChanged(SynchronizerChangeContext changeContext) {
+        }
+
+        @Override
+        public void initializationCompleted(InitializationContext initializationContext) {
+        }
+    };
 
     private void maybeReportUnexpectedExhaustion(String message) {
         if(!closed) {
-            dataSourceUpdates.updateStatus(
+            updateStatus(
                 DataSourceStatusProvider.State.OFF,
                 // If the data source was closed, then we just report we are OFF without an
                 // associated error.

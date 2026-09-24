@@ -34,6 +34,7 @@ final class FDv2DataSystem implements DataSystem, Closeable {
   private final FlagChangeNotifier flagChanged;
   private final DataSourceStatusProvider dataSourceStatusProvider;
   private final DataStoreStatusProvider dataStoreStatusProvider;
+  private final DataSourceUpdatesImpl dataSourceUpdates;
   private boolean disposed = false;
 
   private FDv2DataSystem(
@@ -41,8 +42,10 @@ final class FDv2DataSystem implements DataSystem, Closeable {
     DataSource dataSource,
     DataSourceStatusProvider dataSourceStatusProvider,
     DataStoreStatusProvider dataStoreStatusProvider,
-    FlagChangeNotifier flagChanged
+    FlagChangeNotifier flagChanged,
+    DataSourceUpdatesImpl dataSourceUpdates
   ) {
+    this.dataSourceUpdates = dataSourceUpdates;
     this.store = store;
     this.dataSource = dataSource;
     this.dataStoreStatusProvider = dataStoreStatusProvider;
@@ -177,9 +180,11 @@ final class FDv2DataSystem implements DataSystem, Closeable {
         dataSourceUpdates,
         config.threadPriority,
         clientContext.getBaseLogger().subLogger(Loggers.DATA_SOURCE_LOGGER_NAME),
-        clientContext.sharedExecutor
+        clientContext.sharedExecutor,
+        clientContext.hookRunner
       );
     }
+    dataSourceUpdates.setLifecycleListener(clientContext.hookRunner);
 
     DataSourceStatusProvider dataSourceStatusProvider = new DataSourceStatusProviderImpl(
       dataSourceStatusBroadcaster,
@@ -192,7 +197,8 @@ final class FDv2DataSystem implements DataSystem, Closeable {
       dataSource,
       dataSourceStatusProvider,
       dataStoreStatusProvider,
-      flagChanged
+      flagChanged,
+      dataSourceUpdates
     );
   }
 
@@ -203,6 +209,9 @@ final class FDv2DataSystem implements DataSystem, Closeable {
 
   @Override
   public Future<Void> start() {
+    // The first status invocation carries the initial status, so that a hook has a status before
+    // the first change.
+    dataSourceUpdates.reportInitialStatus();
     return dataSource.start();
   }
 

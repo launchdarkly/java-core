@@ -26,6 +26,20 @@ import com.launchdarkly.sdk.server.subsystems.DiagnosticDescription;
  * </code></pre>
  */
 public abstract class FDv2PollingInitializerBuilder implements DataSourceBuilder<Initializer>, DiagnosticDescription {
+  /**
+   * Sets the name of this component. The name identifies the component in log messages and in the
+   * data the SDK reports to hooks. An empty name keeps the default name, which is {@code "polling"}.
+   *
+   * @param name the component name
+   * @return the builder
+   * @since 7.18.0
+   */
+  public FDv2PollingInitializerBuilder name(String name) {
+    this.name = name;
+    return this;
+  }
+
+  protected String name;
   protected ServiceEndpoints serviceEndpointsOverride;
 
   protected String payloadFilter;

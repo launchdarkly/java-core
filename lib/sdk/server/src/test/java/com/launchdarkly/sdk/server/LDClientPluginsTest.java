@@ -125,9 +125,25 @@ public class LDClientPluginsTest extends BaseTest {
     }
   }
 
+  // The client reports data source and event delivery handler invocations to every hook. These
+  // tests are about registration, so the mocks accept them in any number.
+  private static void allowHandlerCalls(Hook mockHook) {
+    mockHook.dataSourceStatusChanged(anyObject());
+    expectLastCall().anyTimes();
+    mockHook.synchronizerChanged(anyObject());
+    expectLastCall().anyTimes();
+    mockHook.initializerCompleted(anyObject());
+    expectLastCall().anyTimes();
+    mockHook.initializationCompleted(anyObject());
+    expectLastCall().anyTimes();
+    mockHook.eventFlushCompleted(anyObject());
+    expectLastCall().anyTimes();
+  }
+
   @Test
   public void pluginHooksAreRegistered() throws Exception {
     Hook mockHook = mock(Hook.class);
+    allowHandlerCalls(mockHook);
     expect(mockHook.beforeEvaluation(anyObject(), anyObject())).andReturn(Collections.emptyMap());
     expect(mockHook.afterEvaluation(anyObject(), anyObject(), anyObject())).andReturn(Collections.emptyMap());
     
@@ -179,10 +195,12 @@ public class LDClientPluginsTest extends BaseTest {
   @Test
   public void pluginHooksAreRegisteredWithExistingHooks() throws Exception {
     Hook mockExistingHook = mock(Hook.class);
+    allowHandlerCalls(mockExistingHook);
     expect(mockExistingHook.beforeEvaluation(anyObject(), anyObject())).andReturn(Collections.emptyMap());
     expect(mockExistingHook.afterEvaluation(anyObject(), anyObject(), anyObject())).andReturn(Collections.emptyMap());
 
     Hook mockPluginHook = mock(Hook.class);
+    allowHandlerCalls(mockPluginHook);
     expect(mockPluginHook.beforeEvaluation(anyObject(), anyObject())).andReturn(Collections.emptyMap());
     expect(mockPluginHook.afterEvaluation(anyObject(), anyObject(), anyObject())).andReturn(Collections.emptyMap());
     

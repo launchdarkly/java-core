@@ -32,6 +32,7 @@ import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.ErrorInfo
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.ErrorKind;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.State;
 import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider;
+import com.launchdarkly.sdk.server.interfaces.DataSourceDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
@@ -263,6 +264,11 @@ final class StreamProcessor implements DataSource {
     if (diagnosticAccumulator != null && esStarted != 0) {
       diagnosticAccumulator.recordStreamInit(esStarted, System.currentTimeMillis() - esStarted, failed);
     }
+  }
+
+  @Override
+  public DataSourceDescriptor describe() {
+    return DataSourceDescriptor.of(DataSourceDescriptor.Protocol.FDV1, DataSourceDescriptor.Transport.STREAMING, "streaming");
   }
 
   @Override
