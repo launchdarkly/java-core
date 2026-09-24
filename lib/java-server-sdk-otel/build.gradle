@@ -17,6 +17,7 @@ plugins {
 repositories {
     // Use Maven Central for resolving dependencies.
     mavenCentral()
+    mavenLocal()
     maven { url "https://oss.sonatype.org/content/groups/public/" }
 }
 
@@ -28,14 +29,19 @@ allprojects {
     targetCompatibility = 1.8
 }
 
+ext.otelVersion = "1.33.0"
+
 dependencies {
     // Use JUnit test framework.
     testImplementation 'junit:junit:4.13.2'
-    // All Otel testing common packages are alpha variants, usage of alpha is intentional here
-    testImplementation 'io.opentelemetry.javaagent:opentelemetry-testing-common:1.33.1-alpha'
+    testImplementation "io.opentelemetry:opentelemetry-sdk:${otelVersion}"
+    testImplementation "io.opentelemetry:opentelemetry-sdk-testing:${otelVersion}"
+    testImplementation "com.launchdarkly:test-helpers:2.1.0"
 
-    implementation "com.launchdarkly:launchdarkly-java-server-sdk:7.4.0"
-    implementation "io.opentelemetry:opentelemetry-api:1.2.0"
+    // Prototype: the SDK version that provides the hook handlers, published to the local Maven repository.
+    implementation "com.launchdarkly:launchdarkly-java-server-sdk:7.17.1-metrics"
+    // The metrics hook needs batch callbacks (1.15) and histogram bucket advice (1.32).
+    implementation "io.opentelemetry:opentelemetry-api:${otelVersion}"
 }
 
 java {
