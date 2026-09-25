@@ -34,6 +34,15 @@ final class DefaultEventProcessorWrapper implements EventProcessor {
                                     LDValue value, EvaluationReason reason, LDValue defaultValue, String prerequisiteOfFlagKey,
                                     boolean requireFullEvent, Long debugEventsUntilDate, boolean excludeFromSummaries,
                                     Long samplingRatio) {
+    recordEvaluationEvent(context, flagKey, flagVersion, variation, value, reason, defaultValue, prerequisiteOfFlagKey,
+        requireFullEvent, debugEventsUntilDate, excludeFromSummaries, samplingRatio, false);
+  }
+
+  @Override
+  public void recordEvaluationEvent(LDContext context, String flagKey, int flagVersion, int variation,
+                                    LDValue value, EvaluationReason reason, LDValue defaultValue, String prerequisiteOfFlagKey,
+                                    boolean requireFullEvent, Long debugEventsUntilDate, boolean excludeFromSummaries,
+                                    Long samplingRatio, boolean overrideAffected) {
     eventProcessor.sendEvent(new Event.FeatureRequest(
         System.currentTimeMillis(),
         flagKey,
@@ -48,7 +57,8 @@ final class DefaultEventProcessorWrapper implements EventProcessor {
         debugEventsUntilDate,
         false,
         samplingRatio != null ? samplingRatio : 1,
-        excludeFromSummaries
+        excludeFromSummaries,
+        overrideAffected
     ));
   }
 

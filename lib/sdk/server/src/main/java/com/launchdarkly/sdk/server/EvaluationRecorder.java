@@ -16,7 +16,8 @@ interface EvaluationRecorder {
   default void recordPrerequisiteEvaluation(DataModel.FeatureFlag flag, DataModel.FeatureFlag prereqOfFlag, LDContext context, EvalResult result) {
     // default is no op
   }
-  default void recordEvaluationError(DataModel.FeatureFlag flag, LDContext context, LDValue defaultValue, EvaluationReason.ErrorKind errorKind) {
+  default void recordEvaluationError(DataModel.FeatureFlag flag, LDContext context, LDValue defaultValue,
+                                     EvaluationReason.ErrorKind errorKind, boolean overrideAffected) {
     // default is no op
   }
   default void recordEvaluationUnknownFlagError(String flagKey, LDContext context, LDValue defaultValue, EvaluationReason.ErrorKind errorKind) {
