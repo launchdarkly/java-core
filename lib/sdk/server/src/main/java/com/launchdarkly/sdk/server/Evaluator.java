@@ -124,6 +124,12 @@ class Evaluator {
     private List<String> prerequisiteStack = null;
     private List<PrerequisiteEvalRecord> prerequisiteEvalRecords =  new ArrayList<>(0); // 0 initial capacity uses a static instance for performance
     private List<String> segmentStack = null;
+    // True if the current evaluation scope has read a definition that carries the override marker.
+    // The scope starts from its own flag's marker. Each segment read can set it. Around a
+    // prerequisite evaluation the value is saved and reset, so the prerequisite's record reflects
+    // only the definitions that its own subtree read, and the parent scope accumulates that result
+    // afterwards. The marking therefore propagates upward only.
+    private boolean overrideAffected = false;
   }
 
   Evaluator(Getters getters, LDLogger logger) {
@@ -146,6 +152,8 @@ class Evaluator {
 
     EvaluatorState state = new EvaluatorState();
     state.originalFlag = flag;
+    // Reading the flag's own definition is the first read of this scope.
+    state.overrideAffected = flag.isOverride();
 
     try {
       EvalResult result = evaluateInternal(flag, context, recorder, state);
@@ -160,10 +168,12 @@ class Evaluator {
         result = result.withPrerequisiteEvalRecords(state.prerequisiteEvalRecords);
       }
 
-      return result;
+      return result.withOverrideAffected(state.overrideAffected);
     } catch (EvaluationException e) {
       logger.error("Could not evaluate flag \"{}\": {}", flag.getKey(), e.getMessage());
-      return EvalResult.error(e.errorKind);
+      // An error result is marked too. A malformed override definition yields the caller's default
+      // value with an error reason, and an override still affected that result.
+      return EvalResult.error(e.errorKind).withOverrideAffected(state.overrideAffected);
     }
   }
 
@@ -246,7 +256,20 @@ class Evaluator {
           logger.error("Could not retrieve prerequisite flag \"{}\" when evaluating \"{}\"", prereq.getKey(), flag.getKey());
           prereqOk = false;
         } else {
-          EvalResult prereqEvalResult = evaluateInternal(prereqFeatureFlag, context, recorder, state);
+          // The prerequisite evaluation is a scope of its own. Its marking starts from its own flag's
+          // marker, so its record reflects only the definitions that its subtree read. This scope
+          // accumulates that result afterwards, whether the nested evaluation returns or throws.
+          boolean parentOverrideAffected = state.overrideAffected;
+          state.overrideAffected = prereqFeatureFlag.isOverride();
+          EvalResult prereqEvalResult;
+          boolean prereqOverrideAffected;
+          try {
+            prereqEvalResult = evaluateInternal(prereqFeatureFlag, context, recorder, state);
+          } finally {
+            prereqOverrideAffected = state.overrideAffected;
+            state.overrideAffected = parentOverrideAffected || prereqOverrideAffected;
+          }
+          prereqEvalResult = prereqEvalResult.withOverrideAffected(prereqOverrideAffected);
           // Note that if the prerequisite flag is off, we don't consider it a match no matter what its
           // off variation was. But we still need to evaluate it in order to generate an event.
           if (!prereqFeatureFlag.isOn() || prereqEvalResult.getVariationIndex() != prereq.getVariation()) {
@@ -461,6 +484,12 @@ class Evaluator {
       }
       Segment segment = getters.getSegment(segmentKey);
       if (segment != null) {
+        // The segment definition is read at this point, so an override segment marks the scope here.
+        // A match is not required. A negated clause turns a non-match into a match, so the definition
+        // shapes the result either way.
+        if (segment.isOverride()) {
+          state.overrideAffected = true;
+        }
         if (segmentMatchesContext(segment, context, state)) {
           return true;
         }
