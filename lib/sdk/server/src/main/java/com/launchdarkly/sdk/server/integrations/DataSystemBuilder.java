@@ -19,6 +19,7 @@ public final class DataSystemBuilder {
   private ComponentConfigurer<DataSource> fDv1FallbackSynchronizer;
   private ComponentConfigurer<DataStore> persistentStore;
   private DataSystemConfiguration.DataStoreMode persistentDataStoreMode;
+  private ComponentConfigurer<OverrideSource> overrideSource;
 
   /**
    * Add one or more initializers to the builder.
@@ -109,12 +110,44 @@ public final class DataSystemBuilder {
   }
 
   /**
+   * Configures an override source. Flag overrides are currently experimental and subject to change.
+   * <p>
+   * The source supplies flag and segment definitions that take precedence over data received from
+   * LaunchDarkly on a per-key basis. Overrides let an operator force one or more flags to a known
+   * state on a running client, whether or not the client can reach LaunchDarkly. Flags not present
+   * in the override data are unaffected.
+   * </p>
+   * <p>
+   * The override source is not a data source. It has no effect on the client's initialization
+   * status or data source status. Configuring it changes nothing until the source supplies an
+   * override. At most one override source can be configured; a later call replaces the earlier one.
+   * </p>
+   * <p>
+   * <b>Example:</b>
+   * </p>
+   * <pre><code>
+   *     LDConfig config = new LDConfig.Builder()
+   *       .dataSystem(Components.dataSystem().defaultMode()
+   *         .overrides(FileOverrides.source().filePaths("/etc/launchdarkly/overrides.json")))
+   *       .build();
+   * </code></pre>
+   *
+   * @param overrideSource the override source configuration, or null for none
+   * @return a reference to the builder
+   * @since 7.18.0
+   */
+  public DataSystemBuilder overrides(ComponentConfigurer<OverrideSource> overrideSource) {
+    this.overrideSource = overrideSource;
+    return this;
+  }
+
+  /**
    * Build the data system configuration.
    * <p>
    * This method is internal and should not be called by application code.
    * This function should remain internal.
    * </p>
-   * 
+   *
    * @return the data system configuration
    */
   public DataSystemConfiguration build() {
@@ -123,7 +156,8 @@ public final class DataSystemBuilder {
         ImmutableList.copyOf(synchronizers),
         fDv1FallbackSynchronizer,
         persistentStore,
-        persistentDataStoreMode);
+        persistentDataStoreMode,
+        overrideSource);
   }
 }
 

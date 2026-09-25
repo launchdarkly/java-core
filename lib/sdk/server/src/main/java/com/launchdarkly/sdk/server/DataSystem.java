@@ -62,6 +62,15 @@ interface DataSystem {
    * @return the environment ID, or null
    */
   String getEnvironmentId();
+
+  /**
+   * Returns the override layer, or null if no override source is configured. The layer holds the
+   * entries that take precedence over LaunchDarkly data; {@link #getStore()} already applies them.
+   * The client consults the layer directly only for the not-initialized short-circuit.
+   *
+   * @return the override layer, or null
+   */
+  OverrideLayer getOverrideLayer();
 }
 
 /**
