@@ -21,6 +21,14 @@ class NoOpEventProcessor implements EventProcessor {
   }
 
   @Override
+  public void recordEvaluationEvent(LDContext context, String flagKey, int flagVersion, int variation, LDValue value,
+                                    EvaluationReason reason, LDValue defaultValue, String prerequisiteOfFlagKey,
+                                    boolean requireFullEvent, Long debugEventsUntilDate, boolean excludeFromSummaries,
+                                    Long samplingRatio, boolean overrideAffected) {
+    // no-op
+  }
+
+  @Override
   public void recordIdentifyEvent(LDContext context) {
     // no-op
   }

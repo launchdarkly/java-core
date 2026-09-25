@@ -145,7 +145,8 @@ class InputValidatingEvaluator implements EvaluatorInterface {
             !value.isNull() &&
             value.getType() != requireType) {
           logger.error("Feature flag \"{}\"; evaluation expected result as {}, but got {}", flagKey, defaultValue.getType(), value.getType());
-          recorder.recordEvaluationError(featureFlag, context, defaultValue, ErrorKind.WRONG_TYPE);
+          recorder.recordEvaluationError(featureFlag, context, defaultValue, ErrorKind.WRONG_TYPE,
+              result.isOverrideAffected());
           // The type mismatch replaces the reason. The evaluation read the same definitions, so the
           // new reason keeps the override-affected marking.
           return new EvalResultAndFlag(
@@ -164,7 +165,8 @@ class InputValidatingEvaluator implements EvaluatorInterface {
       if (featureFlag == null) {
         recorder.recordEvaluationUnknownFlagError(flagKey, context, defaultValue, ErrorKind.EXCEPTION);
       } else {
-        recorder.recordEvaluationError(featureFlag, context, defaultValue, ErrorKind.EXCEPTION);
+        // The evaluation did not complete, so nothing is known about which definitions it read.
+        recorder.recordEvaluationError(featureFlag, context, defaultValue, ErrorKind.EXCEPTION, false);
       }
       // The flag's definition was read before the failure, so its own marker decides the marking of
       // the error result.
@@ -285,6 +287,8 @@ class InputValidatingEvaluator implements EvaluatorInterface {
    */
   private static EvaluationRecorder makeEvaluationRecorder(EventProcessor processor, boolean withReasons) {
     return new EvaluationRecorder() {
+      // The marking passed to the event processor is the evaluation result's own record of the
+      // definitions it read. Event generation does not read the evaluation reason.
       @Override
       public void recordEvaluation(FeatureFlag flag, LDContext context, EvalResult result, LDValue defaultValue) {
         processor.recordEvaluationEvent(
@@ -299,10 +303,13 @@ class InputValidatingEvaluator implements EvaluatorInterface {
             flag.isTrackEvents() || result.isForceReasonTracking(),
             flag.getDebugEventsUntilDate(),
             flag.isExcludeFromSummaries(),
-            flag.getSamplingRatio()
+            flag.getSamplingRatio(),
+            result.isOverrideAffected()
         );
       }
 
+      // A prerequisite record carries the prerequisite's own marking, which its own subtree of
+      // reads set. It is not the marking of the evaluation that requested it.
       @Override
       public void recordPrerequisiteEvaluation(FeatureFlag flag, FeatureFlag prereqOfFlag, LDContext context, EvalResult result) {
         processor.recordEvaluationEvent(
@@ -317,25 +324,28 @@ class InputValidatingEvaluator implements EvaluatorInterface {
             flag.isTrackEvents() || result.isForceReasonTracking(),
             flag.getDebugEventsUntilDate(),
             flag.isExcludeFromSummaries(),
-            flag.getSamplingRatio()
+            flag.getSamplingRatio(),
+            result.isOverrideAffected()
         );
       }
 
       @Override
-      public void recordEvaluationError(FeatureFlag flag, LDContext context, LDValue defaultValue, ErrorKind errorKind) {
+      public void recordEvaluationError(FeatureFlag flag, LDContext context, LDValue defaultValue, ErrorKind errorKind,
+                                        boolean overrideAffected) {
         processor.recordEvaluationEvent(
             context,
             flag.getKey(),
             flag.getVersion(),
             NO_VARIATION,
             defaultValue,
-            withReasons ? EvaluationReason.error(errorKind) : null,
+            withReasons ? EvaluationReason.error(errorKind).withOverrideAffected(overrideAffected) : null,
             defaultValue,
             null,
             flag.isTrackEvents(),
             flag.getDebugEventsUntilDate(),
             flag.isExcludeFromSummaries(),
-            flag.getSamplingRatio()
+            flag.getSamplingRatio(),
+            overrideAffected
         );
       }
 
