@@ -4,7 +4,9 @@ import com.launchdarkly.logging.LDLogLevel;
 import com.launchdarkly.sdk.EvaluationDetail;
 import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
+import com.launchdarkly.sdk.internal.events.Event;
 import com.launchdarkly.sdk.json.JsonSerialization;
+import com.launchdarkly.sdk.server.TestComponents.TestEventProcessor;
 import com.launchdarkly.sdk.server.integrations.DataSystemBuilder;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
@@ -25,6 +27,7 @@ import static com.launchdarkly.sdk.server.DataModel.FEATURES;
 import static com.launchdarkly.sdk.server.DataModel.SEGMENTS;
 import static com.launchdarkly.sdk.server.OverrideTestDataSources.hangingSynchronizer;
 import static com.launchdarkly.sdk.server.OverrideTestDataSources.initializerWith;
+import static com.launchdarkly.sdk.server.TestComponents.specificComponent;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -32,7 +35,8 @@ import static org.junit.Assert.assertTrue;
 /**
  * Runs the OVERRIDE specification's test vectors. Each vector sets up LaunchDarkly data, an
  * override layer, and an initialization state, evaluates one flag through the full client stack,
- * and checks the value, the variation index, and the reason.
+ * and checks the value, the variation index, the reason, and the marking that the client hands to the
+ * event processor for the evaluation.
  */
 @SuppressWarnings("javadoc")
 public class OverrideSpecVectorsTest extends BaseTest {
@@ -106,8 +110,9 @@ public class OverrideSpecVectorsTest extends BaseTest {
         overrides.get("flags"), overrides.get("flagValues"), overrides.get("segments")));
 
     DataSystemBuilder dataSystem = Components.dataSystem().custom().overrides(source);
+    TestEventProcessor events = new TestEventProcessor();
     LDConfig.Builder config = new LDConfig.Builder()
-        .events(Components.noEvents())
+        .events(specificComponent(events))
         .logging(Components.logging(testLogging).level(LDLogLevel.DEBUG));
     if (initialized) {
       dataSystem.initializers(initializerWith(collectionsFromJson(
@@ -137,6 +142,22 @@ public class OverrideSpecVectorsTest extends BaseTest {
         assertEquals("variationIndex", expect.get("variationIndex").intValue(), detail.getVariationIndex());
       }
       assertVectorReason(expect.get("reason"), LDValue.parse(JsonSerialization.serialize(detail.getReason())));
+
+      // summaryOverrideAffected is the marking the client hands to the event processor for this
+      // evaluation. The event processor keys individual event suppression and the summary counter
+      // marker on that value, not on the reason.
+      if (!expect.get("summaryOverrideAffected").isNull()) {
+        List<Event.FeatureRequest> records = new ArrayList<>();
+        for (Event e : events.events) {
+          if (e instanceof Event.FeatureRequest
+              && ((Event.FeatureRequest) e).getKey().equals(evaluate.get("flagKey").stringValue())) {
+            records.add((Event.FeatureRequest) e);
+          }
+        }
+        assertEquals("expected exactly one evaluation record for the flag", 1, records.size());
+        assertEquals("summaryOverrideAffected", expect.get("summaryOverrideAffected").booleanValue(),
+            records.get(0).isOverrideAffected());
+      }
     }
   }
 
