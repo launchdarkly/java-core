@@ -50,7 +50,7 @@ public class InputValidatingEvaluatorOverrideTest {
   }
 
   private static InputValidatingEvaluator evaluatorOver(ReadOnlyStore store) {
-    return new InputValidatingEvaluator(store, null, new NoOpEventProcessor(), nullLogger);
+    return new InputValidatingEvaluator(store, null, null, new NoOpEventProcessor(), nullLogger);
   }
 
   @Test

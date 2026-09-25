@@ -38,13 +38,14 @@ public final class DataSystemConfiguration {
   private final ComponentConfigurer<DataSource> fDv1FallbackSynchronizer;
   private final ComponentConfigurer<DataStore> persistentStore;
   private final DataStoreMode persistentDataStoreMode;
+  private final ComponentConfigurer<OverrideSource> overrideSource;
 
   /**
-   * Creates an instance.
+   * Creates an instance without an override source.
    * <p>
    * This constructor is internal and should not be called by application code.
    * </p>
-   * 
+   *
    * @param initializers see {@link #getInitializers()}
    * @param synchronizers see {@link #getSynchronizers()}
    * @param fDv1FallbackSynchronizer see {@link #getFDv1FallbackSynchronizer()}
@@ -57,11 +58,36 @@ public final class DataSystemConfiguration {
       ComponentConfigurer<DataSource> fDv1FallbackSynchronizer,
       ComponentConfigurer<DataStore> persistentStore,
       DataStoreMode persistentDataStoreMode) {
+    this(initializers, synchronizers, fDv1FallbackSynchronizer, persistentStore, persistentDataStoreMode, null);
+  }
+
+  /**
+   * Creates an instance.
+   * <p>
+   * This constructor is internal and should not be called by application code.
+   * </p>
+   *
+   * @param initializers see {@link #getInitializers()}
+   * @param synchronizers see {@link #getSynchronizers()}
+   * @param fDv1FallbackSynchronizer see {@link #getFDv1FallbackSynchronizer()}
+   * @param persistentStore see {@link #getPersistentStore()}
+   * @param persistentDataStoreMode see {@link #getPersistentDataStoreMode()}
+   * @param overrideSource see {@link #getOverrideSource()}
+   * @since 7.18.0
+   */
+  public DataSystemConfiguration(
+      ImmutableList<DataSourceBuilder<Initializer>> initializers,
+      ImmutableList<DataSourceBuilder<Synchronizer>> synchronizers,
+      ComponentConfigurer<DataSource> fDv1FallbackSynchronizer,
+      ComponentConfigurer<DataStore> persistentStore,
+      DataStoreMode persistentDataStoreMode,
+      ComponentConfigurer<OverrideSource> overrideSource) {
     this.initializers = initializers;
     this.synchronizers = synchronizers;
     this.fDv1FallbackSynchronizer = fDv1FallbackSynchronizer;
     this.persistentStore = persistentStore;
     this.persistentDataStoreMode = persistentDataStoreMode;
+    this.overrideSource = overrideSource;
   }
 
   /**
@@ -107,11 +133,24 @@ public final class DataSystemConfiguration {
 
   /**
    * The mode of operation for the persistent data store.
-   * 
+   *
    * @return the persistent data store mode
    */
   public DataStoreMode getPersistentDataStoreMode() {
     return persistentDataStoreMode;
+  }
+
+  /**
+   * An optional factory for creating an override source. The source supplies flag and segment
+   * overrides that take precedence over LaunchDarkly data at evaluation time. It is not part of
+   * the initializer or synchronizer pipeline and does not affect the client's initialization
+   * status. Flag overrides are currently experimental and subject to change.
+   *
+   * @return the override source configurer, or null
+   * @since 7.18.0
+   */
+  public ComponentConfigurer<OverrideSource> getOverrideSource() {
+    return overrideSource;
   }
 }
 
