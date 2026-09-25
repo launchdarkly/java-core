@@ -462,6 +462,34 @@ public class EventOutputTest extends BaseEventTest {
   }
 
   @Test
+  public void summaryEventMarksOverrideAffectedCounters() throws Exception {
+    LDValue value = LDValue.of("value"), defaultValue = LDValue.of("default");
+    LDContext context = LDContext.create("key1");
+
+    EventSummarizer es = new EventSummarizer();
+    es.summarizeEvent(1000, "flag", 11, 1, value, defaultValue, context, false);
+    es.summarizeEvent(1001, "flag", 11, 1, value, defaultValue, context, true);
+    es.summarizeEvent(1002, "flag", 11, 1, value, defaultValue, context, true);
+    es.summarizeEvent(1003, "unknown", -1, -1, defaultValue, defaultValue, context, true);
+    EventSummary summary = es.getSummaryAndReset();
+
+    EventOutputFormatter f = new EventOutputFormatter(defaultEventsConfig());
+    StringWriter w = new StringWriter();
+    f.writeOutputEvents(new Event[0], Collections.singletonList(summary), w);
+    LDValue featuresJson = parseValue(w.toString()).get(0).get("features");
+
+    // The marked and unmarked evaluations of the same flag, version, and variation are separate
+    // counters. The marker appears only on the marked counter.
+    assertThat(featuresJson.get("flag").get("counters").values(), containsInAnyOrder(
+        parseValue("{\"value\":\"value\",\"variation\":1,\"version\":11,\"count\":1}"),
+        parseValue("{\"value\":\"value\",\"variation\":1,\"version\":11,\"overrideAffected\":true,\"count\":2}")
+    ));
+    assertThat(featuresJson.get("unknown").get("counters").values(), contains(
+        parseValue("{\"unknown\":true,\"overrideAffected\":true,\"value\":\"default\",\"count\":1}")
+    ));
+  }
+
+  @Test
   public void migrationOpEventIsSerialized() throws IOException {
     LDContext context = LDContext.builder("user-key").name("me").build();
     EventOutputFormatter f = new EventOutputFormatter(defaultEventsConfig());

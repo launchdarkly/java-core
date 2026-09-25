@@ -31,9 +31,11 @@ public final class AggregatedEventSummarizer implements EventSummarizerInterface
     int variation,
     LDValue value,
     LDValue defaultValue,
-    LDContext context
+    LDContext context,
+    boolean overrideAffected
   ) {
-    summarizer.summarizeEvent(timestamp, flagKey, flagVersion, variation, value, defaultValue, context);
+    summarizer.summarizeEvent(timestamp, flagKey, flagVersion, variation, value, defaultValue, context,
+        overrideAffected);
   }
 
   @Override

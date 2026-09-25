@@ -292,7 +292,19 @@ public abstract class BaseEventTest extends BaseTest {
         jsonProperty("variation", variation),
         jsonProperty("version", (double)flagVersion),
         jsonProperty("value", jsonFromValue(value)),
-        jsonProperty("count", (double)count)
+        jsonProperty("count", (double)count),
+        jsonProperty("overrideAffected", jsonUndefined())
+    );
+  }
+
+  public static Matcher<JsonTestValue> isOverrideAffectedSummaryEventCounter(int flagVersion, Integer variation,
+      LDValue value, int count) {
+    return allOf(
+        jsonProperty("variation", variation),
+        jsonProperty("version", (double)flagVersion),
+        jsonProperty("value", jsonFromValue(value)),
+        jsonProperty("count", (double)count),
+        jsonProperty("overrideAffected", true)
     );
   }
 
@@ -477,6 +489,7 @@ public abstract class BaseEventTest extends BaseTest {
     private Long debugEventsUntilDate = null;
     private long samplingRatio = 1;
     private boolean excludeFromSummaries = false;
+    private boolean overrideAffected = false;
 
     public FeatureRequestEventBuilder(LDContext context, String flagKey) {
       this.context = context;
@@ -486,7 +499,12 @@ public abstract class BaseEventTest extends BaseTest {
     public Event.FeatureRequest build() {
       return new Event.FeatureRequest(timestamp, flagKey, context, flagVersion, variation, value,
           defaultValue, reason, prereqOf, trackEvents, debugEventsUntilDate, false, samplingRatio,
-          excludeFromSummaries);
+          excludeFromSummaries, overrideAffected);
+    }
+
+    public FeatureRequestEventBuilder overrideAffected(boolean overrideAffected) {
+      this.overrideAffected = overrideAffected;
+      return this;
     }
 
     public FeatureRequestEventBuilder flagVersion(int flagVersion) {
