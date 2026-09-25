@@ -228,6 +228,14 @@ final class EvalResult {
    */
   public boolean isForceReasonTracking() { return forceReasonTracking; }
 
+  /**
+   * Returns true if an override affected this evaluation, directly or transitively. The value is
+   * the reason's indicator, so the result and the reason it returns to the caller always agree.
+   * Flag overrides are currently experimental and subject to change.
+   * @return true if an override affected the evaluation
+   */
+  public boolean isOverrideAffected() { return anyType.getReason().isOverrideAffected(); }
+
   public List<PrerequisiteEvalRecord> getPrerequisiteEvalRecords() { return prerequisiteEvalRecords; }
   
   /**
@@ -250,6 +258,17 @@ final class EvalResult {
 
   public EvalResult withPrerequisiteEvalRecords(List<PrerequisiteEvalRecord> newValue) {
     return this.prerequisiteEvalRecords == newValue ? this : new EvalResult(this, newValue);
+  }
+
+  /**
+   * Returns a transformed copy of this EvalResult whose reason carries the given override-affected
+   * indicator, or this same instance if the indicator is unchanged. Precomputed results are shared
+   * between evaluations, so a marked result is always a new instance.
+   * @param newValue the new value for the indicator
+   * @return a transformed copy
+   */
+  public EvalResult withOverrideAffected(boolean newValue) {
+    return withReason(anyType.getReason().withOverrideAffected(newValue));
   }
   
   @Override
