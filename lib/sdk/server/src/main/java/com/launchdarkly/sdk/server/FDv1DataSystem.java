@@ -161,6 +161,11 @@ final class FDv1DataSystem implements DataSystem, Closeable {
   }
 
   @Override
+  public OverrideLayer getOverrideLayer() {
+    return null;
+  }
+
+  @Override
   public void close() throws IOException {
     if (disposed) {
       return;
