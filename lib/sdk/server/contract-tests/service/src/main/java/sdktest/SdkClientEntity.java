@@ -32,6 +32,9 @@ import com.launchdarkly.sdk.server.DataSystemComponents;
 import com.launchdarkly.sdk.server.integrations.FDv2PollingInitializerBuilder;
 import com.launchdarkly.sdk.server.integrations.FDv2PollingSynchronizerBuilder;
 import com.launchdarkly.sdk.server.integrations.FDv2StreamingSynchronizerBuilder;
+import com.launchdarkly.sdk.server.integrations.FileData;
+import com.launchdarkly.sdk.server.integrations.FileOverrideSourceBuilder;
+import com.launchdarkly.sdk.server.integrations.FileOverrides;
 import com.launchdarkly.sdk.server.interfaces.BigSegmentStoreStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataSourceBuilder;
 import com.launchdarkly.sdk.server.datasources.Initializer;
@@ -68,6 +71,7 @@ import sdktest.Representations.SdkConfigHookParams;
 import sdktest.Representations.SdkConfigParams;
 import sdktest.Representations.SdkConfigDataSystemParams;
 import sdktest.Representations.SdkConfigDataInitializerParams;
+import sdktest.Representations.SdkConfigOverridesParams;
 import sdktest.Representations.SdkConfigSynchronizerParams;
 import sdktest.Representations.SdkConfigPollingParams;
 import sdktest.Representations.SdkConfigStreamingParams;
@@ -587,10 +591,51 @@ public class SdkClientEntity {
         dataSystemBuilder.fDv1FallbackSynchronizer(fdv1Polling);
       }
 
+      if (params.overrides != null) {
+        dataSystemBuilder.overrides(makeOverridesConfig(params.overrides));
+      }
+
       builder.dataSystem(dataSystemBuilder);
+    } else if (params.overrides != null) {
+      throw new IllegalArgumentException("flag overrides require the data system to be configured");
     }
 
     return builder.build();
+  }
+
+  private static FileOverrideSourceBuilder makeOverridesConfig(SdkConfigOverridesParams params) {
+    FileOverrideSourceBuilder overrides = FileOverrides.source();
+    if (params.filePaths != null) {
+      overrides.filePaths(params.filePaths);
+    }
+    if (params.duplicateKeysHandling != null) {
+      switch (params.duplicateKeysHandling) {
+      case "fail":
+        overrides.duplicateKeysHandling(FileData.DuplicateKeysHandling.FAIL);
+        break;
+      case "ignore":
+        overrides.duplicateKeysHandling(FileData.DuplicateKeysHandling.IGNORE);
+        break;
+      default:
+        throw new IllegalArgumentException("unknown duplicate keys handling: " + params.duplicateKeysHandling);
+      }
+    }
+    if (params.changeDetection != null) {
+      switch (params.changeDetection) {
+      case "polling":
+        overrides.changeDetection(FileOverrides.ChangeDetection.POLLING);
+        break;
+      case "watching":
+        overrides.changeDetection(FileOverrides.ChangeDetection.WATCHING);
+        break;
+      default:
+        throw new IllegalArgumentException("unknown change detection mode: " + params.changeDetection);
+      }
+    }
+    if (params.pollIntervalMs != null) {
+      overrides.pollInterval(Duration.ofMillis(params.pollIntervalMs));
+    }
+    return overrides;
   }
 
   private DataSourceBuilder<Synchronizer> createSynchronizer(
