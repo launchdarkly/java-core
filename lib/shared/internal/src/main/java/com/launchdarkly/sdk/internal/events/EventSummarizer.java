@@ -47,7 +47,33 @@ public final class EventSummarizer {
       LDValue defaultValue,
       LDContext context
       ) {
-    eventsState.incrementCounter(flagKey, flagVersion, variation, value, defaultValue, context);
+    summarizeEvent(timestamp, flagKey, flagVersion, variation, value, defaultValue, context, false);
+  }
+
+  /**
+   * Adds information about an evaluation to our counters. An override-affected evaluation is
+   * counted in a separate counter from other evaluations of the same flag, version, and variation.
+   *
+   * @param timestamp the millisecond timestamp
+   * @param flagKey the flag key
+   * @param flagVersion the flag version, or -1 if the flag is unknown
+   * @param variation the result variation, or -1 if none
+   * @param value the result value
+   * @param defaultValue the application default value
+   * @param context the evaluation context
+   * @param overrideAffected true if an override affected the evaluation
+   */
+  void summarizeEvent(
+      long timestamp,
+      String flagKey,
+      int flagVersion,
+      int variation,
+      LDValue value,
+      LDValue defaultValue,
+      LDContext context,
+      boolean overrideAffected
+      ) {
+    eventsState.incrementCounter(flagKey, flagVersion, variation, value, defaultValue, context, overrideAffected);
     eventsState.noteTimestamp(timestamp);
   }
   
@@ -120,7 +146,8 @@ public final class EventSummarizer {
         int variation,
         LDValue flagValue,
         LDValue defaultVal,
-        LDContext context
+        LDContext context,
+        boolean overrideAffected
         ) {
       FlagInfo flagInfo = counters.get(flagKey);
       if (flagInfo == null) {
@@ -131,10 +158,12 @@ public final class EventSummarizer {
         flagInfo.contextKinds.add(context.getIndividualContext(i).getKind().toString());
       }
       
-      SimpleIntKeyedMap<CounterValue> variations = flagInfo.versionsAndVariations.get(flagVersion);
+      SimpleIntKeyedMap<SimpleIntKeyedMap<CounterValue>> versionsAndVariations =
+          overrideAffected ? flagInfo.overrideAffectedVersionsAndVariations() : flagInfo.versionsAndVariations;
+      SimpleIntKeyedMap<CounterValue> variations = versionsAndVariations.get(flagVersion);
       if (variations == null) {
         variations = new SimpleIntKeyedMap<>();
-        flagInfo.versionsAndVariations.put(flagVersion, variations);
+        versionsAndVariations.put(flagVersion, variations);
       }
       
       CounterValue value = variations.get(variation);
@@ -175,14 +204,47 @@ public final class EventSummarizer {
 
   static final class FlagInfo {
     final LDValue defaultVal;
+    // Counters for evaluations that no override affected, keyed by version and then by variation.
     final SimpleIntKeyedMap<SimpleIntKeyedMap<CounterValue>> versionsAndVariations;
+    // Counters for override-affected evaluations, with the same shape. Most flags never have any,
+    // so the map is created on first use.
+    private SimpleIntKeyedMap<SimpleIntKeyedMap<CounterValue>> overrideAffectedVersionsAndVariations;
     final Set<String> contextKinds;
     
     FlagInfo(LDValue defaultVal, SimpleIntKeyedMap<SimpleIntKeyedMap<CounterValue>>  versionsAndVariations,
         Set<String> contextKinds) {
+      this(defaultVal, versionsAndVariations, null, contextKinds);
+    }
+
+    FlagInfo(LDValue defaultVal, SimpleIntKeyedMap<SimpleIntKeyedMap<CounterValue>> versionsAndVariations,
+        SimpleIntKeyedMap<SimpleIntKeyedMap<CounterValue>> overrideAffectedVersionsAndVariations,
+        Set<String> contextKinds) {
       this.defaultVal = defaultVal;
       this.versionsAndVariations = versionsAndVariations;
+      this.overrideAffectedVersionsAndVariations = overrideAffectedVersionsAndVariations;
       this.contextKinds = contextKinds;
+    }
+
+    /**
+     * Returns the counters for override-affected evaluations, creating the map on first use.
+     *
+     * @return the counters, never null
+     */
+    SimpleIntKeyedMap<SimpleIntKeyedMap<CounterValue>> overrideAffectedVersionsAndVariations() {
+      if (overrideAffectedVersionsAndVariations == null) {
+        overrideAffectedVersionsAndVariations = new SimpleIntKeyedMap<>();
+      }
+      return overrideAffectedVersionsAndVariations;
+    }
+
+    /**
+     * Returns the counters for override-affected evaluations, or null if there are none.
+     *
+     * @return the counters or null
+     */
+    SimpleIntKeyedMap<SimpleIntKeyedMap<CounterValue>> overrideAffectedVersionsAndVariationsIfAny() {
+      return overrideAffectedVersionsAndVariations == null || overrideAffectedVersionsAndVariations.size() == 0
+          ? null : overrideAffectedVersionsAndVariations;
     }
     
     @Override
@@ -190,6 +252,7 @@ public final class EventSummarizer {
       if (other instanceof FlagInfo) {
         FlagInfo o = (FlagInfo)other;
         return o.defaultVal.equals(this.defaultVal) && o.versionsAndVariations.equals(this.versionsAndVariations) &&
+            Objects.equals(o.overrideAffectedVersionsAndVariationsIfAny(), this.overrideAffectedVersionsAndVariationsIfAny()) &&
             o.contextKinds.equals(this.contextKinds);
       }
       return false;
@@ -202,8 +265,10 @@ public final class EventSummarizer {
     
     @Override
     public String toString() { // used only in tests
-      return "(default=" + defaultVal + ", counters=" + versionsAndVariations + ", contextKinds=" +
-        String.join(",", contextKinds) + ")";
+      return "(default=" + defaultVal + ", counters=" + versionsAndVariations +
+        (overrideAffectedVersionsAndVariationsIfAny() == null ? "" :
+          ", overrideAffectedCounters=" + overrideAffectedVersionsAndVariations) +
+        ", contextKinds=" + String.join(",", contextKinds) + ")";
     }
   }
   

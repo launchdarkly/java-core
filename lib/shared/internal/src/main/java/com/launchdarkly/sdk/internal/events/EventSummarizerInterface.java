@@ -15,7 +15,7 @@ import java.util.List;
  */
 public interface EventSummarizerInterface {
   /**
-   * Adds information about an evaluation to the summary.
+   * Adds information about an evaluation that no override affected to the summary.
    *
    * @param timestamp    the millisecond timestamp
    * @param flagKey      the flag key
@@ -25,7 +25,7 @@ public interface EventSummarizerInterface {
    * @param defaultValue the application default value
    * @param context      the evaluation context
    */
-  void summarizeEvent(
+  default void summarizeEvent(
     long timestamp,
     String flagKey,
     int flagVersion,
@@ -33,6 +33,34 @@ public interface EventSummarizerInterface {
     LDValue value,
     LDValue defaultValue,
     LDContext context
+  ) {
+    summarizeEvent(timestamp, flagKey, flagVersion, variation, value, defaultValue, context, false);
+  }
+
+  /**
+   * Adds information about an evaluation to the summary.
+   * <p>
+   * Override-affected evaluations are counted separately from other evaluations of the same flag,
+   * version, and variation, so the marker takes part in the counter key.
+   *
+   * @param timestamp        the millisecond timestamp
+   * @param flagKey          the flag key
+   * @param flagVersion      the flag version, or -1 if the flag is unknown
+   * @param variation        the result variation, or -1 if none
+   * @param value            the result value
+   * @param defaultValue     the application default value
+   * @param context          the evaluation context
+   * @param overrideAffected true if an override affected the evaluation
+   */
+  void summarizeEvent(
+    long timestamp,
+    String flagKey,
+    int flagVersion,
+    int variation,
+    LDValue value,
+    LDValue defaultValue,
+    LDContext context,
+    boolean overrideAffected
   );
 
   /**
