@@ -145,6 +145,15 @@ public abstract class DataModel {
     private Migration migration;
     private boolean excludeFromSummaries;
 
+    // True if this definition came from the SDK's override store rather than from LaunchDarkly. The
+    // field is transient so that it never appears in the JSON form of the flag and never takes part
+    // in deserialization. Only the override layer sets it, on a copy that it owns. Evaluation reads
+    // it to mark the evaluation as override-affected. Other readers treat a marked flag the same as
+    // any other flag.
+    //
+    // Flag overrides are currently experimental and subject to change.
+    private transient boolean isOverride;
+
     /**
      * Container for migration specific flag data.
      */
@@ -265,6 +274,31 @@ public abstract class DataModel {
 
     boolean isExcludeFromSummaries() {
       return excludeFromSummaries;
+    }
+
+    /**
+     * Returns true if this definition came from the override store.
+     *
+     * @return true for an override entry
+     */
+    boolean isOverride() {
+      return isOverride;
+    }
+
+    /**
+     * Returns a shallow copy of this flag that carries the override marker. The copy shares its
+     * nested lists and its preprocessing data with this flag and never writes to them. This flag is
+     * not modified.
+     *
+     * @return a marked copy
+     */
+    FeatureFlag markedAsOverride() {
+      FeatureFlag copy = new FeatureFlag(key, version, on, prerequisites, salt, targets, contextTargets, rules,
+          fallthrough, offVariation, variations, clientSide, trackEvents, trackEventsFallthrough,
+          debugEventsUntilDate, deleted, samplingRatio, migration, excludeFromSummaries);
+      copy.preprocessed = preprocessed;
+      copy.isOverride = true;
+      return copy;
     }
 
     public void afterDeserialized() {
@@ -507,6 +541,10 @@ public abstract class DataModel {
     private ContextKind unboundedContextKind;
     private Integer generation;
 
+    // True if this definition came from the SDK's override store rather than from LaunchDarkly. See
+    // the note on the same field in FeatureFlag.
+    private transient boolean isOverride;
+
     Segment() {}
 
     Segment(String key,
@@ -586,6 +624,28 @@ public abstract class DataModel {
     
     public Integer getGeneration() {
       return generation;
+    }
+
+    /**
+     * Returns true if this definition came from the override store.
+     *
+     * @return true for an override entry
+     */
+    boolean isOverride() {
+      return isOverride;
+    }
+
+    /**
+     * Returns a shallow copy of this segment that carries the override marker. The copy shares its
+     * nested collections with this segment and never writes to them. This segment is not modified.
+     *
+     * @return a marked copy
+     */
+    Segment markedAsOverride() {
+      Segment copy = new Segment(key, included, excluded, includedContexts, excludedContexts, salt, rules,
+          version, deleted, unbounded, unboundedContextKind, generation);
+      copy.isOverride = true;
+      return copy;
     }
 
     public void afterDeserialized() {

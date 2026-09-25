@@ -135,7 +135,11 @@ class InputValidatingEvaluator implements EvaluatorInterface {
             value.getType() != requireType) {
           logger.error("Feature flag \"{}\"; evaluation expected result as {}, but got {}", flagKey, defaultValue.getType(), value.getType());
           recorder.recordEvaluationError(featureFlag, context, defaultValue, ErrorKind.WRONG_TYPE);
-          return new EvalResultAndFlag(EvalResult.error(ErrorKind.WRONG_TYPE, defaultValue), featureFlag);
+          // The type mismatch replaces the reason. The evaluation read the same definitions, so the
+          // new reason keeps the override-affected marking.
+          return new EvalResultAndFlag(
+              EvalResult.error(ErrorKind.WRONG_TYPE, defaultValue).withOverrideAffected(result.isOverrideAffected()),
+              featureFlag);
         }
       }
 
