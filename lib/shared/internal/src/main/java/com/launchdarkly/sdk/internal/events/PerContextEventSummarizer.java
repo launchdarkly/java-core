@@ -47,8 +47,12 @@ public final class PerContextEventSummarizer implements EventSummarizerInterface
     LDValue defaultValue,
     LDContext context
   ) {
-    // Get or create summarizer for this context
-    EventSummarizer summarizer = summarizersByContext.computeIfAbsent(context, EventSummarizer::new);
+    // Not computeIfAbsent: Android below API 24 has neither it nor java.util.function.
+    EventSummarizer summarizer = summarizersByContext.get(context);
+    if (summarizer == null) {
+      summarizer = new EventSummarizer(context);
+      summarizersByContext.put(context, summarizer);
+    }
 
     // Delegate to the per-context summarizer
     summarizer.summarizeEvent(timestamp, flagKey, flagVersion, variation, value, defaultValue, context);
