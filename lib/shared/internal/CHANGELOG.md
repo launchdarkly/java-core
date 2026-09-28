@@ -2,6 +2,13 @@
 
 All notable changes to the project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [1.12.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.12.0...launchdarkly-java-sdk-internal-1.12.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* Don't use computeIfAbsent in PerContextEventSummarizer ([#226](https://github.com/launchdarkly/java-core/issues/226)) ([6b02b08](https://github.com/launchdarkly/java-core/commit/6b02b084c438a01de79d9a1b877d4d5d6e806fb2))
+
 ## [1.12.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.11.1...launchdarkly-java-sdk-internal-1.12.0) (2026-09-15)
 
 
