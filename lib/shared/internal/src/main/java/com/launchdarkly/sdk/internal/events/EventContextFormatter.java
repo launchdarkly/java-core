@@ -104,9 +104,7 @@ class EventContextFormatter {
       boolean redactAnonymous
       ) throws IOException {
     if (allAttributesPrivate || (redactAnonymous && c.isAnonymous())) {
-      // The name must be reported as an escaped attribute reference. Otherwise a name that
-      // starts with a slash reads as a path to a nested property, and the consumer does not
-      // see which attribute was redacted.
+      // An escaped reference keeps a leading slash from reading as a path.
       return addOrCreate(redacted, AttributeRef.fromLiteral(attrName).toString());
     }
     return writeRedactedValue(w, c, 0, attrName, value, null, redacted);
