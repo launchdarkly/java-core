@@ -201,6 +201,25 @@ public class EventContextFormatterTest extends BaseTest {
                     "\"redactedAttributes\": [\"/~1ssn\"]" +
                 "}" +
             "}"
+        },
+        new Object[] {
+            "slash-prefixed attribute name private for this context",
+            LDContext.builder("my-key").kind("org")
+              .name("my-name")
+              .set("/ssn", "123-45-6789")
+              .privateAttributes("/~1ssn")
+              .build(),
+            false,
+            false,
+            new AttributeRef[0],
+            "{" +
+                "\"kind\": \"org\"," +
+                "\"key\": \"my-key\"," +
+                "\"name\": \"my-name\"," +
+                "\"_meta\": {" +
+                    "\"redactedAttributes\": [\"/~1ssn\"]" +
+                "}" +
+            "}"
         }
     );
   }
