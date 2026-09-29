@@ -263,6 +263,7 @@ public abstract class DataStoreTypes {
   public static final class FullDataSet<TDescriptor> {
     private final Iterable<Map.Entry<DataKind, KeyedItems<TDescriptor>>> data;
     private final boolean shouldPersist;
+    private final String environmentId;
     
     /**
      * Returns the wrapped data set.
@@ -287,13 +288,21 @@ public abstract class DataStoreTypes {
     }
 
     /**
+     * Returns the ID of the LaunchDarkly environment that this data came from, if known.
+     *
+     * @return the environment ID, or null if it was not reported with the data
+     */
+    public String getEnvironmentId() {
+      return environmentId;
+    }
+
+    /**
      * Constructs a new instance.  Will default to shouldPersist = true and can be stored in a persistent store.
      * 
      * @param data the data set
      */
     public FullDataSet(Iterable<Map.Entry<DataKind, KeyedItems<TDescriptor>>> data) {
-      this.data = data == null ? ImmutableList.of(): data;
-      this.shouldPersist = true; // default to true if not specified for backwards compatibility
+      this(data, true); // default to true if not specified for backwards compatibility
     }
     
     /**
@@ -303,22 +312,36 @@ public abstract class DataStoreTypes {
      * @param shouldPersist true if the data should be persisted to persistent stores, false otherwise
      */
     public FullDataSet(Iterable<Map.Entry<DataKind, KeyedItems<TDescriptor>>> data, boolean shouldPersist) {
+      this(data, shouldPersist, null);
+    }
+
+    /**
+     * Constructs a new instance.
+     *
+     * @param data the data set
+     * @param shouldPersist true if the data should be persisted to persistent stores, false otherwise
+     * @param environmentId the ID of the LaunchDarkly environment the data came from, or null if unknown
+     */
+    public FullDataSet(Iterable<Map.Entry<DataKind, KeyedItems<TDescriptor>>> data, boolean shouldPersist,
+        String environmentId) {
       this.data = data == null ? ImmutableList.of(): data;
       this.shouldPersist = shouldPersist;
+      this.environmentId = environmentId;
     }
     
     @Override
     public boolean equals(Object o) {
       if (o instanceof FullDataSet<?>) {
         FullDataSet<?> other = (FullDataSet<?>)o;
-        return data.equals(other.data) && shouldPersist == other.shouldPersist;
+        return data.equals(other.data) && shouldPersist == other.shouldPersist
+            && Objects.equals(environmentId, other.environmentId);
       }
       return false;
     }
     
     @Override
     public int hashCode() {
-      return Objects.hash(data, shouldPersist);
+      return Objects.hash(data, shouldPersist, environmentId);
     }
   }
   

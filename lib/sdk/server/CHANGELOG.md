@@ -2,6 +2,28 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.17.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.0...launchdarkly-java-server-sdk-7.17.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* Log the isFlagKnown cached-data warning only once per client ([#213](https://github.com/launchdarkly/java-core/issues/213)) ([48215ba](https://github.com/launchdarkly/java-core/commit/48215bade071879be34d2c2390091771efdc5834))
+
+## [7.17.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.16.0...launchdarkly-java-server-sdk-7.17.0) (2026-09-10)
+
+
+### Features
+
+* Add environment ID support for hooks ([#202](https://github.com/launchdarkly/java-core/issues/202)) ([41df008](https://github.com/launchdarkly/java-core/commit/41df0088deb32c5c1e2c3d81ce60e774ed0e495d))
+* deprecate FDv2 payload filter builder methods ([#209](https://github.com/launchdarkly/java-core/issues/209)) ([ffc5a4c](https://github.com/launchdarkly/java-core/commit/ffc5a4c6b69ed31ec5ca5f938bc76030f2979a32))
+
+## [7.16.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.15.0...launchdarkly-java-server-sdk-7.16.0) (2026-09-01)
+
+
+### Features
+
+* conform FDv1 streaming and polling data sources to the RETRY specification ([dd7b0cd](https://github.com/launchdarkly/java-core/commit/dd7b0cd3eddc62cfce937251128b45ea0fa5049b))
+
 ## [7.15.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.14.0...launchdarkly-java-server-sdk-7.15.0) (2026-07-21)
 
 

@@ -16,10 +16,10 @@ import java.util.List;
  * Note that the methods of this class are deliberately not thread-safe, because they should
  * always be called from EventProcessor's single message-processing thread.
  */
-final class AggregatedEventSummarizer implements EventSummarizerInterface {
+public final class AggregatedEventSummarizer implements EventSummarizerInterface {
   private final EventSummarizer summarizer;
 
-  AggregatedEventSummarizer() {
+  public AggregatedEventSummarizer() {
     this.summarizer = new EventSummarizer();
   }
 

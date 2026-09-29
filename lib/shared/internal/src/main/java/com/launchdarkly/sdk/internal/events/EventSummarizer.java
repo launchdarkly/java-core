@@ -14,7 +14,7 @@ import java.util.Set;
  * methods of this class are deliberately not thread-safe, because they should always
  * be called from EventProcessor's single message-processing thread.
  */
-final class EventSummarizer {
+public final class EventSummarizer {
   private EventSummary eventsState;
   private final LDContext context; // nullable - only set for per-context summarization
 
@@ -85,7 +85,10 @@ final class EventSummarizer {
     eventsState = new EventSummary(context);
   }
   
-  static final class EventSummary {
+  /**
+   * A snapshot of the evaluations counted since the last reset.
+   */
+  public static final class EventSummary {
     final Map<String, FlagInfo> counters;
     long startDate;
     long endDate;

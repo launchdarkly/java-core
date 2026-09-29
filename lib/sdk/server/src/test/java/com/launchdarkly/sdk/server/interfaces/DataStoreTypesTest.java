@@ -153,10 +153,14 @@ public class DataStoreTypesTest {
     List<TypeBehavior.ValueFactory<FullDataSet<ItemDescriptor>>> allPermutations = new ArrayList<>();
     for (DataKind kind: new DataKind[] { DataModel.FEATURES, DataModel.SEGMENTS }) {
       for (int version: new int[] { 1, 2 }) {
-        allPermutations.add(() -> new FullDataSet<>(
-            ImmutableMap.of(kind,
-                new KeyedItems<>(ImmutableMap.of("key", new ItemDescriptor(version, "a")).entrySet())
-            ).entrySet(), true));
+        for (boolean shouldPersist: new boolean[] { true, false }) {
+          for (String environmentId: new String[] { null, "env-1", "env-2" }) {
+            allPermutations.add(() -> new FullDataSet<>(
+                ImmutableMap.of(kind,
+                    new KeyedItems<>(ImmutableMap.of("key", new ItemDescriptor(version, "a")).entrySet())
+                ).entrySet(), shouldPersist, environmentId));
+          }
+        }
       }
     }
     TypeBehavior.checkEqualsAndHashCode(allPermutations);

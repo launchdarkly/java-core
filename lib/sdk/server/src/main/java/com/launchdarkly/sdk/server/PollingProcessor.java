@@ -2,6 +2,8 @@ package com.launchdarkly.sdk.server;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.launchdarkly.logging.LDLogger;
+import com.launchdarkly.sdk.internal.http.FailureClass;
+import com.launchdarkly.sdk.internal.http.HttpErrors;
 import com.launchdarkly.sdk.internal.http.HttpErrors.HttpErrorException;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.ErrorInfo;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider.ErrorKind;
@@ -21,20 +23,23 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static com.launchdarkly.sdk.internal.http.HttpErrors.checkIfErrorIsRecoverableAndLog;
-import static com.launchdarkly.sdk.internal.http.HttpErrors.httpErrorDescription;
-
 final class PollingProcessor implements DataSource {
   private static final String ERROR_CONTEXT_MESSAGE = "on polling request";
   private static final String WILL_RETRY_MESSAGE = "will retry at next scheduled poll interval";
+  static final Duration DEFAULT_EXTENDED_INITIAL_DELAY = Duration.ofMinutes(5);
 
   @VisibleForTesting final FeatureRequestor requestor;
   private final DataSourceUpdateSink dataSourceUpdates;
   private final ScheduledExecutorService scheduler;
   @VisibleForTesting final Duration pollInterval;
+  private final PollingStrategy strategy;
   private final AtomicBoolean initialized = new AtomicBoolean(false);
+  // task tracks the currently pending poll; null when we haven't started yet
+  // or when we've been closed.
+  private ScheduledFuture<?> task;
+  // isClosed is set once in close().
+  private volatile boolean isClosed = false;
   private final CompletableFuture<Void> initFuture;
-  private volatile ScheduledFuture<?> task;
   private final LDLogger logger;
 
   PollingProcessor(
@@ -42,12 +47,14 @@ final class PollingProcessor implements DataSource {
       DataSourceUpdateSink dataSourceUpdates,
       ScheduledExecutorService sharedExecutor,
       Duration pollInterval,
+      Duration extendedInitialDelay,
       LDLogger logger
       ) {
     this.requestor = requestor; // note that HTTP configuration is applied to the requestor when it is created
     this.dataSourceUpdates = dataSourceUpdates;
     this.scheduler = sharedExecutor;
     this.pollInterval = pollInterval;
+    this.strategy = new PollingStrategy(pollInterval, extendedInitialDelay);
     this.initFuture = new CompletableFuture<>();
     this.logger = logger;
   }
@@ -59,34 +66,50 @@ final class PollingProcessor implements DataSource {
 
   @Override
   public void close() throws IOException {
-    logger.info("Closing LaunchDarkly PollingProcessor");
-    requestor.close();
-    
-    // Even though the shared executor will be shut down when the LDClient is closed, it's still good
-    // behavior to remove our polling task now - especially because we might be running in a test
-    // environment where there isn't actually an LDClient.
     synchronized (this) {
+      if (isClosed) {
+        return;
+      }
+      isClosed = true;
       if (task != null) {
         task.cancel(true);
         task = null;
       }
     }
+    logger.info("Closing LaunchDarkly PollingProcessor");
+    requestor.close();
+    dataSourceUpdates.updateStatus(State.OFF, null);
+    initFuture.complete(null);
   }
 
   @Override
   public Future<Void> start() {
-    logger.info("Starting LaunchDarkly polling client with interval: {} milliseconds",
-        pollInterval.toMillis());
-    
     synchronized (this) {
-      if (task == null) {
-        task = scheduler.scheduleAtFixedRate(this::poll, 0L, pollInterval.toMillis(), TimeUnit.MILLISECONDS);
+      if (!isClosed && task == null) {
+        logger.info("Starting LaunchDarkly polling client with interval: {} milliseconds",
+            pollInterval.toMillis());
+        task = scheduler.schedule(this::poll, 0L, TimeUnit.MILLISECONDS);
       }
     }
-    
     return initFuture;
   }
-  
+
+  private void scheduleNext(Duration delay) {
+    synchronized (this) {
+      if (isClosed) {
+        return;
+      }
+      task = scheduler.schedule(this::poll, delay.toMillis(), TimeUnit.MILLISECONDS);
+    }
+  }
+
+  private void tryUpdateStatus(State newState, ErrorInfo newError) {
+    if (isClosed) {
+      return;
+    }
+    dataSourceUpdates.updateStatus(newState, newError);
+  }
+
   private void poll() {
     try {
       // If we already obtained data earlier, and the poll request returns a cached response, then we don't
@@ -96,40 +119,44 @@ final class PollingProcessor implements DataSource {
       FullDataSet<ItemDescriptor> allData = requestor.getAllData(!alreadyInited);
       if (allData == null) {
         // This means it was cached, and alreadyInited was true
-        dataSourceUpdates.updateStatus(State.VALID, null);
+        tryUpdateStatus(State.VALID, null);
       } else {
         if (dataSourceUpdates.init(allData)) {
-          dataSourceUpdates.updateStatus(State.VALID, null);
+          tryUpdateStatus(State.VALID, null);
           if (!initialized.getAndSet(true)) {
             logger.info("Initialized LaunchDarkly client."); 
             initFuture.complete(null);
           }
         }
       }
+      strategy.onSuccess();
     } catch (HttpErrorException e) {
-      ErrorInfo errorInfo = ErrorInfo.fromHttpError(e.getStatus());
-      boolean recoverable = checkIfErrorIsRecoverableAndLog(logger, httpErrorDescription(e.getStatus()),
-          ERROR_CONTEXT_MESSAGE, e.getStatus(), WILL_RETRY_MESSAGE);
-      if (recoverable) {
-        dataSourceUpdates.updateStatus(State.INTERRUPTED, errorInfo);
-      } else {
-        dataSourceUpdates.updateStatus(State.OFF, errorInfo);
-        initFuture.complete(null); // if client is initializing, make it stop waiting; has no effect if already inited
-        if (task != null) {
-          task.cancel(true);
-          task = null;
-        }
+      FailureClass failureClass = HttpErrors.classifyAndLogHttpFailure(
+          logger, e.getStatus(), ERROR_CONTEXT_MESSAGE, WILL_RETRY_MESSAGE);
+      tryUpdateStatus(State.INTERRUPTED, ErrorInfo.fromHttpError(e.getStatus()));
+      if (strategy.onFailure(failureClass)) {
+        logger.info("Classified failure as UNEXPECTED; engaging extended backoff.");
       }
     } catch (IOException e) {
-      checkIfErrorIsRecoverableAndLog(logger, e.toString(), ERROR_CONTEXT_MESSAGE, 0, WILL_RETRY_MESSAGE);
-      dataSourceUpdates.updateStatus(State.INTERRUPTED, ErrorInfo.fromException(ErrorKind.NETWORK_ERROR, e));
+      FailureClass failureClass = HttpErrors.classifyAndLogTransportFailure(
+          logger, e, ERROR_CONTEXT_MESSAGE, WILL_RETRY_MESSAGE);
+      tryUpdateStatus(State.INTERRUPTED, ErrorInfo.fromException(ErrorKind.NETWORK_ERROR, e));
+      if (strategy.onFailure(failureClass)) {
+        logger.info("Classified failure as UNEXPECTED; engaging extended backoff.");
+      }
     } catch (SerializationException e) {
       logger.error("Polling request received malformed data: {}", e.toString());
-      dataSourceUpdates.updateStatus(State.INTERRUPTED, ErrorInfo.fromException(ErrorKind.INVALID_DATA, e));
+      tryUpdateStatus(State.INTERRUPTED, ErrorInfo.fromException(ErrorKind.INVALID_DATA, e));
+      strategy.onFailure(FailureClass.NORMAL);
     } catch (Exception e) {
       logger.error("Unexpected error from polling processor: {}", e.toString());
       logger.debug(e.toString(), e);
-      dataSourceUpdates.updateStatus(State.INTERRUPTED, ErrorInfo.fromException(ErrorKind.UNKNOWN, e));
+      tryUpdateStatus(State.INTERRUPTED, ErrorInfo.fromException(ErrorKind.UNKNOWN, e));
+      strategy.onFailure(FailureClass.NORMAL);
+    } finally {
+      // Regardless of poll outcome, schedule the next attempt per strategy.
+      Duration wait = strategy.nextWait();
+      scheduleNext(wait);
     }
   }
 }

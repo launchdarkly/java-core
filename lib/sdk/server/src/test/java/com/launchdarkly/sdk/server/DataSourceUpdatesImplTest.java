@@ -57,6 +57,8 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.is;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 @SuppressWarnings("javadoc")
 public class DataSourceUpdatesImplTest {
@@ -163,10 +165,12 @@ public class DataSourceUpdatesImplTest {
 
   private static class LegacyDataStore implements DataStore {
     private final Map<DataKind, Map<String, ItemDescriptor>> data = new HashMap<>();
+    private String environmentId;
     
     @Override
     public void init(FullDataSet<ItemDescriptor> allData) {
       data.clear();
+      environmentId = allData.getEnvironmentId(); // recorded verbatim; retention is a store's responsibility
       for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> kindEntry : allData.getData()) {
         DataKind kind = kindEntry.getKey();
         Map<String, ItemDescriptor> items = new HashMap<>();
@@ -175,6 +179,11 @@ public class DataSourceUpdatesImplTest {
         }
         data.put(kind, items);
       }
+    }
+    
+    @Override
+    public String getEnvironmentId() {
+      return environmentId;
     }
     
     @Override
@@ -1034,9 +1043,14 @@ public class DataSourceUpdatesImplTest {
     );
     updates.apply(changeSet);
     
-    // Note: Java SDK doesn't have InitMetadata/EnvironmentId support in the same way as C#,
-    // so this test just verifies the changeset is applied without error
     ItemDescriptor retrievedFlag1 = legacyStore.get(FEATURES, flag1.getKey());
     assertThat(retrievedFlag1, is(org.hamcrest.Matchers.notNullValue()));
+    assertEquals("test-env-id", legacyStore.getEnvironmentId());
+
+    // The environment ID is passed through exactly as it appears on the change set. Whether an absent
+    // value clears a previously retained ID is decided by the store (see InMemoryDataStoreTest and
+    // PersistentDataStoreWrapperTest), not here.
+    updates.apply(new ChangeSet<>(ChangeSetType.Full, Selector.make(2, "state2"), data, null, true));
+    assertNull(legacyStore.getEnvironmentId());
   }
 }

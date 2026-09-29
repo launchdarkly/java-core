@@ -104,4 +104,16 @@ public interface DataStore extends Closeable {
    * @return a cache statistics object, or null if not applicable
    */
   CacheStats getCacheStats();
+
+  /**
+   * Returns the ID of the LaunchDarkly environment that the currently stored data came from.
+   * <p>
+   * This is the environment ID that was provided with the data, if any. The SDK makes it available
+   * to hook implementations.
+   *
+   * @return the environment ID, or null if it is unknown
+   */
+  default String getEnvironmentId() {
+    return null;
+  }
 }

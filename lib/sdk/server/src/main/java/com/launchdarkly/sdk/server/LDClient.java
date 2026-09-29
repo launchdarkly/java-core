@@ -40,6 +40,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.launchdarkly.sdk.server.DataModel.FEATURES;
@@ -66,6 +67,8 @@ public final class LDClient implements LDClientInterface {
   private final ScheduledExecutorService sharedExecutor;
   private final LDLogger baseLogger;
   private final LDLogger evaluationLogger;
+  // isFlagKnown logs its cached-data warning once per client. This flag records that log.
+  private final AtomicBoolean isFlagKnownCachedDataWarned = new AtomicBoolean(false);
 
   private static final int EXCESSIVE_INIT_WAIT_MILLIS = 60000;
 
@@ -158,7 +161,7 @@ public final class LDClient implements LDClientInterface {
    * constructor will not throw an exception for any error condition that could only be
    * detected after making a request to LaunchDarkly (such as an SDK key that is simply
    * wrong despite being valid ASCII, so it is invalid but not illegal); those are logged
-   * and treated as an unsuccessful initialization, as described above.
+   * and the SDK will keep retrying in the background as described above.
    *
    * @param sdkKey the SDK key for your LaunchDarkly environment
    * @param config a client configuration object
@@ -233,8 +236,10 @@ public final class LDClient implements LDClientInterface {
       this.evaluator = evaluator;
       this.migrationEvaluator = new MigrationStageEnforcingEvaluator(evaluator, evaluationLogger);
     } else {
-      this.evaluator = new EvaluatorWithHooks(evaluator, allHooks, this.baseLogger.subLogger(Loggers.HOOKS_LOGGER_NAME));
-      this.migrationEvaluator = new EvaluatorWithHooks(new MigrationStageEnforcingEvaluator(evaluator, evaluationLogger), allHooks, this.baseLogger.subLogger(Loggers.HOOKS_LOGGER_NAME));
+      this.evaluator = new EvaluatorWithHooks(evaluator, allHooks, this.baseLogger.subLogger(Loggers.HOOKS_LOGGER_NAME),
+          this.dataSystem::getEnvironmentId);
+      this.migrationEvaluator = new EvaluatorWithHooks(new MigrationStageEnforcingEvaluator(evaluator, evaluationLogger), allHooks,
+          this.baseLogger.subLogger(Loggers.HOOKS_LOGGER_NAME), this.dataSystem::getEnvironmentId);
     }
 
     // Create FlagTracker using the dataSystem's flag change notifier
@@ -427,7 +432,10 @@ public final class LDClient implements LDClientInterface {
     
     if (!isInitialized()) {
       if (store.isInitialized()) {
-        baseLogger.warn("isFlagKnown called before client initialized for feature flag \"{}\"; using last known values from data store", featureKey);
+        if (isFlagKnownCachedDataWarned.compareAndSet(false, true)) {
+          baseLogger.warn("isFlagKnown called before client initialized for feature flag \"{}\"; "
+              + "using last known values from data store. This message is logged once.", featureKey);
+        }
       } else {
         baseLogger.warn("isFlagKnown called before client initialized for feature flag \"{}\"; data store unavailable, returning false", featureKey);
         return false;

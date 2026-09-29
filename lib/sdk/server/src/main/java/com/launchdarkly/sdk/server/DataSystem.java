@@ -55,6 +55,13 @@ interface DataSystem {
    * @return the data store status provider
    */
   DataStoreStatusProvider getDataStoreStatusProvider();
+
+  /**
+   * Returns the ID of the LaunchDarkly environment the data came from, or null if it is not known.
+   *
+   * @return the environment ID, or null
+   */
+  String getEnvironmentId();
 }
 
 /**

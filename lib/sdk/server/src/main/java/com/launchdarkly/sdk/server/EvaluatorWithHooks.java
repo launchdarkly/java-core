@@ -1,6 +1,7 @@
 package com.launchdarkly.sdk.server;
 
 import com.launchdarkly.logging.LDLogger;
+import com.launchdarkly.logging.LogValues;
 import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.LDValueType;
@@ -11,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * An {@link EvaluatorInterface} that will invoke the evaluation series methods of the provided {@link Hook} when
@@ -21,13 +23,17 @@ class EvaluatorWithHooks implements EvaluatorInterface {
   private final EvaluatorInterface underlyingEvaluator;
   private final List<Hook> hooks;
   private final LDLogger logger;
+  private final Supplier<String> environmentIdSupplier;
 
   /**
-   * @param underlyingEvaluator that will do the actual flag evaluation
-   * @param hooks               that will be invoked at various stages of the evaluation series
-   * @param hooksLogger         that will be used to log
+   * @param underlyingEvaluator   that will do the actual flag evaluation
+   * @param hooks                 that will be invoked at various stages of the evaluation series
+   * @param hooksLogger           that will be used to log
+   * @param environmentIdSupplier provides the environment ID reported by LaunchDarkly, if known
    */
-  EvaluatorWithHooks(EvaluatorInterface underlyingEvaluator, List<Hook> hooks, LDLogger hooksLogger) {
+  EvaluatorWithHooks(EvaluatorInterface underlyingEvaluator, List<Hook> hooks, LDLogger hooksLogger,
+      Supplier<String> environmentIdSupplier) {
+    this.environmentIdSupplier = environmentIdSupplier;
     this.underlyingEvaluator = underlyingEvaluator;
     this.hooks = hooks;
     this.logger = hooksLogger;
@@ -40,7 +46,8 @@ class EvaluatorWithHooks implements EvaluatorInterface {
     int size = hooks.size();
     List<Map> seriesDataList = new ArrayList<>(size);
 
-    EvaluationSeriesContext seriesContext = new EvaluationSeriesContext(method, featureKey, context, defaultValue);
+    EvaluationSeriesContext seriesContext = new EvaluationSeriesContext(method, featureKey, context, defaultValue,
+        getEnvironmentId(featureKey));
     Map<String, Object> emptyMap = Collections.emptyMap();
     for (int i = 0; i < size; i++) {
       Hook currentHook = hooks.get(i);
@@ -66,6 +73,20 @@ class EvaluatorWithHooks implements EvaluatorInterface {
     }
 
     return result;
+  }
+
+  /**
+   * Gets the current environment ID from the supplier. The supplier ultimately reads from the data store,
+   * which may be a customer-provided implementation, so a failure here must not prevent the evaluation.
+   */
+  private String getEnvironmentId(String featureKey) {
+    try {
+      return environmentIdSupplier.get();
+    } catch (Exception e) {
+      logger.error("During evaluation of flag \"{}\". Unable to determine the environment ID for hooks: {}", featureKey,
+          LogValues.exceptionSummary(e));
+      return null;
+    }
   }
 
   @Override

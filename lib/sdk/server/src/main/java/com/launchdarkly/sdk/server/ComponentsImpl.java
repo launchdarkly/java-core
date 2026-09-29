@@ -146,6 +146,9 @@ abstract class ComponentsImpl {
           streamUri,
           payloadFilter,
           initialReconnectDelay,
+          StreamProcessor.DEFAULT_EXTENDED_INITIAL_RECONNECT_DELAY,
+          StreamProcessor.DEFAULT_EXTENDED_STREAM_MAX_RETRY_DELAY,
+          StreamProcessor.DEFAULT_RETRY_RESET_INTERVAL,
           logger);
     }
 
@@ -196,6 +199,7 @@ abstract class ComponentsImpl {
           context.getDataSourceUpdateSink(),
           ClientContextImpl.get(context).sharedExecutor,
           pollInterval,
+          PollingProcessor.DEFAULT_EXTENDED_INITIAL_DELAY,
           logger);
     }
 
