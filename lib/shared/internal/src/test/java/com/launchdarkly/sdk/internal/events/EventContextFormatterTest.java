@@ -24,6 +24,7 @@ import static com.launchdarkly.testhelpers.JsonAssertions.assertJsonEquals;
 public class EventContextFormatterTest extends BaseTest {
   private final LDContext context;
   private final boolean allAttributesPrivate;
+  private final boolean redactAnonymous;
   private final AttributeRef[] globalPrivateAttributes;
   private final String expectedJson;
 
@@ -31,11 +32,13 @@ public class EventContextFormatterTest extends BaseTest {
       String name,
       LDContext context,
       boolean allAttributesPrivate,
+      boolean redactAnonymous,
       AttributeRef[] globalPrivateAttributes,
       String expectedJson
       ) {
     this.context = context;
     this.allAttributesPrivate = allAttributesPrivate;
+    this.redactAnonymous = redactAnonymous;
     this.globalPrivateAttributes = globalPrivateAttributes;
     this.expectedJson = expectedJson;
   }
@@ -53,6 +56,7 @@ public class EventContextFormatterTest extends BaseTest {
               .set("attr1", "value1")
               .build(),
             false,
+            false,
             new AttributeRef[0],
             "{\"kind\": \"org\", \"key\": \"my-key\", \"name\": \"my-name\", \"attr1\": \"value1\"}"
         },
@@ -68,6 +72,7 @@ public class EventContextFormatterTest extends BaseTest {
                   .build()
                 ),
             false,
+            false,
             new AttributeRef[0],
             "{" +
                 "\"kind\": \"multi\"," +
@@ -79,6 +84,7 @@ public class EventContextFormatterTest extends BaseTest {
             "anonymous",
             LDContext.builder("my-key").kind("org").anonymous(true).build(),
             false,
+            false,
             new AttributeRef[0],
             "{\"kind\": \"org\", \"key\": \"my-key\", \"anonymous\": true}"
         },
@@ -89,6 +95,7 @@ public class EventContextFormatterTest extends BaseTest {
               .set("attr1", "value1")
               .build(),
             true,
+            false,
             new AttributeRef[0],
             "{" +
                 "\"kind\": \"org\"," +
@@ -106,6 +113,7 @@ public class EventContextFormatterTest extends BaseTest {
               .set("attr2", "value2")
               .privateAttributes("attr2")
               .build(),
+            false,
             false,
             new AttributeRef[] { AttributeRef.fromLiteral("name") },
             "{" +
@@ -125,6 +133,7 @@ public class EventContextFormatterTest extends BaseTest {
               .privateAttributes("/complex/a/b/d", "/complex/a/b/nonexistent-prop", "/complex/f", "/complex/g/g-is-not-an-object")
               .build(),
             false,
+            false,
             new AttributeRef[] { AttributeRef.fromPath("/address/street") },
             "{" +
                 "\"kind\": \"user\"," +
@@ -133,6 +142,82 @@ public class EventContextFormatterTest extends BaseTest {
                 "\"complex\": {\"a\": {\"b\": {\"c\": 1}, \"e\": 3}, \"g\": 5}," +
                 "\"_meta\": {" +
                     "\"redactedAttributes\": [\"/address/street\", \"/complex/a/b/d\", \"/complex/f\"]" +
+                "}" +
+            "}"
+        },
+        // A name that starts with a slash is reported as an escaped reference. Any other name
+        // is already a valid reference and is reported unchanged.
+        new Object[] {
+            "all attributes private globally - names needing escaping",
+            LDContext.builder("my-key").kind("org")
+              .set("/ssn", "123-45-6789")
+              .set("/a~b", "secret")
+              .set("c/d~e", "value")
+              .build(),
+            true,
+            false,
+            new AttributeRef[0],
+            "{" +
+                "\"kind\": \"org\"," +
+                "\"key\": \"my-key\"," +
+                "\"_meta\": {" +
+                    "\"redactedAttributes\": [\"/~1a~0b\", \"/~1ssn\", \"c/d~e\"]" +
+                "}" +
+            "}"
+        },
+        new Object[] {
+            "redacting anonymous context - names needing escaping",
+            LDContext.builder("my-key").kind("org")
+              .anonymous(true)
+              .name("my-name")
+              .set("/ssn", "123-45-6789")
+              .build(),
+            false,
+            true,
+            new AttributeRef[0],
+            "{" +
+                "\"kind\": \"org\"," +
+                "\"key\": \"my-key\"," +
+                "\"anonymous\": true," +
+                "\"_meta\": {" +
+                    "\"redactedAttributes\": [\"/~1ssn\", \"name\"]" +
+                "}" +
+            "}"
+        },
+        new Object[] {
+            "slash-prefixed attribute name configured as private",
+            LDContext.builder("my-key").kind("org")
+              .name("my-name")
+              .set("/ssn", "123-45-6789")
+              .build(),
+            false,
+            false,
+            new AttributeRef[] { AttributeRef.fromLiteral("/ssn") },
+            "{" +
+                "\"kind\": \"org\"," +
+                "\"key\": \"my-key\"," +
+                "\"name\": \"my-name\"," +
+                "\"_meta\": {" +
+                    "\"redactedAttributes\": [\"/~1ssn\"]" +
+                "}" +
+            "}"
+        },
+        new Object[] {
+            "slash-prefixed attribute name private for this context",
+            LDContext.builder("my-key").kind("org")
+              .name("my-name")
+              .set("/ssn", "123-45-6789")
+              .privateAttributes("/~1ssn")
+              .build(),
+            false,
+            false,
+            new AttributeRef[0],
+            "{" +
+                "\"kind\": \"org\"," +
+                "\"key\": \"my-key\"," +
+                "\"name\": \"my-name\"," +
+                "\"_meta\": {" +
+                    "\"redactedAttributes\": [\"/~1ssn\"]" +
                 "}" +
             "}"
         }
@@ -145,7 +230,7 @@ public class EventContextFormatterTest extends BaseTest {
     StringWriter sw = new StringWriter();
     JsonWriter jw = new JsonWriter(sw);
 
-    f.write(context, jw, false);
+    f.write(context, jw, redactAnonymous);
     jw.flush();
     
     String canonicalizedOutput = canonicalizeOutputJson(sw.toString());
