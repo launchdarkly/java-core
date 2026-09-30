@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.17.2](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.1...launchdarkly-java-server-sdk-7.17.2) (2026-09-30)
+
+
+### Bug Fixes
+
+* Bump java-sdk-internal to 1.12.2 for redactedAttributes escaping ([#203](https://github.com/launchdarkly/java-core/issues/203)) ([4c0c7bd](https://github.com/launchdarkly/java-core/commit/4c0c7bdf9540e9e20d9d2df5dc6f79e3e370dcb5))
+
 ## [7.17.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.0...launchdarkly-java-server-sdk-7.17.1) (2026-09-15)
 
 
