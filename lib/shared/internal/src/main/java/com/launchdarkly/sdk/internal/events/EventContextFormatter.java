@@ -103,10 +103,9 @@ class EventContextFormatter {
       List<String> redacted,
       boolean redactAnonymous
       ) throws IOException {
-    if (allAttributesPrivate) {
-      return addOrCreate(redacted, attrName);
-    } else if (redactAnonymous && c.isAnonymous()) {
-      return addOrCreate(redacted, attrName);
+    if (allAttributesPrivate || (redactAnonymous && c.isAnonymous())) {
+      // An escaped reference keeps a leading slash from reading as a path.
+      return addOrCreate(redacted, AttributeRef.fromLiteral(attrName).toString());
     }
     return writeRedactedValue(w, c, 0, attrName, value, null, redacted);
   }
