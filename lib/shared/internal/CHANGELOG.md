@@ -2,6 +2,13 @@
 
 All notable changes to the project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [1.12.2](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.12.1...launchdarkly-java-sdk-internal-1.12.2) (2026-09-30)
+
+
+### Bug Fixes
+
+* Escape attribute names reported in redactedAttributes ([#228](https://github.com/launchdarkly/java-core/issues/228)) ([b1a8f32](https://github.com/launchdarkly/java-core/commit/b1a8f32e57d1cd6e85fbfda98c2a560e208c3149))
+
 ## [1.12.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.12.0...launchdarkly-java-sdk-internal-1.12.1) (2026-09-28)
 
 
