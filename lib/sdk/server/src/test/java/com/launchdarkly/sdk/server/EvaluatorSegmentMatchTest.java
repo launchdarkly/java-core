@@ -179,7 +179,7 @@ public class EvaluatorSegmentMatchTest extends EvaluatorTestBase {
   }
 
   private void testRolloutBucketing(String bucketByValue, LDContext context, ContextKind contextKind, AttributeRef bucketBy) {
-    float expectedBucketValue = computeBucketValue(false, null, LDContext.create(bucketByValue), null,
+    double expectedBucketValue = computeBucketValue(false, null, LDContext.create(bucketByValue), null,
         SEGMENT_KEY, null, ARBITRARY_SALT);
     int bucketValueAsInt = (int)(expectedBucketValue * 100000);
     Clause clause = clauseMatchingContext(context);

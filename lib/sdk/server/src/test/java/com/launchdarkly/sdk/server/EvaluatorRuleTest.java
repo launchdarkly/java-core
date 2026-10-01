@@ -166,7 +166,7 @@ public class EvaluatorRuleTest {
       ) {
     String flagKey = "feature";
     String salt = "abc";
-    float expectedBucketValue = computeBucketValue(false, null, LDContext.create(bucketByValue), null,
+    double expectedBucketValue = computeBucketValue(false, null, LDContext.create(bucketByValue), null,
         flagKey, null, salt);
     int bucketValueAsInt = (int)(expectedBucketValue * 100000);
     Clause clause = clauseMatchingContext(context);
