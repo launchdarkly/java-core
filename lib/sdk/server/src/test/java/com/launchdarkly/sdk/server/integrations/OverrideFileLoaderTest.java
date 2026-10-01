@@ -87,7 +87,7 @@ public class OverrideFileLoaderTest {
   }
 
   @Test
-  public void valueOnlyEntryBecomesOffFlagServingTheValue() throws Exception {
+  public void valueOnlyEntryBecomesFallthroughFlagServingTheValue() throws Exception {
     try (TempDir dir = TempDir.create()) {
       Path file = write(dir, "overrides.json", "{\"flagValues\":{\"f2\":\"x\"}}");
       LoadResult result = loader(file).load();
@@ -96,8 +96,9 @@ public class OverrideFileLoaderTest {
       LDValue flag = json(FEATURES, f2);
       assertEquals(LDValue.of("f2"), flag.get("key"));
       assertEquals(LDValue.of(0), flag.get("version"));
-      assertEquals(LDValue.of(false), flag.get("on"));
-      assertEquals(LDValue.of(0), flag.get("offVariation"));
+      assertEquals(LDValue.of(true), flag.get("on"));
+      assertEquals(LDValue.ofNull(), flag.get("offVariation"));
+      assertEquals(LDValue.of(0), flag.get("fallthrough").get("variation"));
       assertEquals(LDValue.buildArray().add("x").build(), flag.get("variations"));
     }
   }
