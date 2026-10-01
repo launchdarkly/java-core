@@ -78,7 +78,8 @@ public abstract class FileOverrides {
    * The files use the same document format as the file data source (see {@link FileData}): each
    * file is a JSON or YAML document with optional {@code "flags"}, {@code "flagValues"}, and
    * {@code "segments"} members. A {@code "flagValues"} entry is expanded into a full flag
-   * definition that is off and serves the given value as its single variation for every context.
+   * definition that is on and serves the given value as its single variation by fallthrough for
+   * every context.
    * When multiple files are configured, their entries are combined in the configured order, and
    * the duplicate keys handling decides which file wins for a key that appears more than once.
    * <p>
