@@ -175,12 +175,13 @@ public class FileOverrideSourceTest {
       assertNotNull("the initial snapshot must be supplied before start returns", snapshot);
       assertEquals(7, snapshot.get(FEATURES.getName()).get("full").getVersion());
       assertEquals("value", flagValue(snapshot, "simple"));
-      // A value-only entry is an off flag with version 0.
+      // A value-only entry is a flag served by fallthrough with version 0.
       ItemDescriptor simple = snapshot.get(FEATURES.getName()).get("simple");
       assertEquals(0, simple.getVersion());
       LDValue simpleJson = LDValue.parse(FEATURES.serialize(simple));
-      assertEquals(LDValue.of(false), simpleJson.get("on"));
-      assertEquals(LDValue.of(0), simpleJson.get("offVariation"));
+      assertEquals(LDValue.of(true), simpleJson.get("on"));
+      assertEquals(LDValue.of(0), simpleJson.get("fallthrough").get("variation"));
+      assertEquals(LDValue.ofNull(), simpleJson.get("offVariation"));
       assertEquals(3, snapshot.get(SEGMENTS.getName()).get("seg").getVersion());
       assertThat(logCapture.getMessageStrings(), hasItem(
           "INFO:Flag overrides in effect: 2 flags, 1 segment (" + file + ": 2 flags, 1 segment)"));
