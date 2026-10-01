@@ -187,7 +187,7 @@ final class OverrideFileLoader {
         }
         if (fileContents.flagValues != null) {
           for (Map.Entry<String, LDValue> e : fileContents.flagValues.entrySet()) {
-            if (add(data, FEATURES, e.getKey(), FlagFactory.offFlagWithValue(e.getKey(), e.getValue()))) {
+            if (add(data, FEATURES, e.getKey(), FlagFactory.flagWithValue(e.getKey(), e.getValue(), 0))) {
               flagsAdded++;
             }
           }

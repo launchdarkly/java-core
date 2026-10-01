@@ -203,25 +203,10 @@ abstract class FileDataSourceParsing {
     }
 
     /**
-     * Constructs a flag that is off and serves the given value as its single variation for every
-     * context. The document supplies no version, so the flag has version zero. This is the shape
-     * that the override source uses for value-only entries. The file data source keeps
-     * {@link #flagWithValue(String, LDValue, int)}.
-     */
-    static ItemDescriptor offFlagWithValue(String key, LDValue jsonValue) {
-      LDValue o = LDValue.buildObject()
-            .put("key", key)
-            .put("version", 0)
-            .put("on", false)
-            .put("offVariation", 0)
-            .put("variations", LDValue.buildArray().add(jsonValue).build())
-            .build();
-      return FEATURES.deserialize(o.toJsonString());
-    }
-    
-    /**
      * Constructs a flag that always returns the same value. This is done by giving it a single
-     * variation and setting the fallthrough variation to that.
+     * variation and setting the fallthrough variation to that. The file data source passes its
+     * load version. The override source passes version zero, because its documents supply no
+     * version for a value-only entry.
      */
     static ItemDescriptor flagWithValue(String key, LDValue jsonValue, int version) {
       LDValue o = LDValue.buildObject()
