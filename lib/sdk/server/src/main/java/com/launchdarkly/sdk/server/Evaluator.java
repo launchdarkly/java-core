@@ -333,7 +333,7 @@ class Evaluator {
     } else {
       Rollout rollout = vr.getRollout();
       if (rollout != null && !rollout.getVariations().isEmpty()) {
-        float bucket = computeBucketValue(
+        double bucket = computeBucketValue(
             rollout.isExperiment(),
             rollout.getSeed(),
             context,
@@ -343,13 +343,16 @@ class Evaluator {
             flag.getSalt()
         );
         boolean contextWasFound = bucket >= 0; // see comment on computeBucketValue
-        float sum = 0F;
+        // The weights are summed as integers and divided only at each comparison, rather than
+        // accumulating a floating-point sum, so that rounding errors cannot accumulate and
+        // shift the bucket boundaries.
+        long weightSum = 0;
         List<WeightedVariation> variations = rollout.getVariations(); // guaranteed non-null
         int nVariations = variations.size();
         for (int i = 0; i < nVariations; i++) {
           WeightedVariation wv = variations.get(i);
-          sum += (float) wv.getWeight() / 100000F;
-          if (bucket < sum) {
+          weightSum += wv.getWeight();
+          if (bucket < weightSum / 100000.0) {
             variation = wv.getVariation();
             inExperiment = vr.getRollout().isExperiment() && !wv.isUntracked() && contextWasFound;
             break;

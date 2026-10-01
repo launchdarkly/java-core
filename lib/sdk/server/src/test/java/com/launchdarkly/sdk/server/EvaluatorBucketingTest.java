@@ -58,8 +58,8 @@ public class EvaluatorBucketingTest {
     String salt = "salt";
     Integer seed = 123;
     
-    float bucketValue1 = computeBucketValue(false, noSeed, context, null, flagKey, null, salt);
-    float bucketValue2 = computeBucketValue(true, seed, context, null, flagKey, null, salt);
+    double bucketValue1 = computeBucketValue(false, noSeed, context, null, flagKey, null, salt);
+    double bucketValue2 = computeBucketValue(true, seed, context, null, flagKey, null, salt);
     assert(bucketValue1 != bucketValue2);
   }
 
@@ -71,8 +71,8 @@ public class EvaluatorBucketingTest {
     Integer seed1 = 123;
     Integer seed2 = 456;
     
-    float bucketValue1 = computeBucketValue(true, seed1, context, null, flagKey, null, salt);
-    float bucketValue2 = computeBucketValue(true, seed2, context, null, flagKey, null, salt);
+    double bucketValue1 = computeBucketValue(true, seed1, context, null, flagKey, null, salt);
+    double bucketValue2 = computeBucketValue(true, seed2, context, null, flagKey, null, salt);
     assert(bucketValue1 != bucketValue2);
   }
 
@@ -85,8 +85,8 @@ public class EvaluatorBucketingTest {
     String salt2 = "salt2";
     Integer seed = 123;
     
-    float bucketValue1 = computeBucketValue(true, seed, context, null, flagKey1, null, salt1);
-    float bucketValue2 = computeBucketValue(true, seed, context, null, flagKey2, null, salt2);
+    double bucketValue1 = computeBucketValue(true, seed, context, null, flagKey1, null, salt1);
+    double bucketValue2 = computeBucketValue(true, seed, context, null, flagKey2, null, salt2);
     assert(bucketValue1 == bucketValue2);
   }
 
@@ -111,9 +111,9 @@ public class EvaluatorBucketingTest {
         .set("stringattr", "33333")
         .set("intattr", 33333)
         .build();
-    float resultForString = computeBucketValue(false, noSeed, context, null, "key", AttributeRef.fromLiteral("stringattr"), "salt");
-    float resultForInt = computeBucketValue(false, noSeed, context, null, "key", AttributeRef.fromLiteral("intattr"), "salt");
-    assertEquals(resultForString, resultForInt, Float.MIN_VALUE);
+    double resultForString = computeBucketValue(false, noSeed, context, null, "key", AttributeRef.fromLiteral("stringattr"), "salt");
+    double resultForInt = computeBucketValue(false, noSeed, context, null, "key", AttributeRef.fromLiteral("intattr"), "salt");
+    assertEquals(resultForString, resultForInt, 0.0);
   }
 
   @Test
@@ -121,8 +121,8 @@ public class EvaluatorBucketingTest {
     LDContext context = LDContext.builder("key")
         .set("floatattr", 33.5f)
         .build();
-    float result = computeBucketValue(false, noSeed, context, null, "key", AttributeRef.fromLiteral("floatattr"), "salt");
-    assertEquals(0f, result, Float.MIN_VALUE);
+    double result = computeBucketValue(false, noSeed, context, null, "key", AttributeRef.fromLiteral("floatattr"), "salt");
+    assertEquals(0d, result, 0.0);
   }
 
   @Test
@@ -130,8 +130,8 @@ public class EvaluatorBucketingTest {
     LDContext context = LDContext.builder("key")
         .set("boolattr", true)
         .build();
-    float result = computeBucketValue(false, noSeed, context, null, "key", AttributeRef.fromLiteral("boolattr"), "salt");
-    assertEquals(0f, result, Float.MIN_VALUE);
+    double result = computeBucketValue(false, noSeed, context, null, "key", AttributeRef.fromLiteral("boolattr"), "salt");
+    assertEquals(0d, result, 0.0);
   }
 
   @Test
@@ -139,11 +139,11 @@ public class EvaluatorBucketingTest {
     LDContext context = LDContext.builder("key")
         .set("stringattr", "33333")
         .build();
-    float result = computeBucketValue(false, noSeed, context, null, "key", AttributeRef.fromLiteral("stringattr"), "salt");
+    double result = computeBucketValue(false, noSeed, context, null, "key", AttributeRef.fromLiteral("stringattr"), "salt");
     String hash = DigestUtils.sha1Hex("key.salt.33333").substring(0, 15);
     long longVal = Long.parseLong(hash, 16);
-    float expectedResult = longVal / (float) 0xFFFFFFFFFFFFFFFL;
-    assertEquals(expectedResult, result, Float.MIN_VALUE);
+    double expectedResult = longVal / (double) 0xFFFFFFFFFFFFFFFL;
+    assertEquals(expectedResult, result, 0.0);
   }
 
   private static void assertVariationIndexFromRollout(

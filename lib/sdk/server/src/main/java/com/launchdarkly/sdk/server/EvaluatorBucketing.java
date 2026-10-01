@@ -13,7 +13,7 @@ import org.apache.commons.codec.digest.DigestUtils;
 abstract class EvaluatorBucketing {
   private EvaluatorBucketing() {}
   
-  private static final float LONG_SCALE = (float) 0xFFFFFFFFFFFFFFFL;
+  private static final double LONG_SCALE = (double) 0xFFFFFFFFFFFFFFFL;
 
   // Computes a bucket value for a rollout or experiment. If an error condition prevents
   // us from computing a valid bucket value, we return 0, which will cause the evaluator
@@ -21,7 +21,7 @@ abstract class EvaluatorBucketing {
   // found, in which case we return the special value -1; this similarly will cause the
   // first bucket to be chosen (since it is less than the end value of the bucket, just
   // as 0 is), but also tells the evaluator that inExperiment must be set to false.
-  static float computeBucketValue(
+  static double computeBucketValue(
       boolean isExperiment,
       Integer seed,
       LDContext context,
@@ -67,7 +67,7 @@ abstract class EvaluatorBucketing {
     }
     longVal <<= 4;
     longVal |= ((hash[7] >> 4) & 0xf);
-    return (float) longVal / LONG_SCALE;
+    return (double) longVal / LONG_SCALE;
   }
 
   private static boolean getBucketableStringValue(StringBuilder keyBuilder, LDValue userValue) {
