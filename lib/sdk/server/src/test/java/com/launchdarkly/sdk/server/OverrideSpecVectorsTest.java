@@ -59,9 +59,11 @@ public class OverrideSpecVectorsTest extends BaseTest {
       flagItems.add(new AbstractMap.SimpleEntry<>(key, FEATURES.deserialize(flags.get(key).toJsonString())));
     }
     for (String key : flagValues.keys()) {
-      // A value-only entry is a flag that is off and serves the value as its single variation.
-      LDValue flag = LDValue.buildObject().put("key", key).put("version", 0).put("on", false)
-          .put("offVariation", 0).put("variations", LDValue.buildArray().add(flagValues.get(key)).build()).build();
+      // A value-only entry is a flag that is on and serves the value as its single variation by
+      // fallthrough.
+      LDValue flag = LDValue.buildObject().put("key", key).put("version", 0).put("on", true)
+          .put("variations", LDValue.buildArray().add(flagValues.get(key)).build())
+          .put("fallthrough", LDValue.buildObject().put("variation", 0).build()).build();
       flagItems.add(new AbstractMap.SimpleEntry<>(key, FEATURES.deserialize(flag.toJsonString())));
     }
     List<Map.Entry<String, ItemDescriptor>> segmentItems = new ArrayList<>();
