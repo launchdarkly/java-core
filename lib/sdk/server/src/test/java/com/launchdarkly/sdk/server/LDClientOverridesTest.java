@@ -57,7 +57,7 @@ public class LDClientOverridesTest extends BaseTest {
   private static final LDValue DEFAULT = LDValue.of("default");
 
   private static FeatureFlag valueFlag(String key, String value) {
-    return flagBuilder(key).version(1).on(false).offVariation(0).variations(LDValue.of(value)).build();
+    return flagBuilder(key).version(1).on(true).fallthroughVariation(0).variations(LDValue.of(value)).build();
   }
 
   private LDConfig.Builder configWith(DataSystemBuilder dataSystem) {
@@ -81,7 +81,7 @@ public class LDClientOverridesTest extends BaseTest {
   private static void assertOverrideServed(EvaluationDetail<LDValue> detail, String value) {
     assertEquals(LDValue.of(value), detail.getValue());
     assertEquals(0, detail.getVariationIndex());
-    assertEquals(EvaluationReason.off().withOverrideAffected(true), detail.getReason());
+    assertEquals(EvaluationReason.fallthrough().withOverrideAffected(true), detail.getReason());
   }
 
   private static void assertNotReady(EvaluationDetail<LDValue> detail) {
@@ -130,7 +130,7 @@ public class LDClientOverridesTest extends BaseTest {
       assertOverrideServed(client.jsonValueVariationDetail("shared", CONTEXT, DEFAULT), "override-value");
       EvaluationDetail<LDValue> plain = client.jsonValueVariationDetail("plain", CONTEXT, DEFAULT);
       assertEquals(LDValue.of("plain-value"), plain.getValue());
-      assertEquals(EvaluationReason.off(), plain.getReason());
+      assertEquals(EvaluationReason.fallthrough(), plain.getReason());
       assertFalse(plain.getReason().isOverrideAffected());
 
       // Removing the override returns the flag to LaunchDarkly data.
