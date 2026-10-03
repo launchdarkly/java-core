@@ -32,9 +32,9 @@ import static com.launchdarkly.sdk.server.DataModel.SEGMENTS;
  * <p>
  * This loader is separate from the file data source's loader because the override source has
  * different rules: a configured file that does not exist contributes no entries, entries keep the
- * versions that the documents specify, a value-only entry becomes a flag that is off and serves the
- * value, and every failure to read or parse a file is reported as a file data error. The file data
- * source keeps its own behavior.
+ * versions that the documents specify, a value-only entry becomes a flag that is on and serves the
+ * value by fallthrough, and every failure to read or parse a file is reported as a file data error.
+ * The file data source keeps its own behavior.
  */
 final class OverrideFileLoader {
   /**
