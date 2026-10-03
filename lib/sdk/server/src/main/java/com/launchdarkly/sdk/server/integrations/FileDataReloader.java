@@ -54,16 +54,19 @@ final class FileDataReloader implements Closeable {
    */
   interface Handler {
     /**
-     * Called with each successfully merged result.
+     * Called with each successfully merged result. An exception thrown here fails the reload: it is
+     * reported through {@link #onError(FileDataException)}, nothing from the load is remembered as
+     * the last good result, and the reload is retried.
      *
      * @param result the merged data
      */
     void apply(LoadResult result);
 
     /**
-     * Called when a reload fails, once per distinct failure. With automatic retries, repeats of an
-     * identical failure do not call this again. A success re-arms it. The reloader logs failures
-     * itself, so implementations only need to update their own state.
+     * Called when a reload fails, including when {@link #apply(LoadResult)} throws, once per
+     * distinct failure. With automatic retries, repeats of an identical failure do not call this
+     * again. A success re-arms it. The reloader logs failures itself, so implementations only need
+     * to update their own state.
      *
      * @param e the failure
      */
@@ -291,13 +294,20 @@ final class FileDataReloader implements Closeable {
       // last success. The consumer heard about the failure and may have moved to an interrupted
       // state. Only apply tells it that things are good again.
       boolean recovering = lastErrorMessage != null;
-      lastErrorMessage = null;
       byte[] hash = result.getContentHash();
       if (skipUnchanged && !recovering && hash != null && Arrays.equals(hash, lastGoodHash)) {
         return true;
       }
+      // Nothing is remembered until the consumer has accepted the result. A result that the
+      // consumer rejects must not become the baseline that skip-unchanged compares against, and
+      // must not count as a recovery.
+      try {
+        handler.apply(result);
+      } catch (RuntimeException e) {
+        return fail(new FileDataException("unable to apply flag data", e));
+      }
+      lastErrorMessage = null;
       lastGoodHash = hash;
-      handler.apply(result);
       return true;
     }
   }
