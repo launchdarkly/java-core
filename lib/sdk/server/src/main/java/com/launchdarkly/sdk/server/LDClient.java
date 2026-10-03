@@ -209,7 +209,8 @@ public final class LDClient implements LDClientInterface {
       this.dataSystem = FDv1DataSystem.create(baseLogger, config, context, context.getLogging());
     }
 
-    EvaluatorInterface evaluator = new InputValidatingEvaluator(this.dataSystem.getStore(), bigSegmentStoreWrapper, eventProcessor, evaluationLogger);
+    EvaluatorInterface evaluator = new InputValidatingEvaluator(this.dataSystem.getStore(),
+        this.dataSystem.getOverrideLayer(), bigSegmentStoreWrapper, eventProcessor, evaluationLogger);
 
     // build environment metadata for plugins
     SdkMetadata sdkMetadata;
