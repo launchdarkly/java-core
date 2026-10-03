@@ -14,6 +14,8 @@ import java.io.Closeable;
  * <p>
  * To configure an override source, use
  * {@link com.launchdarkly.sdk.server.integrations.DataSystemBuilder#overrides(ComponentConfigurer)}.
+ * The SDK provides a file-based source; see
+ * {@link com.launchdarkly.sdk.server.integrations.FileOverrides}.
  * <p>
  * Flag overrides are currently experimental and subject to change.
  *
