@@ -1,6 +1,7 @@
 package com.launchdarkly.sdk.server.integrations;
 
 import com.launchdarkly.logging.LDLogger;
+import com.launchdarkly.logging.LogValues;
 import com.launchdarkly.sdk.server.integrations.FileDataSourceParsing.FileDataException;
 import com.launchdarkly.sdk.server.integrations.FileOverrides.ChangeDetection;
 import com.launchdarkly.sdk.server.integrations.OverrideFileLoader.FileSummary;
@@ -91,7 +92,8 @@ final class FileOverrideSourceImpl implements OverrideSource {
         w.start(reloader::trigger);
       } catch (IOException e) {
         // COVERAGE: constructing a watcher only fails under unusual OS conditions
-        logger.error("Unable to watch override files: {}", e.toString());
+        logger.error("Unable to watch override files: {}", LogValues.exceptionSummary(e));
+        logger.debug(LogValues.exceptionTrace(e));
       }
       break;
     case POLLING:
