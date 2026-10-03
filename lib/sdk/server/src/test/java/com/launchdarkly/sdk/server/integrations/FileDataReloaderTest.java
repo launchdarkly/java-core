@@ -24,6 +24,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.Matchers.startsWith;
 import static org.junit.Assert.assertEquals;
@@ -85,6 +86,13 @@ public class FileDataReloaderTest {
       return this;
     }
 
+    ScriptedLoader thenThrow(RuntimeException e) {
+      steps.add(() -> {
+        throw e;
+      });
+      return this;
+    }
+
     @Override
     public LoadResult load() throws FileDataException {
       // Both latches are read before the entered signal, so a test that clears them after the
@@ -125,7 +133,7 @@ public class FileDataReloaderTest {
     }
   }
 
-  private static final class RecordingHandler implements FileDataReloader.Handler {
+  private static class RecordingHandler implements FileDataReloader.Handler {
     final List<LoadResult> applied = Collections.synchronizedList(new ArrayList<>());
     final List<FileDataException> errors = Collections.synchronizedList(new ArrayList<>());
 
@@ -483,29 +491,51 @@ public class FileDataReloaderTest {
   }
 
   @Test
-  public void unexpectedRuntimeExceptionFromHandlerIsLoggedAndWorkerSurvives() throws Exception {
-    ScriptedLoader loader = new ScriptedLoader().then(resultWithHash(1)).then(resultWithHash(2));
+  public void applyThatThrowsIsReportedAsAFailureAndRetried() throws Exception {
+    LoadResult result = resultWithHash(1);
+    ScriptedLoader loader = new ScriptedLoader().then(result);
     AtomicInteger applies = new AtomicInteger();
-    FileDataReloader.Handler handler = new FileDataReloader.Handler() {
+    RecordingHandler handler = new RecordingHandler() {
       @Override
-      public void apply(LoadResult result) {
+      public void apply(LoadResult r) {
         if (applies.incrementAndGet() == 1) {
           throw new IllegalStateException("consumer failed");
         }
-      }
-
-      @Override
-      public void onError(FileDataException e) {
+        super.apply(r);
       }
     };
-    FileDataReloader r = new FileDataReloader(loader, handler, logger, Duration.ZERO, Duration.ZERO, false);
-    reloaders.add(r);
+    FileDataReloader r = reloader(loader, handler, Duration.ZERO, SHORT, true);
 
-    r.trigger();
-    awaitAtLeast(applies, 1);
-    r.trigger();
-    awaitAtLeast(applies, 2);
+    // The initial load's apply throws. The reload returns normally and reports the failure.
+    r.reloadNow();
+    assertTrue(handler.applied.isEmpty());
+    assertEquals(1, handler.errors.size());
+    assertThat(handler.errors.get(0).getCause(), instanceOf(IllegalStateException.class));
+    assertThat(logCapture.getMessageStrings(), hasItem(startsWith("ERROR:Unable to load flags:")));
 
+    // The retry applies the same content without a further trigger.
+    awaitSize(handler.applied, 1);
+    assertEquals(result, handler.applied.get(0));
+
+    // Only now is the content remembered: a further reload of it is skipped.
+    r.trigger();
+    awaitAtLeast(loader.calls, 3);
+    assertEquals(1, handler.applied.size());
+  }
+
+  @Test
+  public void unexpectedRuntimeExceptionFromLoaderIsLoggedAndWorkerSurvives() throws Exception {
+    ScriptedLoader loader = new ScriptedLoader().thenThrow(new IllegalStateException("loader failed"))
+        .then(resultWithHash(1));
+    RecordingHandler handler = new RecordingHandler();
+    FileDataReloader r = reloader(loader, handler, Duration.ZERO, Duration.ZERO, false);
+
+    // The first reload's loader throws something other than a file data failure.
+    r.trigger();
+    awaitAtLeast(loader.calls, 1);
+    // The worker must still run the next reload, and the exception must have been logged.
+    r.trigger();
+    awaitSize(handler.applied, 1);
     assertThat(logCapture.getMessageStrings(),
         hasItem(startsWith("ERROR:Unexpected error while reloading flag data:")));
   }
