@@ -96,7 +96,7 @@ final class FileOverrideSourceImpl implements OverrideSource {
       break;
     case POLLING:
     default:
-      poller = new FileDataPoller(paths, pollInterval, reloader::trigger);
+      poller = new FileDataPoller(paths, pollInterval, reloader::trigger, logger);
       break;
     }
   }
