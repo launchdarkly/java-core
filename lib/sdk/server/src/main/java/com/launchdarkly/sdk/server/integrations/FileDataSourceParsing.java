@@ -193,10 +193,20 @@ abstract class FileDataSourceParsing {
     static ItemDescriptor flagFromJson(LDValue jsonTree, int version) {
       return FEATURES.deserialize(replaceVersion(jsonTree, version).toJsonString());
     }
-    
+
+    /**
+     * Constructs a flag from raw JSON and keeps the version that the document specifies. The
+     * override source uses this. The file data source keeps assigning its load version.
+     */
+    static ItemDescriptor flagFromJson(LDValue jsonTree) {
+      return FEATURES.deserialize(jsonTree.toJsonString());
+    }
+
     /**
      * Constructs a flag that always returns the same value. This is done by giving it a single
-     * variation and setting the fallthrough variation to that.
+     * variation and setting the fallthrough variation to that. The file data source passes its
+     * load version. The override source passes version zero, because its documents supply no
+     * version for a value-only entry.
      */
     static ItemDescriptor flagWithValue(String key, LDValue jsonValue, int version) {
       LDValue o = LDValue.buildObject()
@@ -213,6 +223,14 @@ abstract class FileDataSourceParsing {
     
     static ItemDescriptor segmentFromJson(LDValue jsonTree, int version) {
       return SEGMENTS.deserialize(replaceVersion(jsonTree, version).toJsonString());
+    }
+
+    /**
+     * Constructs a segment from raw JSON and keeps the version that the document specifies. The
+     * override source uses this.
+     */
+    static ItemDescriptor segmentFromJson(LDValue jsonTree) {
+      return SEGMENTS.deserialize(jsonTree.toJsonString());
     }
     
     private static LDValue replaceVersion(LDValue objectValue, int version) {
