@@ -1,5 +1,9 @@
 package com.launchdarkly.sdk.server.integrations;
 
+import com.launchdarkly.logging.LDLogLevel;
+import com.launchdarkly.logging.LDLogger;
+import com.launchdarkly.logging.LogCapture;
+import com.launchdarkly.logging.Logs;
 import com.launchdarkly.testhelpers.TempDir;
 
 import org.junit.Test;
@@ -22,6 +26,7 @@ import static org.junit.Assert.assertTrue;
 
 @SuppressWarnings("javadoc")
 public class FileDataPollerTest {
+  private static final LDLogger testLogger = LDLogger.none();
   private static final Duration INTERVAL = Duration.ofMillis(20);
   private static final long WAIT_MILLIS = 5000;
   private static final long QUIET_MILLIS = 250;
@@ -53,7 +58,7 @@ public class FileDataPollerTest {
     try (TempDir dir = TempDir.create()) {
       Path file = createFile(dir, "a.json", "{}", 1000_000);
       AtomicInteger changes = new AtomicInteger();
-      try (FileDataPoller poller = new FileDataPoller(Collections.singletonList(file), INTERVAL, changes::incrementAndGet)) {
+      try (FileDataPoller poller = new FileDataPoller(Collections.singletonList(file), INTERVAL, changes::incrementAndGet, testLogger)) {
         Thread.sleep(QUIET_MILLIS);
         assertEquals(0, changes.get());
 
@@ -68,7 +73,7 @@ public class FileDataPollerTest {
     try (TempDir dir = TempDir.create()) {
       Path file = createFile(dir, "a.json", "{}", 1000_000);
       AtomicInteger changes = new AtomicInteger();
-      try (FileDataPoller poller = new FileDataPoller(Collections.singletonList(file), INTERVAL, changes::incrementAndGet)) {
+      try (FileDataPoller poller = new FileDataPoller(Collections.singletonList(file), INTERVAL, changes::incrementAndGet, testLogger)) {
         rewrite(file, "{\"flagValues\":{}}", 1000_000);
         awaitCount(changes, 1);
       }
@@ -80,7 +85,7 @@ public class FileDataPollerTest {
     try (TempDir dir = TempDir.create()) {
       Path file = createFile(dir, "a.json", "{}", 1000_000);
       AtomicInteger changes = new AtomicInteger();
-      try (FileDataPoller poller = new FileDataPoller(Collections.singletonList(file), INTERVAL, changes::incrementAndGet)) {
+      try (FileDataPoller poller = new FileDataPoller(Collections.singletonList(file), INTERVAL, changes::incrementAndGet, testLogger)) {
         rewrite(file, "{}", 2000_000);
         awaitCount(changes, 1);
         Thread.sleep(QUIET_MILLIS);
@@ -94,7 +99,7 @@ public class FileDataPollerTest {
     try (TempDir dir = TempDir.create()) {
       Path file = dir.getPath().resolve("later.json");
       AtomicInteger changes = new AtomicInteger();
-      try (FileDataPoller poller = new FileDataPoller(Collections.singletonList(file), INTERVAL, changes::incrementAndGet)) {
+      try (FileDataPoller poller = new FileDataPoller(Collections.singletonList(file), INTERVAL, changes::incrementAndGet, testLogger)) {
         Thread.sleep(QUIET_MILLIS);
         assertEquals(0, changes.get());
 
@@ -109,7 +114,7 @@ public class FileDataPollerTest {
     try (TempDir dir = TempDir.create()) {
       Path file = createFile(dir, "a.json", "{}", 1000_000);
       AtomicInteger changes = new AtomicInteger();
-      try (FileDataPoller poller = new FileDataPoller(Collections.singletonList(file), INTERVAL, changes::incrementAndGet)) {
+      try (FileDataPoller poller = new FileDataPoller(Collections.singletonList(file), INTERVAL, changes::incrementAndGet, testLogger)) {
         Files.delete(file);
         awaitCount(changes, 1);
       }
@@ -123,7 +128,7 @@ public class FileDataPollerTest {
       Path second = createFile(dir, "b.json", "{}", 1000_000);
       List<Path> paths = Arrays.asList(first, second);
       AtomicInteger changes = new AtomicInteger();
-      try (FileDataPoller poller = new FileDataPoller(paths, INTERVAL, changes::incrementAndGet)) {
+      try (FileDataPoller poller = new FileDataPoller(paths, INTERVAL, changes::incrementAndGet, testLogger)) {
         rewrite(second, "{}", 2000_000);
         awaitCount(changes, 1);
         rewrite(first, "{}", 2000_000);
@@ -137,7 +142,7 @@ public class FileDataPollerTest {
     try (TempDir dir = TempDir.create()) {
       Path file = createFile(dir, "a.json", "{}", 1000_000);
       AtomicInteger changes = new AtomicInteger();
-      FileDataPoller poller = new FileDataPoller(Collections.singletonList(file), INTERVAL, changes::incrementAndGet);
+      FileDataPoller poller = new FileDataPoller(Collections.singletonList(file), INTERVAL, changes::incrementAndGet, testLogger);
       poller.close();
       poller.close(); // idempotent
 
@@ -160,7 +165,7 @@ public class FileDataPollerTest {
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
         }
-      });
+      }, testLogger);
       rewrite(file, "{}", 2000_000);
       assertTrue(entered.await(WAIT_MILLIS, TimeUnit.MILLISECONDS));
 
@@ -168,6 +173,31 @@ public class FileDataPollerTest {
       poller.close();
       assertThat(System.currentTimeMillis() - start, lessThan(1000L));
       release.countDown();
+    }
+  }
+
+  @Test
+  public void pollingContinuesAfterTheCallbackThrows() throws Exception {
+    LogCapture logCapture = Logs.capture();
+    LDLogger logger = LDLogger.withAdapter(logCapture, "");
+    try (TempDir dir = TempDir.create()) {
+      Path file = createFile(dir, "a.json", "{}", 1000_000);
+      AtomicInteger changes = new AtomicInteger();
+      Runnable onChange = () -> {
+        if (changes.incrementAndGet() == 1) {
+          throw new IllegalStateException("consumer failed");
+        }
+      };
+      try (FileDataPoller poller = new FileDataPoller(Collections.singletonList(file), INTERVAL, onChange, logger)) {
+        // The first change makes the callback throw.
+        rewrite(file, "{}", 2000_000);
+        awaitCount(changes, 1);
+
+        // The next change must still be detected and delivered, and the failure logged as an error.
+        rewrite(file, "{}", 3000_000);
+        awaitCount(changes, 2);
+        assertTrue(logCapture.getMessages().stream().anyMatch(m -> m.getLevel() == LDLogLevel.ERROR));
+      }
     }
   }
 
