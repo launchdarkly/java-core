@@ -1,5 +1,8 @@
 package com.launchdarkly.sdk.server.integrations;
 
+import com.launchdarkly.logging.LDLogger;
+import com.launchdarkly.logging.LogValues;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -31,6 +34,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class FileDataPoller implements Closeable {
   private final List<Path> paths;
   private final Runnable onChange;
+  private final LDLogger logger;
   private final ScheduledThreadPoolExecutor executor;
   private final AtomicBoolean closed = new AtomicBoolean(false);
   private List<FileState> last;
@@ -42,10 +46,12 @@ final class FileDataPoller implements Closeable {
    * @param paths the files to examine
    * @param interval the time between examinations
    * @param onChange called when any file changed since the previous examination
+   * @param logger receives log output about a callback that fails
    */
-  FileDataPoller(List<Path> paths, Duration interval, Runnable onChange) {
+  FileDataPoller(List<Path> paths, Duration interval, Runnable onChange, LDLogger logger) {
     this.paths = new ArrayList<>(paths);
     this.onChange = onChange;
+    this.logger = logger;
     this.last = observeAll(this.paths);
     ThreadFactory threadFactory = runnable -> {
       Thread t = new Thread(runnable, "LaunchDarkly-FileDataPoller");
@@ -80,7 +86,13 @@ final class FileDataPoller implements Closeable {
     boolean changed = !current.equals(last);
     last = current;
     if (changed && !closed.get()) {
-      onChange.run();
+      try {
+        onChange.run();
+      } catch (RuntimeException e) {
+        // The executor would otherwise cancel the repeating task and the poller would go quiet.
+        logger.error("Unexpected error while handling a file change: {}", LogValues.exceptionSummary(e));
+        logger.debug(LogValues.exceptionTrace(e));
+      }
     }
   }
 
