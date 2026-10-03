@@ -2,6 +2,7 @@ package com.launchdarkly.sdk.server;
 
 import com.google.common.collect.ImmutableList;
 import com.launchdarkly.logging.LDLogger;
+import com.launchdarkly.logging.LogValues;
 import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.datasources.SelectorSource;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
@@ -287,7 +288,8 @@ final class FDv2DataSystem implements DataSystem, Closeable {
         try {
           overrideSource.close();
         } catch (IOException | RuntimeException e) {
-          logger.warn("Error closing override source: {}", e.toString());
+          logger.warn("Error closing override source: {}", LogValues.exceptionSummary(e));
+          logger.debug(LogValues.exceptionTrace(e));
         }
       }
       dataSource.close();
