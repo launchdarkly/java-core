@@ -49,16 +49,18 @@ final class FileDataWatcher implements Closeable, Runnable {
 
   private final WatchService watchService;
   private final Set<Path> watchedFilePaths;
-  private final long directoryRetryDelayMillis;
+  private final long directoryRetryDelayNanos;
   private final LDLogger logger;
   private final Thread thread;
   private final AtomicBoolean stopped = new AtomicBoolean(false);
   private volatile Runnable onChange;
 
   // The directories that are not registered because they do not exist, and the time of the next
-  // attempt to register them. Both are written during creation and then only by the worker thread.
+  // attempt to register them. The time comes from the monotonic clock, so a change to the system
+  // clock does not move the schedule. Both are written during creation and then only by the
+  // worker thread.
   private final Set<Path> missingDirectories = new HashSet<>();
-  private long nextRetryAtMillis;
+  private long nextRetryAtNanos;
 
   /**
    * Creates a watcher for the given files. Nothing is watched until {@link #start(Runnable)}.
@@ -112,7 +114,7 @@ final class FileDataWatcher implements Closeable, Runnable {
   ) {
     this.watchService = watchService;
     this.watchedFilePaths = watchedFilePaths;
-    this.directoryRetryDelayMillis = Math.max(directoryRetryDelay.toMillis(), 1);
+    this.directoryRetryDelayNanos = TimeUnit.MILLISECONDS.toNanos(Math.max(directoryRetryDelay.toMillis(), 1));
     this.logger = logger;
     this.thread = new Thread(this, "LaunchDarkly-FileDataWatcher");
     this.thread.setDaemon(true);
@@ -139,8 +141,8 @@ final class FileDataWatcher implements Closeable, Runnable {
           key = watchService.take(); // blocks until a change is available or the thread is interrupted
         } else {
           // Wake up for the next registration attempt even when no change arrives.
-          long waitMillis = nextRetryAtMillis - System.currentTimeMillis();
-          key = waitMillis > 0 ? watchService.poll(waitMillis, TimeUnit.MILLISECONDS) : null;
+          long waitNanos = nextRetryAtNanos - System.nanoTime();
+          key = waitNanos > 0 ? watchService.poll(waitNanos, TimeUnit.NANOSECONDS) : null;
         }
       } catch (InterruptedException e) {
         continue; // if stopped, the loop condition ends the thread
@@ -150,7 +152,7 @@ final class FileDataWatcher implements Closeable, Runnable {
       if (key != null) {
         processKey(key);
       }
-      if (!missingDirectories.isEmpty() && System.currentTimeMillis() >= nextRetryAtMillis) {
+      if (!missingDirectories.isEmpty() && System.nanoTime() - nextRetryAtNanos >= 0) {
         retryMissingDirectories();
       }
     }
@@ -204,7 +206,7 @@ final class FileDataWatcher implements Closeable, Runnable {
 
   private void rememberAsMissing(Path directory) {
     if (missingDirectories.isEmpty()) {
-      nextRetryAtMillis = System.currentTimeMillis() + directoryRetryDelayMillis;
+      nextRetryAtNanos = System.nanoTime() + directoryRetryDelayNanos;
     }
     missingDirectories.add(directory);
   }
@@ -226,7 +228,7 @@ final class FileDataWatcher implements Closeable, Runnable {
       it.remove();
       registered = true;
     }
-    nextRetryAtMillis = System.currentTimeMillis() + directoryRetryDelayMillis;
+    nextRetryAtNanos = System.nanoTime() + directoryRetryDelayNanos;
     if (registered && !stopped.get()) {
       signal();
     }
