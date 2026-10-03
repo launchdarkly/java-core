@@ -62,7 +62,8 @@ public final class DataSystemConfiguration {
   }
 
   /**
-   * Creates an instance.
+   * Creates an instance with an optional override source. Flag overrides are currently experimental
+   * and subject to change.
    * <p>
    * This constructor is internal and should not be called by application code.
    * </p>
