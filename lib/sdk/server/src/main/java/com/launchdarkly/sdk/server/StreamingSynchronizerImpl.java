@@ -367,14 +367,21 @@ class StreamingSynchronizerImpl implements Synchronizer {
     }
 
     private boolean handleError(StreamException e) {
-        // Check if this was a deliberate shutdown/restart rather than an actual error
-        boolean streamFailed = !(e instanceof StreamClosedByCallerException);
-        recordStreamInit(streamFailed);
-
         if (e instanceof StreamClosedByCallerException) {
-            // We closed it ourselves (shutdown was called or stream was deliberately restarted)
-            return false;
+            // The event source can send this fault after close() or after restartStream().
+            // Only close() stops the stream.
+            synchronized (closeLock) {
+                if (closed) {
+                    recordStreamInit(false);
+                    return false;
+                }
+            }
+            // restartStream() already queued a result and recorded the stream init.
+            // Continue to read events so that the event source connects again.
+            return true;
         }
+
+        recordStreamInit(true);
 
         if (e instanceof StreamHttpErrorException) {
             int status = ((StreamHttpErrorException) e).getCode();

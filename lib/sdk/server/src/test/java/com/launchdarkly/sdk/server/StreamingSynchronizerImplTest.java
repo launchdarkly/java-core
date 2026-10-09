@@ -1640,4 +1640,269 @@ public class StreamingSynchronizerImplTest extends BaseTest {
         }
     }
 
+
+    @Test
+    public void goodbyeAfterEarlierDisconnectRestartsStream() throws Exception {
+        DiagnosticStore diagnosticStore = basicDiagnosticStore();
+
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+        String goodbyeEvent = makeEvent("goodbye", "{\"reason\":\"service-unavailable\"}");
+
+        // First connection: changeset, then the server ends the response.
+        // Second connection: changeset + goodbye.
+        // Third connection: changeset.
+        try (HttpServer server = HttpServer.start(Handlers.sequential(
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred)),
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred),
+                        Handlers.SSE.event(goodbyeEvent),
+                        Handlers.SSE.leaveOpen()),
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred),
+                        Handlers.SSE.leaveOpen())))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY,
+                    diagnosticStore
+            );
+
+            FDv2SourceResult result1 = synchronizer.next().get(5, TimeUnit.SECONDS);
+            assertEquals(SourceResultType.CHANGE_SET, result1.getResultType());
+
+            // The server ended the first response
+            FDv2SourceResult result2 = synchronizer.next().get(5, TimeUnit.SECONDS);
+            assertEquals(SourceResultType.STATUS, result2.getResultType());
+            assertEquals(SourceSignal.INTERRUPTED, result2.getStatus().getState());
+            assertEquals(DataSourceStatusProvider.ErrorKind.NETWORK_ERROR, result2.getStatus().getErrorInfo().getKind());
+
+            FDv2SourceResult result3 = synchronizer.next().get(5, TimeUnit.SECONDS);
+            assertEquals(SourceResultType.CHANGE_SET, result3.getResultType());
+
+            FDv2SourceResult result4 = synchronizer.next().get(5, TimeUnit.SECONDS);
+            assertEquals(SourceResultType.STATUS, result4.getResultType());
+            assertEquals(SourceSignal.GOODBYE, result4.getStatus().getState());
+
+            // The synchronizer restarts the stream and gets the next changeset
+            FDv2SourceResult result5 = synchronizer.next().get(5, TimeUnit.SECONDS);
+            assertEquals(SourceResultType.CHANGE_SET, result5.getResultType());
+            assertEquals(3, server.getRecorder().count());
+
+            // One successful init for each connection that delivered a changeset
+            LDValue event = diagnosticStore.createEventAndReset(0, 0).getJsonValue();
+            LDValue streamInits = event.get("streamInits");
+            assertEquals(3, streamInits.size());
+            assertFalse(streamInits.get(0).get("failed").booleanValue());
+            assertFalse(streamInits.get(1).get("failed").booleanValue());
+            assertFalse(streamInits.get(2).get("failed").booleanValue());
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void invalidDataAfterEarlierDisconnectRestartsStream() throws Exception {
+        DiagnosticStore diagnosticStore = basicDiagnosticStore();
+
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+        String invalidPayload = makeEvent("payload-transferred", "{malformed json}");
+
+        // First connection: changeset, then the server ends the response.
+        // Second connection: invalid data.
+        // Third connection: changeset.
+        try (HttpServer server = HttpServer.start(Handlers.sequential(
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred)),
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(invalidPayload),
+                        Handlers.SSE.leaveOpen()),
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred),
+                        Handlers.SSE.leaveOpen())))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY,
+                    diagnosticStore
+            );
+
+            FDv2SourceResult result1 = synchronizer.next().get(5, TimeUnit.SECONDS);
+            assertEquals(SourceResultType.CHANGE_SET, result1.getResultType());
+
+            // The server ended the first response
+            FDv2SourceResult result2 = synchronizer.next().get(5, TimeUnit.SECONDS);
+            assertEquals(SourceResultType.STATUS, result2.getResultType());
+            assertEquals(SourceSignal.INTERRUPTED, result2.getStatus().getState());
+            assertEquals(DataSourceStatusProvider.ErrorKind.NETWORK_ERROR, result2.getStatus().getErrorInfo().getKind());
+
+            FDv2SourceResult result3 = synchronizer.next().get(5, TimeUnit.SECONDS);
+            assertEquals(SourceResultType.STATUS, result3.getResultType());
+            assertEquals(SourceSignal.INTERRUPTED, result3.getStatus().getState());
+            assertEquals(DataSourceStatusProvider.ErrorKind.INVALID_DATA, result3.getStatus().getErrorInfo().getKind());
+
+            // The synchronizer restarts the stream and gets the next changeset
+            FDv2SourceResult result4 = synchronizer.next().get(5, TimeUnit.SECONDS);
+            assertEquals(SourceResultType.CHANGE_SET, result4.getResultType());
+            assertEquals(3, server.getRecorder().count());
+
+            // The restart records the failed init. The reconnect does not record a second one.
+            LDValue event = diagnosticStore.createEventAndReset(0, 0).getJsonValue();
+            LDValue streamInits = event.get("streamInits");
+            assertEquals(3, streamInits.size());
+            assertFalse(streamInits.get(0).get("failed").booleanValue());
+            assertTrue(streamInits.get(1).get("failed").booleanValue());
+            assertFalse(streamInits.get(2).get("failed").booleanValue());
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void closeDuringRestartAfterEarlierDisconnectDoesNotReconnect() throws Exception {
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+        String goodbyeEvent = makeEvent("goodbye", "{\"reason\":\"service-unavailable\"}");
+
+        // First connection: changeset, then the server ends the response.
+        // Second connection: changeset + goodbye.
+        // Third connection: the synchronizer must not make this request.
+        try (HttpServer server = HttpServer.start(Handlers.sequential(
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred)),
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred),
+                        Handlers.SSE.event(goodbyeEvent),
+                        Handlers.SSE.leaveOpen()),
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred),
+                        Handlers.SSE.leaveOpen())))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            // With this initial delay, the reconnect after the goodbye waits at least 200 milliseconds.
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(200),
+                    Thread.NORM_PRIORITY,
+                    null
+            );
+
+            assertEquals(SourceResultType.CHANGE_SET, synchronizer.next().get(5, TimeUnit.SECONDS).getResultType());
+            assertEquals(SourceSignal.INTERRUPTED, synchronizer.next().get(5, TimeUnit.SECONDS).getStatus().getState());
+            assertEquals(SourceResultType.CHANGE_SET, synchronizer.next().get(5, TimeUnit.SECONDS).getResultType());
+            assertEquals(SourceSignal.GOODBYE, synchronizer.next().get(5, TimeUnit.SECONDS).getStatus().getState());
+
+            // Close the synchronizer while the restarted stream waits to reconnect
+            Thread.sleep(100);
+            synchronizer.close();
+
+            FDv2SourceResult result = synchronizer.next().get(1, TimeUnit.SECONDS);
+            assertEquals(SourceResultType.STATUS, result.getResultType());
+            assertEquals(SourceSignal.SHUTDOWN, result.getStatus().getState());
+
+            // Wait longer than the longest possible reconnect delay
+            Thread.sleep(1200);
+            assertEquals(2, server.getRecorder().count());
+        }
+    }
+
+    @Test
+    public void closeAfterEarlierDisconnectDoesNotReconnect() throws Exception {
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+
+        // First connection: changeset, then the server ends the response.
+        // Second connection: changeset.
+        // Third connection: the synchronizer must not make this request.
+        try (HttpServer server = HttpServer.start(Handlers.sequential(
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred)),
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred),
+                        Handlers.SSE.leaveOpen()),
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred),
+                        Handlers.SSE.leaveOpen())))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY,
+                    null
+            );
+
+            assertEquals(SourceResultType.CHANGE_SET, synchronizer.next().get(5, TimeUnit.SECONDS).getResultType());
+            assertEquals(SourceSignal.INTERRUPTED, synchronizer.next().get(5, TimeUnit.SECONDS).getStatus().getState());
+            assertEquals(SourceResultType.CHANGE_SET, synchronizer.next().get(5, TimeUnit.SECONDS).getResultType());
+
+            synchronizer.close();
+
+            FDv2SourceResult result = synchronizer.next().get(1, TimeUnit.SECONDS);
+            assertEquals(SourceResultType.STATUS, result.getResultType());
+            assertEquals(SourceSignal.SHUTDOWN, result.getStatus().getState());
+
+            // Wait longer than the longest possible reconnect delay
+            Thread.sleep(1000);
+            assertEquals(2, server.getRecorder().count());
+        }
+    }
 }
