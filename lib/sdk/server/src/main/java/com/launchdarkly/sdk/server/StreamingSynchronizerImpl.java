@@ -31,6 +31,7 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 import com.launchdarkly.sdk.server.subsystems.SerializationException;
 import com.google.gson.stream.JsonReader;
+import okhttp3.ConnectionPool;
 import okhttp3.Headers;
 import org.jetbrains.annotations.NotNull;
 
@@ -109,6 +110,11 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 .headers(headers)
                 .clientBuilderActions(clientBuilder -> {
                     httpProperties.applyToHttpClientBuilder(clientBuilder);
+                    // Keep no idle connections, so each reconnect opens a new connection. After a
+                    // stream read timeout, OkHttp can treat a dead HTTP/2 connection as healthy for
+                    // up to 1 second. A reconnect in that time uses the dead connection and stalls
+                    // until the next read timeout. Set this after httpProperties, which sets its own pool.
+                    clientBuilder.connectionPool(new ConnectionPool(0, 1, TimeUnit.SECONDS));
                     // Add interceptor to inject selector and filter query parameters on each request
                     clientBuilder.addInterceptor(chain -> {
                         okhttp3.Request originalRequest = chain.request();

@@ -12,12 +12,16 @@ import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.testhelpers.httptest.Handlers;
 import com.launchdarkly.testhelpers.httptest.HttpServer;
 import com.launchdarkly.testhelpers.httptest.RequestInfo;
+import com.launchdarkly.testhelpers.tcptest.TcpHandler;
+import com.launchdarkly.testhelpers.tcptest.TcpHandlers;
+import com.launchdarkly.testhelpers.tcptest.TcpServer;
 import org.junit.Test;
 
 import java.net.URI;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.launchdarkly.sdk.server.ComponentsImpl.toHttpProperties;
 import static com.launchdarkly.sdk.server.TestComponents.basicDiagnosticStore;
@@ -355,6 +359,57 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             assertTrue("Should have made at least 2 requests", server.getRecorder().count() >= 2);
 
             synchronizer.close();
+        }
+    }
+
+    @Test
+    public void reconnectOpensNewConnection() throws Exception {
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+
+        // The first stream ends normally. This leaves a connection that the HTTP client could reuse.
+        try (HttpServer server = HttpServer.start(Handlers.sequential(
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred)),
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred),
+                        Handlers.SSE.leaveOpen())))) {
+            AtomicInteger connectionCount = new AtomicInteger();
+            TcpHandler forwardToServer = TcpHandlers.forwardToPort(server.getPort());
+            TcpHandler countConnections = socket -> {
+                connectionCount.incrementAndGet();
+                forwardToServer.apply(socket);
+            };
+
+            try (TcpServer countingServer = TcpServer.start(countConnections)) {
+                HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+
+                StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                        httpProperties,
+                        countingServer.getHttpUri(),
+                        "/stream",
+                        testLogger,
+                        mockSelectorSource(),
+                        null,
+                        Duration.ofMillis(100),
+                        Thread.NORM_PRIORITY,
+                        null
+                );
+
+                FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
+                assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
+
+                server.getRecorder().requireRequest();
+                server.getRecorder().requireRequest();
+
+                assertEquals(2, connectionCount.get());
+
+                synchronizer.close();
+            }
         }
     }
 
