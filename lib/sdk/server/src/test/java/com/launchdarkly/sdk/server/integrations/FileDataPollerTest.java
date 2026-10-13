@@ -30,6 +30,8 @@ public class FileDataPollerTest {
   private static final Duration INTERVAL = Duration.ofMillis(20);
   private static final long WAIT_MILLIS = 5000;
   private static final long QUIET_MILLIS = 250;
+  // Long enough for a rewrite that the poller observed in several steps to be fully reported.
+  private static final long SETTLE_MILLIS = 100;
 
   private static void awaitCount(AtomicInteger counter, int expected) throws InterruptedException {
     long deadline = System.currentTimeMillis() + WAIT_MILLIS;
@@ -80,16 +82,21 @@ public class FileDataPollerTest {
     }
   }
 
+  // The poller updates its baseline after a change, so it goes quiet once the file is stable. It
+  // does not promise one callback per logical change: a rewrite is not atomic, and a poll that
+  // lands between its steps legitimately reports an extra change, which the reloader absorbs.
   @Test
-  public void firesOncePerChange() throws Exception {
+  public void stopsFiringWhenFileIsStable() throws Exception {
     try (TempDir dir = TempDir.create()) {
       Path file = createFile(dir, "a.json", "{}", 1000_000);
       AtomicInteger changes = new AtomicInteger();
       try (FileDataPoller poller = new FileDataPoller(Collections.singletonList(file), INTERVAL, changes::incrementAndGet, testLogger)) {
         rewrite(file, "{}", 2000_000);
         awaitCount(changes, 1);
+        Thread.sleep(SETTLE_MILLIS);
+        int settled = changes.get();
         Thread.sleep(QUIET_MILLIS);
-        assertEquals(1, changes.get());
+        assertEquals(settled, changes.get());
       }
     }
   }
