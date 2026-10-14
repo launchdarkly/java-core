@@ -68,7 +68,7 @@ ext.libraries = [:]
 ext.versions = [
     "commonsCodec": "1.19.0",
     "gson": "2.13.1",
-    "guava": "32.0.1-jre",
+    "guava": "33.7.2-jre",
     "jackson": "2.11.2",
     "launchdarklyJavaSdkCommon": "2.3.0",
     "launchdarklyJavaSdkInternal": "1.12.2",
