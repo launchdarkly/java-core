@@ -2,6 +2,14 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.17.3](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.2...launchdarkly-java-server-sdk-7.17.3) (2026-10-14)
+
+
+### Bug Fixes
+
+* Open a new connection on each stream reconnect ([#232](https://github.com/launchdarkly/java-core/issues/232)) ([770f0a9](https://github.com/launchdarkly/java-core/commit/770f0a9122abbef288df11cdc85603bc167c7f13))
+* Reconnect the FDv2 stream after a restart that follows an earlier disconnect ([#233](https://github.com/launchdarkly/java-core/issues/233)) ([3c69b44](https://github.com/launchdarkly/java-core/commit/3c69b449312af1476762011c40f6b4478c34e887))
+
 ## [7.17.2](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.1...launchdarkly-java-server-sdk-7.17.2) (2026-09-30)
 
 
