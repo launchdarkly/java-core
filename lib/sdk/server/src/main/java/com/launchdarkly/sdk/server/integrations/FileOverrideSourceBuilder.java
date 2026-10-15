@@ -11,7 +11,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Configures the file-based override source. Obtain an instance with {@link FileOverrides#source()},
@@ -129,12 +131,17 @@ public final class FileOverrideSourceBuilder implements ComponentConfigurer<Over
     if (pollInterval == null) {
       throw new IllegalArgumentException("a poll interval is required for the file-based override source");
     }
-    List<Path> absolutePaths = new ArrayList<>(filePaths.size());
+    LDLogger logger = context.getBaseLogger().subLogger("FileOverrideSource");
+
+    // A path listed more than once would make every entry of that file a duplicate of itself, so
+    // the repeats are dropped and the first occurrence keeps its place in the order.
+    Set<Path> absolutePaths = new LinkedHashSet<>();
     for (Path p : filePaths) {
       absolutePaths.add(p.toAbsolutePath().normalize());
     }
-
-    LDLogger logger = context.getBaseLogger().subLogger("FileOverrideSource");
+    if (absolutePaths.size() != filePaths.size()) {
+      logger.warn("File paths list the same file more than once; the repeats are ignored");
+    }
 
     Duration effectivePollInterval = pollInterval;
     if (changeDetection == ChangeDetection.POLLING && pollInterval.compareTo(FileOverrides.MINIMUM_POLL_INTERVAL) < 0) {
@@ -142,6 +149,6 @@ public final class FileOverrideSourceBuilder implements ComponentConfigurer<Over
       effectivePollInterval = FileOverrides.MINIMUM_POLL_INTERVAL;
     }
 
-    return new FileOverrideSourceImpl(absolutePaths, duplicateKeysHandling, changeDetection, effectivePollInterval, logger);
+    return new FileOverrideSourceImpl(new ArrayList<>(absolutePaths), duplicateKeysHandling, changeDetection, effectivePollInterval, logger);
   }
 }
