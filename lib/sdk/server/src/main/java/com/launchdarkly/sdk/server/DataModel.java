@@ -365,11 +365,11 @@ public abstract class DataModel {
     private final ContextKind contextKind;
     private final AttributeRef attribute;
     private final Operator op;
-    private final List<LDValue> values; //interpreted as an OR of values
+    private List<LDValue> values; //interpreted as an OR of values; null only after releaseValues()
     private final boolean negate;
-    
+
     transient ClausePreprocessed preprocessed;
-    
+
     Clause(ContextKind contextKind, AttributeRef attribute, Operator op, List<LDValue> values, boolean negate) {
       this.contextKind = contextKind;
       this.attribute = attribute;
@@ -377,24 +377,41 @@ public abstract class DataModel {
       this.values = values == null ? emptyList() : values;
       this.negate = negate;
     }
-  
+
     ContextKind getContextKind() {
       return contextKind;
     }
-    
+
     AttributeRef getAttribute() {
       return attribute;
     }
-    
+
     Operator getOp() {
       return op;
     }
-    
+
     // Guaranteed non-null
     List<LDValue> getValues() {
-      return values;
+      return values == null ? emptyList() : values;
     }
-    
+
+    // The preprocessor calls this to drop the value list when the preprocessed value set holds the
+    // same values. This frees the memory of the duplicate list. Read values through getAllValues()
+    // to cover both states.
+    void releaseValues() {
+      values = null;
+    }
+
+    // Returns the values whether or not releaseValues() dropped the list. The preprocessed set
+    // keeps the values in first-appearance order, so a released clause serializes its values in
+    // the original order, without duplicates.
+    Iterable<LDValue> getAllValues() {
+      if (values == null && preprocessed != null && preprocessed.valuesSet != null) {
+        return preprocessed.valuesSet;
+      }
+      return getValues();
+    }
+
     boolean isNegate() {
       return negate;
     }

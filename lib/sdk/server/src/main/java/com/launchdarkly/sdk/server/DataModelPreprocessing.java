@@ -40,6 +40,26 @@ import static com.launchdarkly.sdk.server.DataModel.Operator.semVerLessThan;
  */
 abstract class DataModelPreprocessing {
   private DataModelPreprocessing() {}
+
+  /**
+   * The name of the system property that turns on the release of "in" clause value lists.
+   * <p>
+   * When the property is "true", the preprocessor drops the value list of each "in" clause that
+   * has a preprocessed value set. This frees the memory of the duplicate list. Evaluation and
+   * serialization then read the values from the set. A released clause serializes its values in
+   * the original order, but without duplicate values.
+   * <p>
+   * The default is off, so the serialized form of a clause stays identical to
+   * its previous form.
+   */
+  static final String RELEASE_CLAUSE_VALUES_PROPERTY = "com.launchdarkly.sdk.server.releaseClauseValues";
+
+  private static volatile boolean releaseClauseValues = Boolean.getBoolean(RELEASE_CLAUSE_VALUES_PROPERTY);
+
+  // For tests. Production code reads the system property once, at class load.
+  static void setReleaseClauseValues(boolean enabled) {
+    releaseClauseValues = enabled;
+  }
   
   static final class EvalResultsForSingleVariation {
     private final EvalResult regularResult;
@@ -221,8 +241,16 @@ abstract class DataModelPreprocessing {
       // clause values. Converting the value list to a Set allows us to do a fast lookup instead of
       // a linear search. We do not do this for other operators (or if there are fewer than two
       // values) because the slight extra overhead of a Set is not worthwhile in those case.
+      // JMH measurements show the set lookup is faster than a list scan at every size of two or
+      // more values, so two is the right threshold for Java.
       if (values.size() > 1) {
         c.preprocessed = new ClausePreprocessed(ImmutableSet.copyOf(values), null);
+        if (releaseClauseValues) {
+          // The set holds the same values, so the clause does not need the list too. The set keeps
+          // first-appearance order, so serialization keeps the original order, but a duplicate
+          // value is dropped. Other operators always keep their list.
+          c.releaseValues();
+        }
       }
     } else if (op == matches) {
       c.preprocessed = preprocessClauseValues(c.getValues(), v ->

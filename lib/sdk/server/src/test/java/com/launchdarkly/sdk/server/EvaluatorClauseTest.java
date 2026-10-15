@@ -301,4 +301,42 @@ public class EvaluatorClauseTest extends EvaluatorTestBase {
     Evaluator e = evaluatorBuilder().withStoredSegments(segment).build();
     assertMatch(e, flag, context, true);
   }
+
+  @Test
+  public void clauseCanMatchWhenValuesListIsReleased() throws Exception {
+    DataModelPreprocessing.setReleaseClauseValues(true);
+    try {
+      Clause clause = clause("name", Operator.in, LDValue.of("Bob"), LDValue.of("Carol"));
+      FeatureFlag f = booleanFlagWithClauses("flag", clause);
+      // the release dropped the list, so this match can only come from the value set
+      assertEquals(0, f.getRules().get(0).getClauses().get(0).getValues().size());
+
+      assertMatch(BASE_EVALUATOR, f, LDContext.builder("key").name("Carol").build(), true);
+      assertMatch(BASE_EVALUATOR, f, LDContext.builder("key").name("Don").build(), false);
+    } finally {
+      DataModelPreprocessing.setReleaseClauseValues(false);
+    }
+  }
+
+  @Test
+  public void segmentMatchClauseStillMatchesWhenReleaseIsEnabled() throws Exception {
+    // The release must not touch segmentMatch clauses, because segment matching reads the
+    // values list directly.
+    DataModelPreprocessing.setReleaseClauseValues(true);
+    try {
+      String segmentKey = "segkey";
+      Clause inClause = clause("name", Operator.in, LDValue.of("Bob"), LDValue.of("Carol"));
+      Clause segmentClause = clauseMatchingSegment(segmentKey);
+      FeatureFlag flag = booleanFlagWithClauses("flag", segmentClause);
+      FeatureFlag flagWithBoth = booleanFlagWithClauses("flag2", inClause, segmentClause);
+      Segment segment = makeSegmentThatMatchesUser(segmentKey, "foo");
+
+      Evaluator e = evaluatorBuilder().withStoredSegments(segment).build();
+      assertMatch(e, flag, LDContext.create("foo"), true);
+      assertMatch(e, flag, LDContext.create("bar"), false);
+      assertMatch(e, flagWithBoth, LDContext.builder("foo").name("Carol").build(), true);
+    } finally {
+      DataModelPreprocessing.setReleaseClauseValues(false);
+    }
+  }
 }

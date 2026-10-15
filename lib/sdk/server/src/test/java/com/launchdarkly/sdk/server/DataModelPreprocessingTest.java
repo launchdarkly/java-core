@@ -275,6 +275,98 @@ public class DataModelPreprocessingTest {
   }
 
   @Test
+  public void preprocessFlagKeepsClauseValuesListByDefault() {
+    Clause c = clause("x", Operator.in, LDValue.of("a"), LDValue.of(0), LDValue.of("a"));
+
+    FeatureFlag f = flagFromClause(c);
+    f.afterDeserialized();
+
+    Clause pc = f.getRules().get(0).getClauses().get(0);
+    assertNotNull(pc.preprocessed.valuesSet);
+    assertEquals(ImmutableList.of(LDValue.of("a"), LDValue.of(0), LDValue.of("a")), pc.getValues());
+    assertEquals(ImmutableList.of(LDValue.of("a"), LDValue.of(0), LDValue.of("a")),
+        ImmutableList.copyOf(pc.getAllValues()));
+  }
+
+  @Test
+  public void preprocessFlagReleasesClauseValuesListWhenReleaseIsEnabled() {
+    DataModelPreprocessing.setReleaseClauseValues(true);
+    try {
+      Clause c = clause("x", Operator.in, LDValue.of("a"), LDValue.of(0), LDValue.of("a"));
+
+      FeatureFlag f = flagFromClause(c);
+      f.afterDeserialized();
+
+      Clause pc = f.getRules().get(0).getClauses().get(0);
+      assertEquals(ImmutableList.of(), pc.getValues());
+      assertEquals(ImmutableSet.of(LDValue.of("a"), LDValue.of(0)), pc.preprocessed.valuesSet);
+      // the set keeps first-appearance order, so getAllValues() drops only the duplicate
+      assertEquals(ImmutableList.of(LDValue.of("a"), LDValue.of(0)),
+          ImmutableList.copyOf(pc.getAllValues()));
+    } finally {
+      DataModelPreprocessing.setReleaseClauseValues(false);
+    }
+  }
+
+  @Test
+  public void releaseKeepsClauseValuesListWhenThereIsNoValueSet() {
+    DataModelPreprocessing.setReleaseClauseValues(true);
+    try {
+      Clause c = clause("x", Operator.in, LDValue.of("a"));
+
+      FeatureFlag f = flagFromClause(c);
+      f.afterDeserialized();
+
+      Clause pc = f.getRules().get(0).getClauses().get(0);
+      assertNull(pc.preprocessed);
+      assertEquals(ImmutableList.of(LDValue.of("a")), pc.getValues());
+    } finally {
+      DataModelPreprocessing.setReleaseClauseValues(false);
+    }
+  }
+
+  @Test
+  public void releaseKeepsClauseValuesListForNonEqualityOperators() {
+    // Evaluation and dependency analysis read the list directly for every operator other than
+    // "in" (this includes segmentMatch), so the release must not touch these clauses.
+    DataModelPreprocessing.setReleaseClauseValues(true);
+    try {
+      for (Operator op: Operator.getBuiltins()) {
+        if (op == Operator.in) {
+          continue;
+        }
+        Clause c = clause("x", op, LDValue.of("a"), LDValue.of("b"));
+
+        FeatureFlag f = flagFromClause(c);
+        f.afterDeserialized();
+
+        Clause pc = f.getRules().get(0).getClauses().get(0);
+        assertEquals(op.toString(), ImmutableList.of(LDValue.of("a"), LDValue.of("b")), pc.getValues());
+      }
+    } finally {
+      DataModelPreprocessing.setReleaseClauseValues(false);
+    }
+  }
+
+  @Test
+  public void releaseAppliesToSegmentRuleClauses() {
+    DataModelPreprocessing.setReleaseClauseValues(true);
+    try {
+      Clause c = clause("x", Operator.in, LDValue.of("a"), LDValue.of("b"));
+      SegmentRule rule = segmentRuleBuilder().clauses(c).build();
+      Segment s = segmentBuilder("key").disablePreprocessing(true).rules(rule).build();
+
+      s.afterDeserialized();
+
+      Clause pc = s.getRules().get(0).getClauses().get(0);
+      assertEquals(ImmutableList.of(), pc.getValues());
+      assertEquals(ImmutableSet.of(LDValue.of("a"), LDValue.of("b")), pc.preprocessed.valuesSet);
+    } finally {
+      DataModelPreprocessing.setReleaseClauseValues(false);
+    }
+  }
+
+  @Test
   public void preprocessFlagParsesClauseDate() {
     String time1Str = "2016-04-16T17:09:12-07:00";
     Instant time1 = ZonedDateTime.parse(time1Str).toInstant();
