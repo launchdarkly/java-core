@@ -162,6 +162,21 @@ public class FileOverrideSourceTest {
   }
 
   @Test
+  public void repeatedPathIsDroppedWithAWarning() throws Exception {
+    // Under the default fail handling the same file listed twice would make every one of its
+    // keys a duplicate of itself. The repeat is ignored and the file loads once.
+    try (TempDir dir = TempDir.create()) {
+      Path file = write(dir, "a.json", docWith("flag", "value"));
+      RecordingSink sink = new RecordingSink();
+      start(FileOverrides.source().filePaths(file, file), sink);
+
+      assertEquals("value", flagValue(sink.await(), "flag"));
+      assertThat(logCapture.getMessageStrings(),
+          hasItem("WARN:File paths list the same file more than once; the repeats are ignored"));
+    }
+  }
+
+  @Test
   public void initialLoadCompletesBeforeStartReturns() throws Exception {
     try (TempDir dir = TempDir.create()) {
       Path file = write(dir, "overrides.json",
