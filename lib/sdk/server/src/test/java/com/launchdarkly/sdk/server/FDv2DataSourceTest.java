@@ -1656,6 +1656,69 @@ public class FDv2DataSourceTest extends BaseTest {
         assertNotNull("Second synchronizer should be called after fallback", secondCalled);
     }
 
+    @Test
+    public void silentSynchronizerFallsBackBeforeDataIsApplied() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
+
+        // First fails permanently, second never reports anything, third serves data.
+        BlockingQueue<FDv2SourceResult> firstSyncResults = new LinkedBlockingQueue<>();
+        firstSyncResults.add(makeTerminalErrorResult());
+        BlockingQueue<FDv2SourceResult> thirdSyncResults = new LinkedBlockingQueue<>();
+        thirdSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+
+        BlockingQueue<Boolean> thirdCalledQueue = new LinkedBlockingQueue<>();
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> new MockQueuedSynchronizer(firstSyncResults),
+            () -> new MockQueuedSynchronizer(new LinkedBlockingQueue<>()),
+            () -> {
+                thirdCalledQueue.offer(true);
+                return new MockQueuedSynchronizer(thirdSyncResults);
+            }
+        );
+
+        // Long steady-state fallback timeout, short initialization fallback timeout.
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300, 1);
+        resourcesToClose.add(dataSource);
+
+        Future<Void> startFuture = dataSource.start();
+        startFuture.get(5, TimeUnit.SECONDS);
+
+        assertTrue(dataSource.isInitialized());
+        assertNotNull("Third synchronizer should be called", thirdCalledQueue.poll(1, TimeUnit.SECONDS));
+    }
+
+    @Test
+    public void silentSynchronizerDoesNotFallBackQuicklyAfterDataIsApplied() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
+            () -> new MockInitializer(CompletableFuture.completedFuture(FDv2SourceResult.changeSet(makeChangeSet(true), false)))
+        );
+
+        BlockingQueue<Boolean> secondCalledQueue = new LinkedBlockingQueue<>();
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> new MockQueuedSynchronizer(new LinkedBlockingQueue<>()),
+            () -> {
+                secondCalledQueue.offer(true);
+                return new MockQueuedSynchronizer(new LinkedBlockingQueue<>());
+            }
+        );
+
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300, 1);
+        resourcesToClose.add(dataSource);
+
+        Future<Void> startFuture = dataSource.start();
+        startFuture.get(2, TimeUnit.SECONDS);
+
+        assertNull("Second synchronizer should not be called", secondCalledQueue.poll(2, TimeUnit.SECONDS));
+    }
+
     // ============================================================================
     // Condition Lifecycle
     // ============================================================================
