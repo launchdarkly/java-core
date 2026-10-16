@@ -10,6 +10,7 @@ import com.launchdarkly.sdk.json.JsonSerialization;
 import com.launchdarkly.sdk.server.DataModel.FeatureFlag;
 import com.launchdarkly.sdk.server.DataModel.Segment;
 import com.launchdarkly.sdk.server.integrations.DataSystemBuilder;
+import com.launchdarkly.sdk.server.integrations.TestDataV2;
 import com.launchdarkly.sdk.server.interfaces.FlagChangeEvent;
 import com.launchdarkly.sdk.server.subsystems.ComponentConfigurer;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
@@ -379,5 +380,34 @@ public class LDClientOverridesTest extends BaseTest {
       keys.add(e.getKey());
     }
     return keys;
+  }
+
+  @Test
+  public void isFlagKnownReportsAnOverrideBeforeTheClientIsInitialized() throws Exception {
+    TestOverrideSource source = new TestOverrideSource(flagsOnly(valueFlag("overridden", "v")));
+    try (LDClient client = new LDClient(SDK_KEY, uninitializedConfig(source))) {
+      assertFalse(client.isInitialized());
+      assertTrue(client.isFlagKnown("overridden"));
+      assertFalse(client.isFlagKnown("other"));
+    }
+  }
+
+  @Test
+  public void launchDarklyChangeNotifiesOverridesThatDependOnIt() throws Exception {
+    // The override "overridden" has the LaunchDarkly flag "prereq" as a prerequisite. A change to
+    // prereq on the LaunchDarkly side notifies the override too.
+    TestDataV2 td = TestDataV2.synchronizer();
+    td.update(td.flag("prereq").on(true));
+    FeatureFlag overridden = flagBuilder("overridden").version(1).on(true).fallthroughVariation(0).offVariation(0)
+        .variations(LDValue.of("x")).prerequisites(prerequisite("prereq", 0)).build();
+    TestOverrideSource source = new TestOverrideSource(flagsOnly(overridden));
+    LDConfig config = configWith(Components.dataSystem().custom().synchronizers(td).overrides(source)).build();
+    try (LDClient client = new LDClient(SDK_KEY, config)) {
+      BlockingQueue<FlagChangeEvent> events = new LinkedBlockingQueue<>();
+      client.getFlagTracker().addFlagChangeListener(events::add);
+      td.update(td.flag("prereq").on(false));
+      assertEquals(keys("prereq", "overridden"), awaitKeys(events, 2));
+      assertNull(events.poll(200, TimeUnit.MILLISECONDS));
+    }
   }
 }

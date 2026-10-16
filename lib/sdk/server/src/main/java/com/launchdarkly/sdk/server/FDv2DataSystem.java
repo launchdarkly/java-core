@@ -219,7 +219,7 @@ final class FDv2DataSystem implements DataSystem, Closeable {
       overrideSource = dataSystemConfiguration.getOverrideSource().build(clientContext);
     }
 
-    return new FDv2DataSystem(
+    FDv2DataSystem system = new FDv2DataSystem(
       store,
       dataSource,
       dataSourceStatusProvider,
@@ -229,6 +229,11 @@ final class FDv2DataSystem implements DataSystem, Closeable {
       overrideSource,
       logger
     );
+    if (system.overrideLayer != null) {
+      // A LaunchDarkly change must also notify the flags whose overrides depend on it.
+      dataSourceUpdates.setExternalDependencies(system.overrideLayer);
+    }
+    return system;
   }
 
   @Override
