@@ -24,6 +24,7 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.SerializationException;
 
+import org.junit.After;
 import org.junit.Test;
 
 import java.util.Collections;
@@ -611,79 +612,81 @@ public class DataModelSerializationTest {
         .addAny(FEATURES, flag1, flag2).addAny(SEGMENTS, segment1, segment2).build(), allData);
   }
   
+  @After
+  public void restoreReleaseClauseValues() {
+    DataModelPreprocessing.setReleaseClauseValues(
+        Boolean.getBoolean(DataModelPreprocessing.RELEASE_CLAUSE_VALUES_PROPERTY));
+  }
+
   @Test
   public void clauseWithReleasedValuesListIsSerializedFromValueSet() {
-    // With the release enabled, an "in" clause with 2 or more values drops its value list and the
-    // serializer writes the values from the preprocessed set. The set keeps first-appearance
-    // order, so the output keeps the original order and drops only the duplicate value.
+    // With the release enabled, an "in" clause with two or more values replaces its value list
+    // with the preprocessed set's list view. The view keeps first-appearance order, so the
+    // serialized output keeps the original order and drops only the duplicate value.
     DataModelPreprocessing.setReleaseClauseValues(true);
-    try {
-      LDValue clauseJson = LDValue.buildObject()
-          .put("attribute", "name")
-          .put("op", "in")
-          .put("values", LDValue.buildArray()
-              .add("a").add("b").add(1).add(true).add("a")
-              .build())
-          .put("negate", false)
-          .build();
-      assertClauseFromJson(clauseJson, c -> {
-        assertEquals(0, c.getValues().size());
-      });
 
-      LDValue flagJson = baseBuilder("flag-key")
-          .put("rules", LDValue.buildArray()
-              .add(LDValue.buildObject()
-                  .put("id", "ruleid")
-                  .put("clauses", LDValue.arrayOf(clauseJson))
-                  .build())
-              .build())
-          .build();
-      assertFlagFromJson(flagJson, flag -> {
-        String json = FEATURES.serialize(new ItemDescriptor(flag.getVersion(), flag));
-        LDValue values = LDValue.parse(json)
-            .get("rules").get(0).get("clauses").get(0).get("values");
-        assertEquals(LDValue.buildArray().add("a").add("b").add(1).add(true).build(), values);
+    LDValue clauseJson = LDValue.buildObject()
+        .put("attribute", "name")
+        .put("op", "in")
+        .put("values", LDValue.buildArray()
+            .add("a").add("b").add(1).add(true).add("a")
+            .build())
+        .put("negate", false)
+        .build();
+    assertClauseFromJson(clauseJson, c -> {
+      // the release dropped the duplicate "a", so 4 of the 5 input values remain
+      assertEquals(4, c.getValues().size());
+    });
 
-        // the released form round-trips: parsing the new JSON gives the same values again
-        assertFlagFromJson(LDValue.parse(json), flag2 -> {
-          String json2 = FEATURES.serialize(new ItemDescriptor(flag2.getVersion(), flag2));
-          assertJsonEquals(json, json2);
-        });
+    LDValue flagJson = baseBuilder("flag-key")
+        .put("rules", LDValue.buildArray()
+            .add(LDValue.buildObject()
+                .put("id", "ruleid")
+                .put("clauses", LDValue.arrayOf(clauseJson))
+                .build())
+            .build())
+        .build();
+    assertFlagFromJson(flagJson, flag -> {
+      String json = FEATURES.serialize(new ItemDescriptor(flag.getVersion(), flag));
+      LDValue values = LDValue.parse(json)
+          .get("rules").get(0).get("clauses").get(0).get("values");
+      assertEquals(LDValue.buildArray().add("a").add("b").add(1).add(true).build(), values);
+
+      // Parsing the released JSON gives the same values again.
+      assertFlagFromJson(LDValue.parse(json), flag2 -> {
+        String json2 = FEATURES.serialize(new ItemDescriptor(flag2.getVersion(), flag2));
+        assertJsonEquals(json, json2);
       });
-    } finally {
-      DataModelPreprocessing.setReleaseClauseValues(false);
-    }
+    });
   }
 
   @Test
   public void segmentClauseWithReleasedValuesListIsSerializedFromValueSet() {
     DataModelPreprocessing.setReleaseClauseValues(true);
-    try {
-      LDValue segmentJson = baseBuilder("segment-key")
-          .put("rules", LDValue.buildArray()
-              .add(LDValue.buildObject()
-                  .put("clauses", LDValue.buildArray()
-                      .add(LDValue.buildObject()
-                          .put("attribute", "name")
-                          .put("op", "in")
-                          .put("values", LDValue.buildArray().add("a").add("b").add("a").build())
-                          .put("negate", false)
-                          .build())
-                      .build())
-                  .build())
-              .build())
-          .build();
-      assertSegmentFromJson(segmentJson, segment -> {
-        assertEquals(0, segment.getRules().get(0).getClauses().get(0).getValues().size());
 
-        String json = SEGMENTS.serialize(new ItemDescriptor(segment.getVersion(), segment));
-        LDValue values = LDValue.parse(json)
-            .get("rules").get(0).get("clauses").get(0).get("values");
-        assertEquals(LDValue.buildArray().add("a").add("b").build(), values);
-      });
-    } finally {
-      DataModelPreprocessing.setReleaseClauseValues(false);
-    }
+    LDValue segmentJson = baseBuilder("segment-key")
+        .put("rules", LDValue.buildArray()
+            .add(LDValue.buildObject()
+                .put("clauses", LDValue.buildArray()
+                    .add(LDValue.buildObject()
+                        .put("attribute", "name")
+                        .put("op", "in")
+                        .put("values", LDValue.buildArray().add("a").add("b").add("a").build())
+                        .put("negate", false)
+                        .build())
+                    .build())
+                .build())
+            .build())
+        .build();
+    assertSegmentFromJson(segmentJson, segment -> {
+      // the release dropped the duplicate "a", so 2 of the 3 input values remain
+      assertEquals(2, segment.getRules().get(0).getClauses().get(0).getValues().size());
+
+      String json = SEGMENTS.serialize(new ItemDescriptor(segment.getVersion(), segment));
+      LDValue values = LDValue.parse(json)
+          .get("rules").get(0).get("clauses").get(0).get("values");
+      assertEquals(LDValue.buildArray().add("a").add("b").build(), values);
+    });
   }
 
   @Test
@@ -706,7 +709,7 @@ public class DataModelSerializationTest {
       String json = FEATURES.serialize(new ItemDescriptor(flag.getVersion(), flag));
       LDValue values = LDValue.parse(json)
           .get("rules").get(0).get("clauses").get(0).get("values");
-      // the duplicate value and the original order are kept
+      // serialization keeps the duplicate value and the original order
       assertEquals(LDValue.buildArray().add("a").add("b").add("a").build(), values);
     });
   }

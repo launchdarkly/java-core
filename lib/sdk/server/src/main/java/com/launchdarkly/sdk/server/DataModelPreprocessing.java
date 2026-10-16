@@ -44,13 +44,14 @@ abstract class DataModelPreprocessing {
   /**
    * The name of the system property that turns on the release of "in" clause value lists.
    * <p>
-   * When the property is "true", the preprocessor drops the value list of each "in" clause that
-   * has a preprocessed value set. This frees the memory of the duplicate list. Evaluation and
-   * serialization then read the values from the set. A released clause serializes its values in
-   * the original order, but without duplicate values.
+   * When the property is "true", the preprocessor replaces the value list of each "in" clause that
+   * has a preprocessed value set with the set's list view. This frees the memory of the duplicate
+   * list. The view keeps the values in first-appearance order, so a released clause serializes its
+   * values in the original order, but without duplicate values. Equal numbers in different forms,
+   * such as 1 and 1.0, count as duplicates.
    * <p>
-   * The default is off, so the serialized form of a clause stays identical to
-   * its previous form.
+   * The SDK reads the property once, at class load. The default is off. With the default, a
+   * clause serializes its values exactly as received.
    */
   static final String RELEASE_CLAUSE_VALUES_PROPERTY = "com.launchdarkly.sdk.server.releaseClauseValues";
 
@@ -240,21 +241,15 @@ abstract class DataModelPreprocessing {
       // This is a special case where the clause is testing for an exact match against any of the
       // clause values. Converting the value list to a Set allows us to do a fast lookup instead of
       // a linear search. We do not do this for other operators (or if there are fewer than two
-      // values) because the slight extra overhead of a Set is not worthwhile in those case.
-      // JMH measurements show the set lookup is faster than a list scan at every size of two or
-      // more values, so two is the right threshold for Java.
-      if (c.preprocessed != null && c.preprocessed.valuesSet != null) {
-        // The clause already has its value set, and its value list can be released. A second
-        // preprocess pass must not build a new set from the possibly empty list.
-        return;
-      }
+      // values) because the slight extra overhead of a Set is not worthwhile in those cases.
       if (values.size() > 1) {
-        c.preprocessed = new ClausePreprocessed(ImmutableSet.copyOf(values), null);
+        ImmutableSet<LDValue> valuesSet = ImmutableSet.copyOf(values);
+        c.preprocessed = new ClausePreprocessed(valuesSet, null);
         if (releaseClauseValues) {
-          // The set holds the same values, so the clause does not need the list too. The set keeps
-          // first-appearance order, so serialization keeps the original order, but a duplicate
-          // value is dropped. Other operators always keep their list.
-          c.releaseValues();
+          // Replace the list with the set's cached list view, which frees the duplicate list.
+          // Other operators always keep their list, because they read values by position or as
+          // segment keys.
+          c.releaseValues(valuesSet.asList());
         }
       }
     } else if (op == matches) {

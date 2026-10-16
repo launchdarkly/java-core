@@ -164,9 +164,8 @@ abstract class DataModelSerialization {
       }
       out.name("attribute").value(c.getAttribute() == null ? null : c.getAttribute().toString());
       out.name("op").value(c.getOp() == null ? null : c.getOp().name());
-      // getAllValues() reads from the preprocessed value set when the value list was released.
       out.name("values").beginArray();
-      for (LDValue v: c.getAllValues()) {
+      for (LDValue v: c.getValues()) {
         gsonInstanceWithNullsAllowed().toJson(v, LDValue.class, out);
       }
       out.endArray();

@@ -365,7 +365,7 @@ public abstract class DataModel {
     private final ContextKind contextKind;
     private final AttributeRef attribute;
     private final Operator op;
-    private List<LDValue> values; //interpreted as an OR of values; null only after releaseValues()
+    private List<LDValue> values; // OR semantics. The preprocessor can replace it via releaseValues().
     private final boolean negate;
 
     transient ClausePreprocessed preprocessed;
@@ -392,24 +392,13 @@ public abstract class DataModel {
 
     // Guaranteed non-null
     List<LDValue> getValues() {
-      return values == null ? emptyList() : values;
+      return values;
     }
 
-    // The preprocessor calls this to drop the value list when the preprocessed value set holds the
-    // same values. This frees the memory of the duplicate list. Read values through getAllValues()
-    // to cover both states.
-    void releaseValues() {
-      values = null;
-    }
-
-    // Returns the values whether or not releaseValues() dropped the list. The preprocessed set
-    // keeps the values in first-appearance order, so a released clause serializes its values in
-    // the original order, without duplicates.
-    Iterable<LDValue> getAllValues() {
-      if (values == null && preprocessed != null && preprocessed.valuesSet != null) {
-        return preprocessed.valuesSet;
-      }
-      return getValues();
+    // The preprocessor calls this when the preprocessed value set holds the same values. The set's
+    // cached list view replaces the original list, which frees the memory of the duplicate list.
+    void releaseValues(List<LDValue> valuesFromSet) {
+      values = valuesFromSet;
     }
 
     boolean isNegate() {

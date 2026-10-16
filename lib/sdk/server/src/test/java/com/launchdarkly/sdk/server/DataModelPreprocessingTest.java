@@ -15,6 +15,7 @@ import com.launchdarkly.sdk.server.DataModel.SegmentRule;
 import com.launchdarkly.sdk.server.DataModel.Target;
 import com.launchdarkly.sdk.server.DataModelPreprocessing.ClausePreprocessed;
 
+import org.junit.After;
 import org.junit.Test;
 
 import java.time.Instant;
@@ -284,66 +285,41 @@ public class DataModelPreprocessingTest {
     Clause pc = f.getRules().get(0).getClauses().get(0);
     assertNotNull(pc.preprocessed.valuesSet);
     assertEquals(ImmutableList.of(LDValue.of("a"), LDValue.of(0), LDValue.of("a")), pc.getValues());
-    assertEquals(ImmutableList.of(LDValue.of("a"), LDValue.of(0), LDValue.of("a")),
-        ImmutableList.copyOf(pc.getAllValues()));
+  }
+
+  @After
+  public void restoreReleaseClauseValues() {
+    DataModelPreprocessing.setReleaseClauseValues(
+        Boolean.getBoolean(DataModelPreprocessing.RELEASE_CLAUSE_VALUES_PROPERTY));
   }
 
   @Test
   public void preprocessFlagReleasesClauseValuesListWhenReleaseIsEnabled() {
     DataModelPreprocessing.setReleaseClauseValues(true);
-    try {
-      Clause c = clause("x", Operator.in, LDValue.of("a"), LDValue.of(0), LDValue.of("a"));
 
-      FeatureFlag f = flagFromClause(c);
-      f.afterDeserialized();
+    Clause c = clause("x", Operator.in, LDValue.of("a"), LDValue.of(0), LDValue.of("a"));
 
-      Clause pc = f.getRules().get(0).getClauses().get(0);
-      assertEquals(ImmutableList.of(), pc.getValues());
-      assertEquals(ImmutableSet.of(LDValue.of("a"), LDValue.of(0)), pc.preprocessed.valuesSet);
-      // the set keeps first-appearance order, so getAllValues() drops only the duplicate
-      assertEquals(ImmutableList.of(LDValue.of("a"), LDValue.of(0)),
-          ImmutableList.copyOf(pc.getAllValues()));
-    } finally {
-      DataModelPreprocessing.setReleaseClauseValues(false);
-    }
-  }
+    FeatureFlag f = flagFromClause(c);
+    f.afterDeserialized();
 
-  @Test
-  public void preprocessIsIdempotentWhenClauseValuesListIsReleased() {
-    // A clause is normally preprocessed only once. The guard makes a repeat pass safe: it must
-    // not replace the value set with one built from the released (empty) list.
-    DataModelPreprocessing.setReleaseClauseValues(true);
-    try {
-      Clause c = clause("x", Operator.in, LDValue.of("a"), LDValue.of("b"));
-
-      FeatureFlag f = flagFromClause(c);
-      f.afterDeserialized();
-      f.afterDeserialized();
-
-      Clause pc = f.getRules().get(0).getClauses().get(0);
-      assertEquals(ImmutableSet.of(LDValue.of("a"), LDValue.of("b")), pc.preprocessed.valuesSet);
-      assertEquals(ImmutableList.of(LDValue.of("a"), LDValue.of("b")),
-          ImmutableList.copyOf(pc.getAllValues()));
-    } finally {
-      DataModelPreprocessing.setReleaseClauseValues(false);
-    }
+    Clause pc = f.getRules().get(0).getClauses().get(0);
+    assertEquals(ImmutableSet.of(LDValue.of("a"), LDValue.of(0)), pc.preprocessed.valuesSet);
+    // the set's list view replaces the list, so the duplicate value is gone
+    assertEquals(ImmutableList.of(LDValue.of("a"), LDValue.of(0)), pc.getValues());
   }
 
   @Test
   public void releaseKeepsClauseValuesListWhenThereIsNoValueSet() {
     DataModelPreprocessing.setReleaseClauseValues(true);
-    try {
-      Clause c = clause("x", Operator.in, LDValue.of("a"));
 
-      FeatureFlag f = flagFromClause(c);
-      f.afterDeserialized();
+    Clause c = clause("x", Operator.in, LDValue.of("a"));
 
-      Clause pc = f.getRules().get(0).getClauses().get(0);
-      assertNull(pc.preprocessed);
-      assertEquals(ImmutableList.of(LDValue.of("a")), pc.getValues());
-    } finally {
-      DataModelPreprocessing.setReleaseClauseValues(false);
-    }
+    FeatureFlag f = flagFromClause(c);
+    f.afterDeserialized();
+
+    Clause pc = f.getRules().get(0).getClauses().get(0);
+    assertNull(pc.preprocessed);
+    assertEquals(ImmutableList.of(LDValue.of("a")), pc.getValues());
   }
 
   @Test
@@ -351,40 +327,34 @@ public class DataModelPreprocessingTest {
     // Evaluation and dependency analysis read the list directly for every operator other than
     // "in" (this includes segmentMatch), so the release must not touch these clauses.
     DataModelPreprocessing.setReleaseClauseValues(true);
-    try {
-      for (Operator op: Operator.getBuiltins()) {
-        if (op == Operator.in) {
-          continue;
-        }
-        Clause c = clause("x", op, LDValue.of("a"), LDValue.of("b"));
 
-        FeatureFlag f = flagFromClause(c);
-        f.afterDeserialized();
-
-        Clause pc = f.getRules().get(0).getClauses().get(0);
-        assertEquals(op.toString(), ImmutableList.of(LDValue.of("a"), LDValue.of("b")), pc.getValues());
+    for (Operator op: Operator.getBuiltins()) {
+      if (op == Operator.in) {
+        continue;
       }
-    } finally {
-      DataModelPreprocessing.setReleaseClauseValues(false);
+      Clause c = clause("x", op, LDValue.of("a"), LDValue.of("b"));
+
+      FeatureFlag f = flagFromClause(c);
+      f.afterDeserialized();
+
+      Clause pc = f.getRules().get(0).getClauses().get(0);
+      assertEquals(op.toString(), ImmutableList.of(LDValue.of("a"), LDValue.of("b")), pc.getValues());
     }
   }
 
   @Test
   public void releaseAppliesToSegmentRuleClauses() {
     DataModelPreprocessing.setReleaseClauseValues(true);
-    try {
-      Clause c = clause("x", Operator.in, LDValue.of("a"), LDValue.of("b"));
-      SegmentRule rule = segmentRuleBuilder().clauses(c).build();
-      Segment s = segmentBuilder("key").disablePreprocessing(true).rules(rule).build();
 
-      s.afterDeserialized();
+    Clause c = clause("x", Operator.in, LDValue.of("a"), LDValue.of("b"), LDValue.of("a"));
+    SegmentRule rule = segmentRuleBuilder().clauses(c).build();
+    Segment s = segmentBuilder("key").disablePreprocessing(true).rules(rule).build();
 
-      Clause pc = s.getRules().get(0).getClauses().get(0);
-      assertEquals(ImmutableList.of(), pc.getValues());
-      assertEquals(ImmutableSet.of(LDValue.of("a"), LDValue.of("b")), pc.preprocessed.valuesSet);
-    } finally {
-      DataModelPreprocessing.setReleaseClauseValues(false);
-    }
+    s.afterDeserialized();
+
+    Clause pc = s.getRules().get(0).getClauses().get(0);
+    assertEquals(ImmutableList.of(LDValue.of("a"), LDValue.of("b")), pc.getValues());
+    assertEquals(ImmutableSet.of(LDValue.of("a"), LDValue.of("b")), pc.preprocessed.valuesSet);
   }
 
   @Test
