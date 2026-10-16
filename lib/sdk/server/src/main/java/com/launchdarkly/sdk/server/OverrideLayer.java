@@ -9,6 +9,7 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The override layer: a thread-safe store of override entries that an override source replaces
@@ -21,7 +22,7 @@ import java.util.Map;
  * <p>
  * This class is package-private and should not be used by application code.
  */
-final class OverrideLayer {
+final class OverrideLayer implements DataModelDependencies.ExternalDependencies {
   /**
    * The previous and current contents of the layer after a replacement. The maps must not be
    * modified.
@@ -45,6 +46,9 @@ final class OverrideLayer {
   // A single volatile read decides the common case of a configured but unpopulated layer.
   private volatile boolean nonEmpty = false;
   private final Object writeLock = new Object();
+  // The dependency edges of the layer's own entries: which entries reference which flags and
+  // segments. Rebuilt with the contents on every replacement and swapped with them.
+  private volatile DataModelDependencies.DependencyTracker dependencies = new DataModelDependencies.DependencyTracker();
 
   /**
    * Atomically replaces the entire layer contents. A null or empty collection clears the layer.
@@ -54,6 +58,7 @@ final class OverrideLayer {
    */
   Replacement setAll(Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data) {
     Map<DataKind, Map<String, ItemDescriptor>> collected = new HashMap<>();
+    DataModelDependencies.DependencyTracker tracker = new DataModelDependencies.DependencyTracker();
     int count = 0;
     if (data != null) {
       for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> kindEntry : data) {
@@ -64,7 +69,9 @@ final class OverrideLayer {
           continue;
         }
         for (Map.Entry<String, ItemDescriptor> item : kindItems) {
-          items.put(item.getKey(), markedCopy(item.getValue()));
+          ItemDescriptor copied = markedCopy(item.getValue());
+          items.put(item.getKey(), copied);
+          tracker.updateDependenciesFrom(kindEntry.getKey(), item.getKey(), copied);
           count++;
         }
       }
@@ -78,9 +85,21 @@ final class OverrideLayer {
     synchronized (writeLock) {
       ImmutableMap<DataKind, ImmutableMap<String, ItemDescriptor>> previous = contents;
       contents = replacement;
+      dependencies = tracker;
       nonEmpty = count != 0;
       return new Replacement(previous, replacement);
     }
+  }
+
+  /**
+   * Adds the given item to the set together with every item whose override entry depends on it,
+   * directly or through other override entries. A LaunchDarkly update uses this so that a change to
+   * a LaunchDarkly segment or prerequisite notifies the overridden flags that reference it, which
+   * the data system's own dependency tracking cannot see.
+   */
+  @Override
+  public void addAffectedItems(Set<DataModelDependencies.KindAndKey> itemsOut, DataModelDependencies.KindAndKey item) {
+    dependencies.addAffectedItems(itemsOut, item);
   }
 
   /**
