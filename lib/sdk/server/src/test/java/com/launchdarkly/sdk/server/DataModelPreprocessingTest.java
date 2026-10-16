@@ -309,6 +309,27 @@ public class DataModelPreprocessingTest {
   }
 
   @Test
+  public void preprocessIsIdempotentWhenClauseValuesListIsReleased() {
+    // A clause is normally preprocessed only once. The guard makes a repeat pass safe: it must
+    // not replace the value set with one built from the released (empty) list.
+    DataModelPreprocessing.setReleaseClauseValues(true);
+    try {
+      Clause c = clause("x", Operator.in, LDValue.of("a"), LDValue.of("b"));
+
+      FeatureFlag f = flagFromClause(c);
+      f.afterDeserialized();
+      f.afterDeserialized();
+
+      Clause pc = f.getRules().get(0).getClauses().get(0);
+      assertEquals(ImmutableSet.of(LDValue.of("a"), LDValue.of("b")), pc.preprocessed.valuesSet);
+      assertEquals(ImmutableList.of(LDValue.of("a"), LDValue.of("b")),
+          ImmutableList.copyOf(pc.getAllValues()));
+    } finally {
+      DataModelPreprocessing.setReleaseClauseValues(false);
+    }
+  }
+
+  @Test
   public void releaseKeepsClauseValuesListWhenThereIsNoValueSet() {
     DataModelPreprocessing.setReleaseClauseValues(true);
     try {

@@ -243,6 +243,11 @@ abstract class DataModelPreprocessing {
       // values) because the slight extra overhead of a Set is not worthwhile in those case.
       // JMH measurements show the set lookup is faster than a list scan at every size of two or
       // more values, so two is the right threshold for Java.
+      if (c.preprocessed != null && c.preprocessed.valuesSet != null) {
+        // The clause already has its value set, and its value list can be released. A second
+        // preprocess pass must not build a new set from the possibly empty list.
+        return;
+      }
       if (values.size() > 1) {
         c.preprocessed = new ClausePreprocessed(ImmutableSet.copyOf(values), null);
         if (releaseClauseValues) {
