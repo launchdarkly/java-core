@@ -429,6 +429,17 @@ public final class LDClient implements LDClientInterface {
 
   @Override
   public boolean isFlagKnown(String featureKey) {
+    // An override makes a flag known whether or not the client is initialized, the same as
+    // evaluation serves an override before the not-initialized short circuit (spec 1.5.3). A
+    // caller that gates on isFlagKnown must not skip an override during an outage.
+    OverrideLayer overrideLayer = dataSystem.getOverrideLayer();
+    if (overrideLayer != null) {
+      ItemDescriptor overridden = overrideLayer.get(DataModel.FEATURES, featureKey);
+      if (overridden != null && overridden.getItem() != null) {
+        return true;
+      }
+    }
+
     ReadOnlyStore store = dataSystem.getStore();
     
     if (!isInitialized()) {

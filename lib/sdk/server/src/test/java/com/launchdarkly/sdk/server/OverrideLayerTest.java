@@ -1,6 +1,7 @@
 package com.launchdarkly.sdk.server;
 
 import com.launchdarkly.sdk.server.DataModel.FeatureFlag;
+import com.launchdarkly.sdk.server.DataModelDependencies.KindAndKey;
 import com.launchdarkly.sdk.server.DataModel.Segment;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
@@ -13,10 +14,15 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 
 import static com.launchdarkly.sdk.server.DataModel.FEATURES;
 import static com.launchdarkly.sdk.server.DataModel.SEGMENTS;
 import static com.launchdarkly.sdk.server.ModelBuilders.flagBuilder;
+import static com.launchdarkly.sdk.server.ModelBuilders.ruleBuilder;
+import static com.launchdarkly.sdk.server.ModelBuilders.prerequisite;
+import static com.launchdarkly.sdk.server.ModelBuilders.clauseMatchingSegment;
 import static com.launchdarkly.sdk.server.ModelBuilders.segmentBuilder;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -131,5 +137,45 @@ public class OverrideLayerTest {
     assertEquals(1, layer.all(SEGMENTS).size());
     assertTrue(layer.all(FEATURES).containsKey("f"));
     assertTrue(layer.all(SEGMENTS).containsKey("s"));
+  }
+
+  private static Set<KindAndKey> affectedFrom(OverrideLayer layer, DataKind kind, String key) {
+    Set<KindAndKey> affected = new HashSet<>();
+    layer.addAffectedItems(affected, new KindAndKey(kind, key));
+    return affected;
+  }
+
+  private static Set<KindAndKey> items(KindAndKey... items) {
+    return new HashSet<>(java.util.Arrays.asList(items));
+  }
+
+  @Test
+  public void reportsEntriesThatDependOnAnItem() {
+    // a matches a segment; b has a as a prerequisite, so b depends on the segment through a.
+    FeatureFlag a = flagBuilder("a").version(1).on(true)
+        .rules(ruleBuilder().id("r").variation(0).clauses(clauseMatchingSegment("seg")).build()).build();
+    FeatureFlag b = flagBuilder("b").version(1).on(true).prerequisites(prerequisite("a", 0)).build();
+    OverrideLayer layer = new OverrideLayer();
+    layer.setAll(flagsOnly(a, b));
+
+    assertEquals(items(new KindAndKey(SEGMENTS, "seg"), new KindAndKey(FEATURES, "a"), new KindAndKey(FEATURES, "b")),
+        affectedFrom(layer, SEGMENTS, "seg"));
+    assertEquals(items(new KindAndKey(FEATURES, "a"), new KindAndKey(FEATURES, "b")),
+        affectedFrom(layer, FEATURES, "a"));
+    assertEquals(items(new KindAndKey(SEGMENTS, "unreferenced")), affectedFrom(layer, SEGMENTS, "unreferenced"));
+  }
+
+  @Test
+  public void forgetsEdgesOfReplacedEntries() {
+    FeatureFlag a = flagBuilder("a").version(1).on(true)
+        .rules(ruleBuilder().id("r").variation(0).clauses(clauseMatchingSegment("seg")).build()).build();
+    FeatureFlag c = flagBuilder("c").version(1).on(true)
+        .rules(ruleBuilder().id("r").variation(0).clauses(clauseMatchingSegment("seg2")).build()).build();
+    OverrideLayer layer = new OverrideLayer();
+    layer.setAll(flagsOnly(a));
+    layer.setAll(flagsOnly(c));
+
+    assertEquals(items(new KindAndKey(SEGMENTS, "seg")), affectedFrom(layer, SEGMENTS, "seg"));
+    assertEquals(items(new KindAndKey(SEGMENTS, "seg2"), new KindAndKey(FEATURES, "c")), affectedFrom(layer, SEGMENTS, "seg2"));
   }
 }
