@@ -29,6 +29,9 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Deque;
+import java.util.Arrays;
+import java.util.ArrayDeque;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -56,6 +59,10 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
   private final EventBroadcasterImpl<FlagChangeListener, FlagChangeEvent> flagChangeEventNotifier;
   private final EventBroadcasterImpl<StatusListener, Status> dataSourceStatusNotifier;
   private final DataModelDependencies.DependencyTracker dependencyTracker = new DataModelDependencies.DependencyTracker();
+  // Dependencies of definitions the data system does not hold. The override layer supplies its
+  // entries' dependencies, so that a change to a LaunchDarkly item also notifies the overridden
+  // flags that reference it. Null when no override source is configured.
+  private volatile DataModelDependencies.ExternalDependencies externalDependencies = null;
   private final DataStoreStatusProvider dataStoreStatusProvider;
   private final OutageTracker outageTracker;
   private final Object stateLock = new Object();
@@ -84,6 +91,47 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
     currentStatus = new Status(State.INITIALIZING, Instant.now(), null);
   }
   
+  /**
+   * Registers dependency edges that live outside the LaunchDarkly data, such as the override
+   * layer's. Called once during construction of the data system.
+   */
+  void setExternalDependencies(DataModelDependencies.ExternalDependencies externalDependencies) {
+    this.externalDependencies = externalDependencies;
+  }
+
+  /**
+   * Adds the modified item and everything that depends on it to the set. The LaunchDarkly data and
+   * the external dependencies each know their own edges, and a chain can cross between them in
+   * either direction: an overridden flag can reference a LaunchDarkly segment, and a LaunchDarkly
+   * flag can have an overridden prerequisite. Each newly reached item is therefore expanded through
+   * both until nothing new is found.
+   */
+  private void addAffectedItems(Set<KindAndKey> itemsOut, KindAndKey item) {
+    DataModelDependencies.ExternalDependencies external = externalDependencies;
+    if (external == null) {
+      dependencyTracker.addAffectedItems(itemsOut, item);
+      return;
+    }
+    Deque<KindAndKey> pending = new ArrayDeque<>();
+    pending.push(item);
+    while (!pending.isEmpty()) {
+      KindAndKey next = pending.pop();
+      // Each tracker gets its own set: a tracker skips an item that is already in the set it is
+      // given, so sharing one set would stop the second tracker at the starting item.
+      Set<KindAndKey> viaData = new HashSet<>();
+      dependencyTracker.addAffectedItems(viaData, next);
+      Set<KindAndKey> viaExternal = new HashSet<>();
+      external.addAffectedItems(viaExternal, next);
+      for (Set<KindAndKey> reached : Arrays.asList(viaData, viaExternal)) {
+        for (KindAndKey reachedItem : reached) {
+          if (itemsOut.add(reachedItem)) {
+            pending.push(reachedItem);
+          }
+        }
+      }
+    }
+  }
+
   @Override
   public boolean init(FullDataSet<ItemDescriptor> allData) {
     Map<DataKind, Map<String, ItemDescriptor>> oldData = null;
@@ -132,7 +180,7 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
       dependencyTracker.updateDependenciesFrom(kind, key, item);
       if (hasFlagChangeEventListeners()) {
         Set<KindAndKey> affectedItems = new HashSet<>();
-        dependencyTracker.addAffectedItems(affectedItems, new KindAndKey(kind, key));
+        addAffectedItems(affectedItems, new KindAndKey(kind, key));
         sendChangeEvents(affectedItems);
       }
     }
@@ -270,7 +318,7 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
           continue;
         }
         if (oldItem == null || newItem == null || oldItem.getVersion() < newItem.getVersion()) {
-          dependencyTracker.addAffectedItems(affectedItems, new KindAndKey(kind, key));
+          addAffectedItems(affectedItems, new KindAndKey(kind, key));
         }
         // Note that comparing the version numbers is sufficient; we don't have to compare every detail of the
         // flag or segment configuration, because it's a basic underlying assumption of the entire LD data model
@@ -535,7 +583,7 @@ final class DataSourceUpdatesImpl implements DataSourceUpdateSink, DataSourceUpd
       for (Map.Entry<String, ItemDescriptor> itemEntry: kindEntry.getValue().getItems()) {
         String key = itemEntry.getKey();
         dependencyTracker.updateDependenciesFrom(kind, key, itemEntry.getValue());
-        dependencyTracker.addAffectedItems(affectedItems, new KindAndKey(kind, key));
+        addAffectedItems(affectedItems, new KindAndKey(kind, key));
       }
     }
     
