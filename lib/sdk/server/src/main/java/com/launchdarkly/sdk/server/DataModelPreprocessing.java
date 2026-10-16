@@ -55,7 +55,17 @@ abstract class DataModelPreprocessing {
    */
   static final String RELEASE_CLAUSE_VALUES_PROPERTY = "com.launchdarkly.sdk.server.releaseClauseValues";
 
-  private static volatile boolean releaseClauseValues = Boolean.getBoolean(RELEASE_CLAUSE_VALUES_PROPERTY);
+  private static volatile boolean releaseClauseValues = readReleaseClauseValues();
+
+  // A security policy can deny reads of non-standard system properties.
+  // A denied read means the feature stays off.
+  private static boolean readReleaseClauseValues() {
+    try {
+      return Boolean.getBoolean(RELEASE_CLAUSE_VALUES_PROPERTY);
+    } catch (SecurityException e) {
+      return false;
+    }
+  }
 
   // For tests. Production code reads the system property once, at class load.
   static void setReleaseClauseValues(boolean enabled) {
