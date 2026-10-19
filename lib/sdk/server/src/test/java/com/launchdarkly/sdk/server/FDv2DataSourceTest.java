@@ -7,6 +7,7 @@ import com.launchdarkly.logging.LogCapture;
 import com.launchdarkly.logging.Logs;
 import com.launchdarkly.sdk.internal.collections.IterableAsyncQueue;
 import com.launchdarkly.sdk.fdv2.Selector;
+import com.launchdarkly.sdk.server.datasources.FDv1FallbackDirective;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
@@ -25,6 +26,7 @@ import java.util.Map;
 import org.junit.After;
 import org.junit.Test;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -66,6 +68,10 @@ public class FDv2DataSourceTest extends BaseTest {
             null,
             true
         );
+    }
+
+    private static FDv1FallbackDirective shortFallbackDirective() {
+        return FDv1FallbackDirective.fromServiceTtl(Duration.ofMillis(100));
     }
 
     private FDv2SourceResult makeInterruptedResult() {
@@ -2531,38 +2537,35 @@ public class FDv2DataSourceTest extends BaseTest {
         assertTrue("Should have at least 2 changesets", sink.getApplyCount() >= 2);
     }
 
-    // Synchronizer-phase analogue of the initializer halt path: when a synchronizer signals
-    // FDv1 fallback but no FDv1 fallback synchronizer is configured, the data system must halt
-    // (transition to OFF, stop building further synchronizers).
+    // When a synchronizer signals FDv1 fallback but no FDv1 fallback synchronizer is configured, no
+    // synchronizer runs until the directive's TTL elapses, the status is INTERRUPTED, and then the
+    // data source returns to the primary FDv2 synchronizer.
     @Test
-    public void fdv1FallbackOnSynchronizerWithoutFDv1ConfiguredHaltsDataSystem() throws Exception {
+    public void fdv1FallbackOnSynchronizerWithoutFDv1ConfiguredRecoversAfterTtl() throws Exception {
         executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
-        // First synchronizer sends a normal payload, then a payload with the directive.
-        BlockingQueue<FDv2SourceResult> firstSyncResults = new LinkedBlockingQueue<>();
-        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), true));
+        BlockingQueue<FDv2SourceResult> primaryResults = new LinkedBlockingQueue<>();
+        primaryResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+        primaryResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), shortFallbackDirective()));
 
-        AtomicInteger firstSyncBuildCount = new AtomicInteger(0);
-        AtomicBoolean secondSyncCalled = new AtomicBoolean(false);
+        BlockingQueue<Integer> primaryBuilds = new LinkedBlockingQueue<>();
+        AtomicInteger primaryBuildCount = new AtomicInteger(0);
+        AtomicInteger secondaryBuildCount = new AtomicInteger(0);
 
-        // Two synchronizers configured; once the directive halts the data system, neither
-        // should be re-built. The second synchronizer in particular must never run.
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             () -> {
-                firstSyncBuildCount.incrementAndGet();
-                return new MockQueuedSynchronizer(firstSyncResults);
+                primaryBuilds.offer(primaryBuildCount.incrementAndGet());
+                return new MockQueuedSynchronizer(primaryResults);
             },
             () -> {
-                secondSyncCalled.set(true);
+                secondaryBuildCount.incrementAndGet();
                 return new MockQueuedSynchronizer(new LinkedBlockingQueue<>());
             }
         );
 
-        // No FDv1 fallback configured.
         FDv2DataSource dataSource = new FDv2DataSource(
             initializers,
             synchronizers,
@@ -2577,33 +2580,15 @@ public class FDv2DataSourceTest extends BaseTest {
         resourcesToClose.add(dataSource);
 
         dataSource.start().get(2, TimeUnit.SECONDS);
+        assertEquals(Integer.valueOf(1), primaryBuilds.poll(2, TimeUnit.SECONDS));
 
-        // First payload is applied; the directive-bearing payload is also applied (the SDK
-        // surfaces the data) but no further synchronizers are dialled.
-        sink.awaitApplyCount(2, 2, TimeUnit.SECONDS);
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.awaitStatus(2, TimeUnit.SECONDS));
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.awaitStatus(2, TimeUnit.SECONDS));
+        assertEquals(DataSourceStatusProvider.State.INTERRUPTED, sink.awaitStatus(2, TimeUnit.SECONDS));
+        assertNotNull(sink.getLastError());
 
-        // Status must end up OFF because the directive could not be satisfied.
-        // Poll briefly for the OFF state in case the final transition is observed slightly
-        // after the apply count reaches 2; this keeps the assertion deterministic without
-        // relying on real-time delays.
-        DataSourceStatusProvider.State finalState = null;
-        for (int i = 0; i < 20 && finalState != DataSourceStatusProvider.State.OFF; i++) {
-            DataSourceStatusProvider.State next = sink.awaitStatus(100, TimeUnit.MILLISECONDS);
-            if (next != null) {
-                finalState = next;
-            } else if (sink.getLastState() == DataSourceStatusProvider.State.OFF) {
-                finalState = DataSourceStatusProvider.State.OFF;
-            }
-        }
-        assertEquals("Status should be OFF after directive halts the data system",
-            DataSourceStatusProvider.State.OFF, sink.getLastState());
-
-        // The second synchronizer must never be built.
-        assertFalse("Subsequent synchronizers must not run after directive-induced halt",
-            secondSyncCalled.get());
-        // The first synchronizer should also not be re-built (we should stay halted).
-        assertEquals("First synchronizer should be built exactly once",
-            1, firstSyncBuildCount.get());
+        assertEquals(Integer.valueOf(2), primaryBuilds.poll(2, TimeUnit.SECONDS));
+        assertEquals("Recovery should start from the primary synchronizer", 0, secondaryBuildCount.get());
     }
 
     @Test
@@ -2714,6 +2699,111 @@ public class FDv2DataSourceTest extends BaseTest {
         // Should not be called again even if FDv1 sends fallback flag
         Boolean secondCall = fdv1CalledQueue.poll(500, TimeUnit.MILLISECONDS);
         assertNull("FDv1 fallback should only be called once", secondCall);
+    }
+
+    @Test
+    public void fdv1FallbackRecoversToFDv2AfterTtl() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
+
+        BlockingQueue<FDv2SourceResult> primaryResults = new LinkedBlockingQueue<>();
+        primaryResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), shortFallbackDirective()));
+
+        BlockingQueue<Integer> primaryBuilds = new LinkedBlockingQueue<>();
+        AtomicInteger primaryBuildCount = new AtomicInteger(0);
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                primaryBuilds.offer(primaryBuildCount.incrementAndGet());
+                return new MockQueuedSynchronizer(primaryResults);
+            }
+        );
+
+        BlockingQueue<Boolean> fdv1Built = new LinkedBlockingQueue<>();
+        BlockingQueue<Boolean> fdv1Closed = new LinkedBlockingQueue<>();
+        FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
+            fdv1Built.offer(true);
+            return new MockQueuedSynchronizer(new LinkedBlockingQueue<>()) {
+                @Override
+                public void close() {
+                    fdv1Closed.offer(true);
+                    super.close();
+                }
+            };
+        };
+
+        FDv2DataSource dataSource = new FDv2DataSource(
+            initializers,
+            synchronizers,
+            fdv1Fallback,
+            sink,
+            Thread.NORM_PRIORITY,
+            logger,
+            executor,
+            120,
+            300
+        );
+        resourcesToClose.add(dataSource);
+
+        dataSource.start().get(2, TimeUnit.SECONDS);
+
+        assertEquals(Integer.valueOf(1), primaryBuilds.poll(2, TimeUnit.SECONDS));
+        assertNotNull("FDv1 fallback synchronizer should be activated", fdv1Built.poll(2, TimeUnit.SECONDS));
+        assertEquals(Integer.valueOf(2), primaryBuilds.poll(2, TimeUnit.SECONDS));
+        assertNotNull("FDv1 fallback synchronizer should be stopped on recovery", fdv1Closed.poll(2, TimeUnit.SECONDS));
+    }
+
+    // A directive received by the FDv1 fallback synchronizer replaces the TTL in effect, without
+    // restarting the FDv1 fallback synchronizer.
+    @Test
+    public void fdv1FallbackDirectiveFromFDv1SynchronizerReplacesTtl() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
+
+        BlockingQueue<FDv2SourceResult> primaryResults = new LinkedBlockingQueue<>();
+        primaryResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), FDv1FallbackDirective.fromServiceTtl(Duration.ofHours(1))));
+
+        BlockingQueue<Integer> primaryBuilds = new LinkedBlockingQueue<>();
+        AtomicInteger primaryBuildCount = new AtomicInteger(0);
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                primaryBuilds.offer(primaryBuildCount.incrementAndGet());
+                return new MockQueuedSynchronizer(primaryResults);
+            }
+        );
+
+        BlockingQueue<FDv2SourceResult> fdv1Results = new LinkedBlockingQueue<>();
+        fdv1Results.add(FDv2SourceResult.changeSet(makeChangeSet(true), shortFallbackDirective()));
+
+        AtomicInteger fdv1BuildCount = new AtomicInteger(0);
+        FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
+            fdv1BuildCount.incrementAndGet();
+            return new MockQueuedSynchronizer(fdv1Results);
+        };
+
+        FDv2DataSource dataSource = new FDv2DataSource(
+            initializers,
+            synchronizers,
+            fdv1Fallback,
+            sink,
+            Thread.NORM_PRIORITY,
+            logger,
+            executor,
+            120,
+            300
+        );
+        resourcesToClose.add(dataSource);
+
+        dataSource.start().get(2, TimeUnit.SECONDS);
+
+        assertEquals(Integer.valueOf(1), primaryBuilds.poll(2, TimeUnit.SECONDS));
+        assertEquals(Integer.valueOf(2), primaryBuilds.poll(2, TimeUnit.SECONDS));
+        assertEquals(1, fdv1BuildCount.get());
     }
 
     // ============================================================================
@@ -2842,12 +2932,11 @@ public class FDv2DataSourceTest extends BaseTest {
             fdv2SyncCalled.get());
     }
 
-    // When an initializer signals FDv1 fallback but no FDv1 synchronizer is configured, the
-    // SDK must transition the data source status to OFF -- not stay stuck at INITIALIZING --
-    // and surface the underlying initializer error so monitors can see why.
+    // When an initializer signals FDv1 fallback but no FDv1 synchronizer is configured, the status is
+    // INTERRUPTED with the initializer's error, and the FDv2 synchronizers run once the TTL elapses.
     @Test
-    public void fdv1FallbackOnInitializerWithoutFDv1ConfiguredTransitionsToOff() throws Exception {
-        executor = Executors.newScheduledThreadPool(1);
+    public void fdv1FallbackOnInitializerWithoutFDv1ConfiguredRecoversAfterTtl() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         DataSourceStatusProvider.ErrorInfo initError = new DataSourceStatusProvider.ErrorInfo(
@@ -2856,22 +2945,21 @@ public class FDv2DataSourceTest extends BaseTest {
             "fallback requested without fallback configured",
             Instant.now()
         );
+
         CompletableFuture<FDv2SourceResult> initFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.terminalError(initError, true)
+            FDv2SourceResult.terminalError(initError, shortFallbackDirective())
         );
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
             () -> new MockInitializer(initFuture)
         );
 
-        AtomicBoolean fdv2SyncCalled = new AtomicBoolean(false);
+        BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
-            () -> {
-                fdv2SyncCalled.set(true);
-                return new MockQueuedSynchronizer(new LinkedBlockingQueue<>());
-            }
+            () -> new MockQueuedSynchronizer(syncResults)
         );
 
-        // No FDv1 fallback configured.
         FDv2DataSource dataSource = new FDv2DataSource(
             initializers,
             synchronizers,
@@ -2885,16 +2973,15 @@ public class FDv2DataSourceTest extends BaseTest {
         );
         resourcesToClose.add(dataSource);
 
-        dataSource.start().get(2, TimeUnit.SECONDS);
+        Future<Void> startFuture = dataSource.start();
 
-        // Status must end up OFF (not INITIALIZING) so callers can observe the terminal state.
-        assertEquals(DataSourceStatusProvider.State.OFF, sink.getLastState());
-        assertNotNull("Initializer error should be preserved on the OFF status", sink.getLastError());
-        assertEquals(initError.getKind(), sink.getLastError().getKind());
-        assertEquals(initError.getStatusCode(), sink.getLastError().getStatusCode());
+        assertEquals(DataSourceStatusProvider.State.INTERRUPTED, sink.awaitStatus(2, TimeUnit.SECONDS));
+        assertEquals(DataSourceStatusProvider.State.INTERRUPTED, sink.awaitStatus(2, TimeUnit.SECONDS));
+        assertEquals(initError, sink.getLastError());
 
-        // FDv2 synchronizers should not run.
-        assertFalse(fdv2SyncCalled.get());
+        startFuture.get(2, TimeUnit.SECONDS);
+        assertTrue(dataSource.isInitialized());
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
     }
 
     // When an initializer returns a successful payload-without-selector AND the FDv1 fallback

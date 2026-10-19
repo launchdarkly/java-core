@@ -6,6 +6,7 @@ import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -31,6 +32,7 @@ class FDv2DataSourceConditions {
         enum ConditionType {
             FALLBACK,
             RECOVERY,
+            FDV1_FALLBACK_EXPIRED,
         }
 
         CompletableFuture<Condition> execute();
@@ -178,6 +180,59 @@ class FDv2DataSourceConditions {
         @Override
         public ConditionType getType() {
             return ConditionType.RECOVERY;
+        }
+    }
+
+    /**
+     * This condition is met when the TTL of an FDv1 fallback directive elapses, meaning the data source should
+     * return to its FDv2 synchronizers. A directive received while the condition is pending supersedes the TTL that
+     * was in effect.
+     * <p>
+     * This is package-private, instead of private, for ease of testing.
+     */
+    static class FDv1FallbackExpiryCondition implements Condition {
+        private final CompletableFuture<Condition> resultFuture = new CompletableFuture<>();
+        private final ScheduledExecutorService sharedExecutor;
+        private ScheduledFuture<?> timerFuture;
+
+        public FDv1FallbackExpiryCondition(ScheduledExecutorService sharedExecutor, Duration delay) {
+            this.sharedExecutor = sharedExecutor;
+            schedule(delay);
+        }
+
+        private synchronized void schedule(Duration delay) {
+            if (timerFuture != null) {
+                timerFuture.cancel(false);
+            }
+            timerFuture = sharedExecutor.schedule(
+                () -> resultFuture.complete(this),
+                Math.max(0, delay.toNanos()),
+                TimeUnit.NANOSECONDS);
+        }
+
+        @Override
+        public CompletableFuture<Condition> execute() {
+            return resultFuture;
+        }
+
+        @Override
+        public void inform(FDv2SourceResult sourceResult) {
+            if (sourceResult.isFdv1Fallback()) {
+                schedule(sourceResult.getFdv1FallbackDirective().getTtl());
+            }
+        }
+
+        @Override
+        public synchronized void close() {
+            if (timerFuture != null) {
+                timerFuture.cancel(false);
+                timerFuture = null;
+            }
+        }
+
+        @Override
+        public ConditionType getType() {
+            return ConditionType.FDV1_FALLBACK_EXPIRED;
         }
     }
 }

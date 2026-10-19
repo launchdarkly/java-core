@@ -4,6 +4,7 @@ import com.launchdarkly.sdk.server.datasources.Initializer;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -36,6 +37,11 @@ class SourceManager implements Closeable {
      */
     private SynchronizerFactoryWithState currentSynchronizerFactory;
 
+    /**
+     * The FDv2 synchronizers that were available when FDv1 fallback began, so they can be restored on recovery.
+     */
+    private final List<SynchronizerFactoryWithState> suspendedForFDv1Fallback = new ArrayList<>();
+
     public SourceManager(List<SynchronizerFactoryWithState> synchronizers, List<FDv2DataSource.DataSourceFactory<Initializer>> initializers) {
         this.synchronizers = synchronizers;
         this.initializers = initializers;
@@ -61,15 +67,47 @@ class SourceManager implements Closeable {
     }
 
     /**
-     * Block all synchronizers aside from the fdv1 fallback and unblock the fdv1 fallback.
+     * Block all synchronizers aside from the fdv1 fallback and unblock the fdv1 fallback. The FDv2 synchronizers
+     * that were available are remembered so that {@link #endFDv1Fallback()} can restore them.
      */
     public void fdv1Fallback() {
-        for (SynchronizerFactoryWithState factory : synchronizers) {
-            if(factory.isFDv1Fallback()) {
-                factory.unblock();
-            } else {
-                factory.block();
+        synchronized (activeSourceLock) {
+            for (SynchronizerFactoryWithState factory : synchronizers) {
+                if (factory.isFDv1Fallback()) {
+                    factory.unblock();
+                } else if (factory.getState() == SynchronizerFactoryWithState.State.Available) {
+                    factory.block();
+                    suspendedForFDv1Fallback.add(factory);
+                }
             }
+        }
+    }
+
+    /**
+     * Restore the FDv2 synchronizers that were blocked by {@link #fdv1Fallback()}, block the fdv1 fallback, and
+     * start again from the first synchronizer.
+     */
+    public void endFDv1Fallback() {
+        synchronized (activeSourceLock) {
+            for (SynchronizerFactoryWithState factory : synchronizers) {
+                if (factory.isFDv1Fallback()) {
+                    factory.block();
+                }
+            }
+            for (SynchronizerFactoryWithState factory : suspendedForFDv1Fallback) {
+                factory.unblock();
+            }
+            suspendedForFDv1Fallback.clear();
+            synchronizerIndex = -1;
+        }
+    }
+
+    /**
+     * @return true if {@link #fdv1Fallback()} suspended FDv2 synchronizers that have not yet been restored
+     */
+    public boolean hasSuspendedFDv2Synchronizers() {
+        synchronized (activeSourceLock) {
+            return !suspendedForFDv1Fallback.isEmpty();
         }
     }
 
@@ -133,6 +171,9 @@ class SourceManager implements Closeable {
             SynchronizerFactoryWithState factory = getNextAvailableSynchronizer();
             if (factory == null) {
                 currentSynchronizerFactory = null;
+                // Nothing replaces the previously active source, so stop it rather than leave it running.
+                safeClose(activeSource);
+                activeSource = null;
                 return null;
             }
 
