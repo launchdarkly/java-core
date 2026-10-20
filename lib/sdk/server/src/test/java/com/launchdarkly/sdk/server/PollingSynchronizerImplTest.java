@@ -920,6 +920,85 @@ public class PollingSynchronizerImplTest extends BaseTest {
     }
 
     @Test
+    public void fdv1FallbackTtlReadFromHeader() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+
+        okhttp3.Headers headers = new okhttp3.Headers.Builder()
+            .add("x-ld-fd-fallback", "true")
+            .add("x-ld-fd-fallback-ttl", "120")
+            .build();
+
+        FDv2Requestor.FDv2PayloadResponse response = FDv2Requestor.FDv2PayloadResponse.success(
+            com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(
+                "{\"events\": [{\"event\": \"server-intent\", \"data\": {\"payloads\": [{\"id\": \"payload-1\", \"target\": 100, \"intentCode\": \"xfer-full\", \"reason\": \"payload-missing\"}]}}, {\"event\": \"payload-transferred\", \"data\": {\"state\": \"(p:payload-1:100)\", \"version\": 100}}]}"
+            ),
+            headers,
+            200
+        );
+
+        when(requestor.Poll(any(Selector.class)))
+            .thenReturn(CompletableFuture.completedFuture(response));
+
+        try {
+            PollingSynchronizerImpl synchronizer = new PollingSynchronizerImpl(
+                    requestor,
+                    testLogger,
+                    selectorSource,
+                    executor,
+                    Duration.ofMillis(100)
+            );
+
+            FDv2SourceResult result = synchronizer.next().get(1, TimeUnit.SECONDS);
+
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
+            assertEquals(Duration.ofSeconds(120), result.getFdv1FallbackTtl());
+
+            synchronizer.close();
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    public void fdv1FallbackTtlReadFromGoodbye() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+
+        FDv2Requestor.FDv2PayloadResponse response = FDv2Requestor.FDv2PayloadResponse.success(
+            com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(
+                "{\"events\": [{\"event\": \"goodbye\", \"data\": {\"reason\": \"fallback\", \"protocolFallbackTTL\": 120}}]}"
+            ),
+            new okhttp3.Headers.Builder().build(),
+            200
+        );
+
+        when(requestor.Poll(any(Selector.class)))
+            .thenReturn(CompletableFuture.completedFuture(response));
+
+        try {
+            PollingSynchronizerImpl synchronizer = new PollingSynchronizerImpl(
+                    requestor,
+                    testLogger,
+                    selectorSource,
+                    executor,
+                    Duration.ofMillis(100)
+            );
+
+            FDv2SourceResult result = synchronizer.next().get(1, TimeUnit.SECONDS);
+
+            assertEquals(SourceSignal.GOODBYE, result.getStatus().getState());
+            assertEquals(Duration.ofSeconds(120), result.getFdv1FallbackTtl());
+
+            synchronizer.close();
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
     public void fdv1FallbackFlagSetToFalseWhenHeaderNotPresent() throws Exception {
         FDv2Requestor requestor = mockRequestor();
         SelectorSource selectorSource = mockSelectorSource();

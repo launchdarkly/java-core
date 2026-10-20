@@ -970,6 +970,76 @@ public class StreamingSynchronizerImplTest extends BaseTest {
     }
 
     @Test
+    public void fdv1FallbackTtlReadFromHeader() throws Exception {
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.header("x-ld-fd-fallback", "true"),
+                Handlers.header("x-ld-fd-fallback-ttl", "120"),
+                Handlers.SSE.start(),
+                Handlers.SSE.event(serverIntent),
+                Handlers.SSE.event(payloadTransferred),
+                Handlers.SSE.leaveOpen()))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY,
+                    null
+            );
+
+            FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
+
+            assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
+            assertEquals(Duration.ofSeconds(120), result.getFdv1FallbackTtl());
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void fdv1FallbackTtlReadFromGoodbye() throws Exception {
+        String goodbyeEvent = makeEvent("goodbye", "{\"reason\":\"fallback\",\"protocolFallbackTTL\":120}");
+
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.SSE.start(),
+                Handlers.SSE.event(goodbyeEvent),
+                Handlers.SSE.leaveOpen()))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            SelectorSource selectorSource = mockSelectorSource();
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    null,
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY,
+                    null
+            );
+
+            FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
+
+            assertEquals(SourceSignal.GOODBYE, result.getStatus().getState());
+            assertEquals(Duration.ofSeconds(120), result.getFdv1FallbackTtl());
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
     public void fdv1FallbackFlagSetToFalseWhenHeaderNotPresent() throws Exception {
         String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
         String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
