@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableList;
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.logging.LogValues;
 import com.launchdarkly.sdk.fdv2.SourceSignal;
-import com.launchdarkly.sdk.server.datasources.FDv1FallbackDirective;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
@@ -157,13 +156,13 @@ class FDv2DataSource implements DataSource {
             // If an initializer signalled FDv1 fallback, the FDv2 synchronizers are not given a
             // chance to run until the directive's TTL elapses. If FDv1 is configured we hand off
             // to it; otherwise no synchronizer runs until then.
-            if (initializerOutcome.fdv1Fallback != null) {
+            if (initializerOutcome.fdv1FallbackTtl != null) {
                 if (sourceManager.hasFDv1Fallback()) {
                     logger.warn("Initializer requested fallback to FDv1; switching to FDv1 fallback synchronizer.");
                 } else {
                     logger.warn("Initializer requested fallback to FDv1, but no FDv1 fallback synchronizer is configured.");
                 }
-                engageFDv1Fallback(initializerOutcome.fdv1Fallback, initializerOutcome.errorInfo);
+                engageFDv1Fallback(initializerOutcome.fdv1FallbackTtl, initializerOutcome.errorInfo);
             }
 
             if(!sourceManager.hasAvailableSynchronizers() && !sourceManager.hasSuspendedFDv2Synchronizers()) {
@@ -228,7 +227,7 @@ class FDv2DataSource implements DataSource {
                                 dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
                                 startFuture.complete(true);
                                 if (result.isFdv1Fallback()) {
-                                    return InitializerOutcome.fallbackToFDv1(result.getFdv1FallbackDirective(), null);
+                                    return InitializerOutcome.fallbackToFDv1(FDv1FallbackDirective.ttlOrDefault(result.getFdv1FallbackTtl()), null);
                                 }
                                 return InitializerOutcome.completed();
                             }
@@ -264,7 +263,7 @@ class FDv2DataSource implements DataSource {
                     // to the FDv1 fallback synchronizer; the eventual VALID status will come
                     // from the FDv1 synchronizer once it serves a selectorful payload.
                     if (result.isFdv1Fallback()) {
-                        return InitializerOutcome.fallbackToFDv1(result.getFdv1FallbackDirective(), fallbackErrorInfo);
+                        return InitializerOutcome.fallbackToFDv1(FDv1FallbackDirective.ttlOrDefault(result.getFdv1FallbackTtl()), fallbackErrorInfo);
                     }
                 }
             } catch (ExecutionException | InterruptedException | CancellationException e) {
@@ -301,11 +300,11 @@ class FDv2DataSource implements DataSource {
      * server-directed FDv1 fallback before the synchronizer phase begins.
      */
     private static final class InitializerOutcome {
-        final FDv1FallbackDirective fdv1Fallback;
+        final Duration fdv1FallbackTtl;
         final DataSourceStatusProvider.ErrorInfo errorInfo;
 
-        private InitializerOutcome(FDv1FallbackDirective fdv1Fallback, DataSourceStatusProvider.ErrorInfo errorInfo) {
-            this.fdv1Fallback = fdv1Fallback;
+        private InitializerOutcome(Duration fdv1FallbackTtl, DataSourceStatusProvider.ErrorInfo errorInfo) {
+            this.fdv1FallbackTtl = fdv1FallbackTtl;
             this.errorInfo = errorInfo;
         }
 
@@ -313,8 +312,8 @@ class FDv2DataSource implements DataSource {
             return new InitializerOutcome(null, null);
         }
 
-        static InitializerOutcome fallbackToFDv1(FDv1FallbackDirective fdv1Fallback, DataSourceStatusProvider.ErrorInfo errorInfo) {
-            return new InitializerOutcome(fdv1Fallback, errorInfo);
+        static InitializerOutcome fallbackToFDv1(Duration fdv1FallbackTtl, DataSourceStatusProvider.ErrorInfo errorInfo) {
+            return new InitializerOutcome(fdv1FallbackTtl, errorInfo);
         }
     }
 
@@ -323,10 +322,10 @@ class FDv2DataSource implements DataSource {
      * and enables the FDv1 fallback synchronizer if one is configured. If none is configured then no synchronizer
      * runs until the TTL elapses, and the data source reports INTERRUPTED.
      */
-    private void engageFDv1Fallback(FDv1FallbackDirective directive, DataSourceStatusProvider.ErrorInfo errorInfo) {
+    private void engageFDv1Fallback(Duration ttl, DataSourceStatusProvider.ErrorInfo errorInfo) {
         sourceManager.fdv1Fallback();
-        fdv1FallbackExpiresAtNanos = System.nanoTime() + directive.getTtl().toNanos();
-        logger.info("FDv2 will be retried in {} seconds.", directive.getTtl().getSeconds());
+        fdv1FallbackExpiresAtNanos = System.nanoTime() + ttl.toNanos();
+        logger.info("FDv2 will be retried in {} seconds.", ttl.getSeconds());
         if (!sourceManager.hasFDv1Fallback()) {
             dataSourceUpdates.updateStatus(
                 DataSourceStatusProvider.State.INTERRUPTED,
@@ -528,7 +527,7 @@ class FDv2DataSource implements DataSource {
                                 if (result.isFdv1Fallback()) {
                                     if (sourceManager.isCurrentSynchronizerFDv1Fallback()) {
                                         fdv1FallbackExpiresAtNanos = System.nanoTime()
-                                            + result.getFdv1FallbackDirective().getTtl().toNanos();
+                                            + FDv1FallbackDirective.ttlOrDefault(result.getFdv1FallbackTtl()).toNanos();
                                     } else {
                                         if (sourceManager.hasFDv1Fallback()) {
                                             logger.info("Falling back to an FDv1 fallback synchronizer.");
@@ -539,7 +538,7 @@ class FDv2DataSource implements DataSource {
                                             );
                                         }
                                         engageFDv1Fallback(
-                                            result.getFdv1FallbackDirective(),
+                                            FDv1FallbackDirective.ttlOrDefault(result.getFdv1FallbackTtl()),
                                             result.getStatus() != null ? result.getStatus().getErrorInfo() : null);
                                         running = false;
                                     }

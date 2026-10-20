@@ -218,7 +218,7 @@ class FDv2DataSourceConditions {
         @Override
         public void inform(FDv2SourceResult sourceResult) {
             if (sourceResult.isFdv1Fallback()) {
-                schedule(sourceResult.getFdv1FallbackDirective().getTtl());
+                schedule(FDv1FallbackDirective.ttlOrDefault(sourceResult.getFdv1FallbackTtl()));
             }
         }
 

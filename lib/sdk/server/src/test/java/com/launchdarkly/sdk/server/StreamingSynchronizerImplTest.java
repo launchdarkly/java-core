@@ -1000,7 +1000,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
 
             assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
-            assertEquals(Duration.ofSeconds(120), result.getFdv1FallbackDirective().getTtl());
+            assertEquals(Duration.ofSeconds(120), result.getFdv1FallbackTtl());
 
             synchronizer.close();
         }
@@ -1033,7 +1033,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
 
             assertEquals(SourceSignal.GOODBYE, result.getStatus().getState());
-            assertEquals(Duration.ofSeconds(120), result.getFdv1FallbackDirective().getTtl());
+            assertEquals(Duration.ofSeconds(120), result.getFdv1FallbackTtl());
 
             synchronizer.close();
         }

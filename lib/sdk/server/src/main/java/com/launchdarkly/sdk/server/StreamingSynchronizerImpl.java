@@ -21,7 +21,6 @@ import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ProtocolHandler;
 import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.internal.http.HttpHelpers;
 import com.launchdarkly.sdk.internal.http.HttpProperties;
-import com.launchdarkly.sdk.server.datasources.FDv1FallbackDirective;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.SelectorSource;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
@@ -322,7 +321,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
             case GOODBYE:
                 String reason = ((FDv2ProtocolHandler.FDv2ActionGoodbye) action).getReason();
                 logger.info("Goodbye was received from the LaunchDarkly connection with reason: '{}'.", reason);
-                FDv1FallbackDirective goodbyeFallback = FDv1FallbackDirectives.fromGoodbye(fdv2Event);
+                Duration goodbyeFallback = FDv1FallbackDirective.fromGoodbye(fdv2Event);
                 result = FDv2SourceResult.goodbye(reason, goodbyeFallback != null ? goodbyeFallback : getFallback(event));
                 // We drop this current connection and attempt to restart the stream.
                 restartStream(false);  // Not a failure - deliberate server-initiated restart
@@ -450,14 +449,14 @@ class StreamingSynchronizerImpl implements Synchronizer {
         }
     }
 
-    private static FDv1FallbackDirective getFallback(Exception ex) {
+    private static Duration getFallback(Exception ex) {
         if(ex instanceof StreamHttpErrorException) {
             return getFallback(((StreamHttpErrorException) ex).getHeaders());
         }
         return null;
     }
 
-    private static FDv1FallbackDirective getFallback(StreamEvent event) {
+    private static Duration getFallback(StreamEvent event) {
         if(event instanceof FaultEvent) {
             return getFallback(((FaultEvent) event).getHeaders());
         } else if (event instanceof MessageEvent) {
@@ -466,8 +465,8 @@ class StreamingSynchronizerImpl implements Synchronizer {
         return null;
     }
 
-    private static FDv1FallbackDirective getFallback(ResponseHeaders headers) {
-        return FDv1FallbackDirectives.fromHeaders(
+    private static Duration getFallback(ResponseHeaders headers) {
+        return FDv1FallbackDirective.fromHeaders(
             headers.value(HeaderConstants.FDV1_FALLBACK.getHeaderName()),
             headers.value(HeaderConstants.FDV1_FALLBACK_TTL.getHeaderName()));
     }

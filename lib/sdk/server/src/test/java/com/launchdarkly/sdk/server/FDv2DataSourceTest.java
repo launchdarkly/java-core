@@ -7,7 +7,6 @@ import com.launchdarkly.logging.LogCapture;
 import com.launchdarkly.logging.Logs;
 import com.launchdarkly.sdk.internal.collections.IterableAsyncQueue;
 import com.launchdarkly.sdk.fdv2.Selector;
-import com.launchdarkly.sdk.server.datasources.FDv1FallbackDirective;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
@@ -70,8 +69,8 @@ public class FDv2DataSourceTest extends BaseTest {
         );
     }
 
-    private static FDv1FallbackDirective shortFallbackDirective() {
-        return FDv1FallbackDirective.fromServiceTtl(Duration.ofMillis(100));
+    private static Duration shortFallbackTtl() {
+        return Duration.ofMillis(100);
     }
 
     private FDv2SourceResult makeInterruptedResult() {
@@ -2549,7 +2548,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         BlockingQueue<FDv2SourceResult> primaryResults = new LinkedBlockingQueue<>();
         primaryResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
-        primaryResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), shortFallbackDirective()));
+        primaryResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), shortFallbackTtl()));
 
         BlockingQueue<Integer> primaryBuilds = new LinkedBlockingQueue<>();
         AtomicInteger primaryBuildCount = new AtomicInteger(0);
@@ -2709,7 +2708,7 @@ public class FDv2DataSourceTest extends BaseTest {
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
         BlockingQueue<FDv2SourceResult> primaryResults = new LinkedBlockingQueue<>();
-        primaryResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), shortFallbackDirective()));
+        primaryResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), shortFallbackTtl()));
 
         BlockingQueue<Integer> primaryBuilds = new LinkedBlockingQueue<>();
         AtomicInteger primaryBuildCount = new AtomicInteger(0);
@@ -2765,7 +2764,7 @@ public class FDv2DataSourceTest extends BaseTest {
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
         BlockingQueue<FDv2SourceResult> primaryResults = new LinkedBlockingQueue<>();
-        primaryResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), FDv1FallbackDirective.fromServiceTtl(Duration.ofHours(1))));
+        primaryResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), Duration.ofHours(1)));
 
         BlockingQueue<Integer> primaryBuilds = new LinkedBlockingQueue<>();
         AtomicInteger primaryBuildCount = new AtomicInteger(0);
@@ -2778,7 +2777,7 @@ public class FDv2DataSourceTest extends BaseTest {
         );
 
         BlockingQueue<FDv2SourceResult> fdv1Results = new LinkedBlockingQueue<>();
-        fdv1Results.add(FDv2SourceResult.changeSet(makeChangeSet(true), shortFallbackDirective()));
+        fdv1Results.add(FDv2SourceResult.changeSet(makeChangeSet(true), shortFallbackTtl()));
 
         AtomicInteger fdv1BuildCount = new AtomicInteger(0);
         FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
@@ -2947,7 +2946,7 @@ public class FDv2DataSourceTest extends BaseTest {
         );
 
         CompletableFuture<FDv2SourceResult> initFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.terminalError(initError, shortFallbackDirective())
+            FDv2SourceResult.terminalError(initError, shortFallbackTtl())
         );
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
             () -> new MockInitializer(initFuture)

@@ -4,7 +4,6 @@ import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event;
 import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ProtocolHandler;
 import com.launchdarkly.sdk.fdv2.Selector;
-import com.launchdarkly.sdk.server.datasources.FDv1FallbackDirective;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.fdv2.ChangeSet;
@@ -16,6 +15,7 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 import com.launchdarkly.sdk.json.SerializationException;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Date;
@@ -36,9 +36,9 @@ class PollingBase {
         requestor.close();
     }
 
-    private static FDv1FallbackDirective getFallback(FDv2Requestor.FDv2PayloadResponse response) {
+    private static Duration getFallback(FDv2Requestor.FDv2PayloadResponse response) {
         if (response != null && response.getHeaders() != null) {
-            return FDv1FallbackDirectives.fromHeaders(
+            return FDv1FallbackDirective.fromHeaders(
                 response.getHeaders().get(HeaderConstants.FDV1_FALLBACK.getHeaderName()),
                 response.getHeaders().get(HeaderConstants.FDV1_FALLBACK_TTL.getHeaderName()));
         }
@@ -55,7 +55,7 @@ class PollingBase {
 
     protected CompletableFuture<FDv2SourceResult> poll(Selector selector, boolean oneShot) {
         return requestor.Poll(selector).handle(((pollingResponse, ex) -> {
-            FDv1FallbackDirective fdv1Fallback = getFallback(pollingResponse);
+            Duration fdv1Fallback = getFallback(pollingResponse);
             String environmentId = getEnvironmentId(pollingResponse);
             if (ex != null) {
                 if (ex instanceof IOException) {
@@ -150,7 +150,7 @@ class PollingBase {
                     case GOODBYE:
                         String reason = ((FDv2ProtocolHandler.FDv2ActionGoodbye) res).getReason();
                         logger.info("Goodbye was received from the LaunchDarkly connection with reason: '{}'.", reason);
-                        FDv1FallbackDirective goodbyeFallback = FDv1FallbackDirectives.fromGoodbye(event);
+                        Duration goodbyeFallback = FDv1FallbackDirective.fromGoodbye(event);
                         return FDv2SourceResult.goodbye(reason, goodbyeFallback != null ? goodbyeFallback : fdv1Fallback);
                     case NONE:
                         break;
