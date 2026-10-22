@@ -215,6 +215,41 @@ public abstract class Representations {
     MigrationVariationParams migrationVariation;
 
     MigrationOperationParams migrationOperation;
+
+    RegisterFlagChangeListenerParams registerFlagChangeListener;
+    RegisterFlagValueChangeListenerParams registerFlagValueChangeListener;
+    UnregisterListenerParams unregisterListener;
+  }
+
+  public static class RegisterFlagChangeListenerParams {
+    String listenerId;
+    URI callbackUri;
+  }
+
+  public static class RegisterFlagValueChangeListenerParams {
+    String listenerId;
+    String flagKey;
+    LDContext context;
+    LDValue defaultValue;
+    URI callbackUri;
+  }
+
+  public static class UnregisterListenerParams {
+    String listenerId;
+  }
+
+  // Posted to a listener's callback URI when a general flag change listener fires.
+  public static class FlagChangeNotification {
+    String listenerId;
+    String flagKey;
+  }
+
+  // Posted to a listener's callback URI when a flag value change listener fires.
+  public static class FlagValueChangeNotification {
+    String listenerId;
+    String flagKey;
+    LDValue oldValue;
+    LDValue newValue;
   }
 
   public static class EvaluateFlagParams {

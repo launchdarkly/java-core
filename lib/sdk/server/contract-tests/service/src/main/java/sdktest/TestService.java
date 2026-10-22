@@ -34,6 +34,8 @@ public class TestService {
     "event-gzip",
     "event-sampling",
     "filtering",
+    "flag-change-listeners",
+    "flag-value-change-listeners",
     "hook-environment-id",
     "inline-context-all",
     "migrations",
