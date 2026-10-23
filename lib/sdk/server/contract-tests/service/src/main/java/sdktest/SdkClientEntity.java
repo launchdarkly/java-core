@@ -63,6 +63,9 @@ import sdktest.Representations.EvaluateFlagParams;
 import sdktest.Representations.EvaluateFlagResponse;
 import sdktest.Representations.GetBigSegmentsStoreStatusResponse;
 import sdktest.Representations.IdentifyEventParams;
+import sdktest.Representations.RegisterFlagChangeListenerParams;
+import sdktest.Representations.RegisterFlagValueChangeListenerParams;
+import sdktest.Representations.UnregisterListenerParams;
 import sdktest.Representations.HookConfig;
 import sdktest.Representations.SdkConfigHookParams;
 import sdktest.Representations.SdkConfigParams;
@@ -76,6 +79,7 @@ import sdktest.Representations.SecureModeHashResponse;
 
 public class SdkClientEntity {
   private final LDClient client;
+  private final ListenerRegistry listeners;
   final Logger logger;
 
   public SdkClientEntity(TestService owner, CreateInstanceParams params) {
@@ -84,6 +88,7 @@ public class SdkClientEntity {
 
     LDConfig config = buildSdkConfig(params.configuration, params.tag);
     this.client = new LDClient(params.configuration.credential, config);
+    this.listeners = new ListenerRegistry(client.getFlagTracker(), logger);
     if (!client.isInitialized() && !params.configuration.initCanFail) {
       throw new RuntimeException("client initialization failed or timed out");
     }
@@ -129,6 +134,20 @@ public class SdkClientEntity {
       return res;
     case "migrationOperation":
       return doMigrationOperation(params.migrationOperation);
+    case "registerFlagChangeListener":
+      RegisterFlagChangeListenerParams rfcl = params.registerFlagChangeListener;
+      listeners.registerFlagChangeListener(rfcl.listenerId, rfcl.callbackUri);
+      return null;
+    case "registerFlagValueChangeListener":
+      RegisterFlagValueChangeListenerParams rfvcl = params.registerFlagValueChangeListener;
+      listeners.registerFlagValueChangeListener(rfvcl.listenerId, rfvcl.flagKey, rfvcl.context, rfvcl.callbackUri);
+      return null;
+    case "unregisterListener":
+      UnregisterListenerParams ul = params.unregisterListener;
+      if (!listeners.unregister(ul.listenerId)) {
+        throw new TestService.BadRequestException("no listener with id " + ul.listenerId);
+      }
+      return null;
     default:
       throw new TestService.BadRequestException("unknown command: " + params.command);
     }
@@ -372,6 +391,7 @@ public class SdkClientEntity {
   }
 
   public void close() {
+    listeners.closeAll();
     try {
       client.close();
     } catch (Exception e) {
