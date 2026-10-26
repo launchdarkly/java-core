@@ -1,0 +1,72 @@
+name: java-server-sdk-dynamodb-store
+
+on:
+  push:
+    branches: [main, 'feat/**']
+    paths-ignore:
+      - '**.md' #Do not need to run CI for markdown changes.
+  pull_request:
+    branches: [main, 'feat/**']
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  build-test-java-server-sdk-dynamodb-store:
+    strategy:
+      matrix:
+        java-version: [8, 11, 17, 19]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Shared CI Steps
+        uses: ./.github/actions/ci
+        with:
+          workspace_path: 'lib/java-server-sdk-dynamodb-store'
+          java_version: ${{ matrix.java-version }}
+
+  build-test-java-server-sdk-dynamodb-store-windows:
+    strategy:
+      matrix:
+        java-version: [11, 17]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ matrix.java-version }}
+
+      - name: Setup DynamoDB Service
+        shell: pwsh
+        run: |
+          $ProgressPreference = "SilentlyContinue"
+          iwr -outf dynamo.zip https://s3-us-west-2.amazonaws.com/dynamodb-local/dynamodb_local_latest.zip
+          mkdir dynamo
+          Expand-Archive -Path dynamo.zip -DestinationPath dynamo
+          cd dynamo
+          Start-Process -FilePath "java" -ArgumentList "-D`"java.library.path=./DynamoDBLocal_lib`"","-jar","DynamoDBLocal.jar"
+
+      - name: Restore dependencies
+        shell: bash
+        run: lib/java-server-sdk-dynamodb-store/gradlew dependencies -p lib/java-server-sdk-dynamodb-store
+
+      - name: Build
+        shell: bash
+        id: build
+        run: lib/java-server-sdk-dynamodb-store/gradlew build -p lib/java-server-sdk-dynamodb-store
+
+      - name: Build Jar
+        shell: bash
+        run: lib/java-server-sdk-dynamodb-store/gradlew jar -p lib/java-server-sdk-dynamodb-store
+
+      - name: Run Tests
+        if: steps.build.outcome == 'success'
+        shell: bash
+        run: lib/java-server-sdk-dynamodb-store/gradlew test -p lib/java-server-sdk-dynamodb-store
+
+      - name: Build Documentation
+        shell: bash
+        run: lib/java-server-sdk-dynamodb-store/gradlew javadoc -p lib/java-server-sdk-dynamodb-store
