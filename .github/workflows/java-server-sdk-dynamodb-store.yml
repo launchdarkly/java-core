@@ -33,6 +33,14 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      # DynamoDB Local 2.6.0+ requires Java 17, so it gets its own JDK independent of the version under test.
+      - name: Setup Java for DynamoDB Local
+        id: dynamodb-java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -41,13 +49,23 @@ jobs:
 
       - name: Setup DynamoDB Service
         shell: pwsh
+        env:
+          DYNAMODB_JAVA_HOME: ${{ steps.dynamodb-java.outputs.path }}
         run: |
           $ProgressPreference = "SilentlyContinue"
-          iwr -outf dynamo.zip https://s3-us-west-2.amazonaws.com/dynamodb-local/dynamodb_local_latest.zip
+          iwr -outf dynamo.zip https://d1ni2b6xgvw0s0.cloudfront.net/v2.x/dynamodb_local_latest.zip
           mkdir dynamo
           Expand-Archive -Path dynamo.zip -DestinationPath dynamo
           cd dynamo
-          Start-Process -FilePath "java" -ArgumentList "-D`"java.library.path=./DynamoDBLocal_lib`"","-jar","DynamoDBLocal.jar"
+          $java = Join-Path $env:DYNAMODB_JAVA_HOME "bin\java.exe"
+          $proc = Start-Process -PassThru -FilePath $java -ArgumentList "-D`"java.library.path=./DynamoDBLocal_lib`"","-jar","DynamoDBLocal.jar"
+          $deadline = (Get-Date).AddSeconds(60)
+          while ($true) {
+            try { (New-Object System.Net.Sockets.TcpClient("127.0.0.1", 8000)).Close(); break } catch {}
+            if ($proc.HasExited) { throw "DynamoDB Local exited before it started listening on port 8000" }
+            if ((Get-Date) -gt $deadline) { throw "DynamoDB Local did not start listening on port 8000 within 60 seconds" }
+            Start-Sleep -Seconds 1
+          }
 
       - name: Restore dependencies
         shell: bash
