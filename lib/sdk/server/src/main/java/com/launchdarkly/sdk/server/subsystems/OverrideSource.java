@@ -31,10 +31,12 @@ public interface OverrideSource extends Closeable {
    * failed load should leave the previously supplied layer untouched by not calling the sink.
    * <p>
    * The SDK calls this method at most once, before any call to {@link #close()}, while the client
-   * is being constructed. An exception thrown from it does not prevent the client from starting: the
-   * SDK logs the exception, closes the source, and the client runs without overrides. A source that
-   * cannot load its data should log that and retry rather than throw, as the SDK's file-based source
-   * does.
+   * is being constructed. This method is not intended to fail. A source that cannot load its data
+   * logs the failure and keeps retrying, as the SDK's file-based source does. A configuration error
+   * belongs in the {@link ComponentConfigurer#build(ClientContext)} that builds the source, where it
+   * is reported when the client is created. If this method does throw, the client still starts: the
+   * SDK logs the exception, closes the source, removes any snapshot the source supplied, and the
+   * client runs without overrides.
    *
    * @param sink receives override snapshots
    */
