@@ -66,6 +66,19 @@ public class InputValidatingEvaluatorOverrideTest {
   }
 
   @Test
+  public void unrecognizedMigrationStageFromOverrideFlagKeepsMarking() {
+    FeatureFlag flag = flagBuilder("flag").on(false).offVariation(0).variations(LDValue.of("potato"))
+        .build().markedAsOverride();
+    MigrationStageEnforcingEvaluator evaluator =
+        new MigrationStageEnforcingEvaluator(evaluatorOver(storeWith(flag)), nullLogger);
+    EvalResultAndFlag result = evaluator.evalAndFlag("LDClient.migrationVariation", "flag", BASE_USER,
+        LDValue.of("off"), LDValueType.STRING, EvaluationOptions.EVENTS_WITHOUT_REASONS);
+
+    assertEquals(LDValue.of("off"), result.getResult().getValue());
+    assertEquals(EvaluationReason.error(ErrorKind.WRONG_TYPE).withOverrideAffected(true), result.getResult().getReason());
+  }
+
+  @Test
   public void typeMismatchOnOrdinaryFlagIsNotMarked() {
     FeatureFlag flag = flagBuilder("flag").on(false).offVariation(0).variations(LDValue.of("a string")).build();
     EvalResultAndFlag result = evaluatorOver(storeWith(flag)).evaluate("flag", BASE_USER, LDValue.of(true),
