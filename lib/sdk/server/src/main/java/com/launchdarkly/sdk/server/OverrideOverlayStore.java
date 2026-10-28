@@ -45,28 +45,18 @@ final class OverrideOverlayStore implements ReadOnlyStore {
 
   /**
    * Returns the union of the base store's items and the layer's items. The override entry wins for
-   * any key present in both, including keys that the base holds as deleted-item placeholders.
-   * <p>
-   * When the base store fails and the layer holds entries, the result is the layer's entries alone.
-   * A per-key read serves those entries whatever the state of the base, so an all-flags read does
-   * the same. When the layer is empty, the base failure propagates.
+   * any key present in both, including keys that the base holds as deleted-item placeholders. A
+   * failure of the base store propagates, as it does without the overlay.
    */
   @Override
   public KeyedItems<ItemDescriptor> getAll(DataKind kind) {
+    KeyedItems<ItemDescriptor> fromBase = base.getAll(kind);
     ImmutableMap<String, ItemDescriptor> overrides = layer.all(kind);
-    Iterable<Map.Entry<String, ItemDescriptor>> baseItems;
-    try {
-      KeyedItems<ItemDescriptor> fromBase = base.getAll(kind);
-      if (overrides.isEmpty()) {
-        return fromBase;
-      }
-      baseItems = fromBase == null || fromBase.getItems() == null ? Collections.emptyList() : fromBase.getItems();
-    } catch (RuntimeException e) {
-      if (overrides.isEmpty()) {
-        throw e;
-      }
-      baseItems = Collections.emptyList();
+    if (overrides.isEmpty()) {
+      return fromBase;
     }
+    Iterable<Map.Entry<String, ItemDescriptor>> baseItems =
+        fromBase == null || fromBase.getItems() == null ? Collections.emptyList() : fromBase.getItems();
 
     ImmutableList.Builder<Map.Entry<String, ItemDescriptor>> result = ImmutableList.builder();
     Set<String> seen = new HashSet<>();

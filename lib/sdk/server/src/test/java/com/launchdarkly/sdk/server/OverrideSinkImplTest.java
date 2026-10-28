@@ -26,6 +26,7 @@ import static com.launchdarkly.sdk.server.OverrideLayerTest.flagsOnly;
 import static com.launchdarkly.sdk.server.TestComponents.nullLogger;
 import static com.launchdarkly.sdk.server.TestComponents.sharedExecutor;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -70,6 +71,40 @@ public class OverrideSinkImplTest {
     assertTrue(((FeatureFlag) layer.get(DataModel.FEATURES, "a").getItem()).isOverride());
     sink.setOverrides(Collections.emptyList());
     assertTrue(layer.isEmpty());
+  }
+
+  @Test
+  public void closeKeepsTheLayerAndIgnoresLaterSnapshots() throws Exception {
+    listen();
+    sink.setOverrides(flagsOnly(flagBuilder("a").version(1).build()));
+    assertEquals(keys("a"), awaitKeys(1));
+
+    sink.close();
+    assertNotNull(layer.get(DataModel.FEATURES, "a"));
+    assertNoMoreEvents();
+
+    // A snapshot after closing changes nothing.
+    sink.setOverrides(flagsOnly(flagBuilder("b").version(1).build()));
+    assertNotNull(layer.get(DataModel.FEATURES, "a"));
+    assertNull(layer.get(DataModel.FEATURES, "b"));
+    assertNoMoreEvents();
+  }
+
+  @Test
+  public void closeAndClearClearsTheLayerAndIgnoresLaterSnapshots() throws Exception {
+    listen();
+    sink.setOverrides(flagsOnly(flagBuilder("a").version(1).build()));
+    assertEquals(keys("a"), awaitKeys(1));
+
+    // Closing removes what the source supplied, and the removal is a change.
+    sink.closeAndClear();
+    assertTrue(layer.isEmpty());
+    assertEquals(keys("a"), awaitKeys(1));
+
+    // A snapshot after closing changes nothing.
+    sink.setOverrides(flagsOnly(flagBuilder("a").version(1).build()));
+    assertTrue(layer.isEmpty());
+    assertNoMoreEvents();
   }
 
   @Test

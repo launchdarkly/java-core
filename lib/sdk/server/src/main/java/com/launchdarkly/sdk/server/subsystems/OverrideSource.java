@@ -14,6 +14,9 @@ import java.io.Closeable;
  * <p>
  * To configure an override source, use
  * {@link com.launchdarkly.sdk.server.integrations.DataSystemBuilder#overrides(ComponentConfigurer)}.
+ * The SDK closes the source when the client is closed. An exception thrown from {@link #close()} is
+ * logged and does not stop the client from shutting down. A snapshot that the source supplies after
+ * the client begins to close it is ignored.
  * <p>
  * Flag overrides are currently experimental and subject to change.
  *
@@ -28,7 +31,10 @@ public interface OverrideSource extends Closeable {
    * failed load should leave the previously supplied layer untouched by not calling the sink.
    * <p>
    * The SDK calls this method at most once, before any call to {@link #close()}, while the client
-   * is being constructed.
+   * is being constructed. An exception thrown from it does not prevent the client from starting: the
+   * SDK logs the exception, closes the source, and the client runs without overrides. A source that
+   * cannot load its data should log that and retry rather than throw, as the SDK's file-based source
+   * does.
    *
    * @param sink receives override snapshots
    */
