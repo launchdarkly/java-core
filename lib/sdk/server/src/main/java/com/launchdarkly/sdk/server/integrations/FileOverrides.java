@@ -79,7 +79,11 @@ public abstract class FileOverrides {
    * file is a JSON or YAML document with optional {@code "flags"}, {@code "flagValues"}, and
    * {@code "segments"} members. A {@code "flagValues"} entry is expanded into a full flag
    * definition that is on and serves the given value as its single variation by fallthrough for
-   * every context.
+   * every context. Such a flag is not available to client-side SDKs, so
+   * {@link com.launchdarkly.sdk.server.LDClient#allFlagsState} with
+   * {@link com.launchdarkly.sdk.server.FlagsStateOption#CLIENT_SIDE_ONLY} leaves it out, even when
+   * the flag it overrides is available to them. To override such a flag, define it in
+   * {@code "flags"} with {@code "clientSide": true}.
    * When multiple files are configured, their entries are combined in the configured order, and
    * the duplicate keys handling decides which file wins for a key that appears more than once.
    * <p>

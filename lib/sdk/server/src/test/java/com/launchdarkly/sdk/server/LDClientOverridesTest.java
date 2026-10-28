@@ -10,6 +10,7 @@ import com.launchdarkly.sdk.json.JsonSerialization;
 import com.launchdarkly.sdk.server.DataModel.FeatureFlag;
 import com.launchdarkly.sdk.server.DataModel.Segment;
 import com.launchdarkly.sdk.server.integrations.DataSystemBuilder;
+import com.launchdarkly.sdk.server.integrations.FileOverrides;
 import com.launchdarkly.sdk.server.integrations.TestDataV2;
 import com.launchdarkly.sdk.server.interfaces.FlagChangeEvent;
 import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider.CacheStats;
@@ -21,10 +22,15 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 import com.launchdarkly.sdk.server.subsystems.DataSystemConfiguration.DataStoreMode;
 import com.launchdarkly.sdk.server.subsystems.OverrideSource;
+import com.launchdarkly.testhelpers.TempDir;
 
 import org.junit.Test;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
@@ -165,6 +171,25 @@ public class LDClientOverridesTest extends BaseTest {
       assertTrue(state.isValid());
       assertEquals(Collections.singletonMap("overridden", LDValue.of("override-value")), state.toValuesMap());
       assertTrue(state.getFlagReason("overridden").isOverrideAffected());
+    }
+  }
+
+  @Test
+  public void clientSideAllFlagsStateKeepsADefinitionWithClientSideButNotAFlagValuesEntry() throws Exception {
+    // A flagValues entry is not available to client-side SDKs. A full definition that sets
+    // clientSide is, so that is how an operator overrides a flag that client-side SDKs use.
+    try (TempDir dir = TempDir.create()) {
+      Path file = dir.getPath().resolve("overrides.json");
+      Files.write(file, ("{\"flagValues\": {\"value-flag\": true}, \"flags\": {\"full-flag\": {"
+          + "\"key\": \"full-flag\", \"version\": 1, \"on\": true, \"variations\": [true], "
+          + "\"fallthrough\": {\"variation\": 0}, \"clientSide\": true}}}").getBytes(StandardCharsets.UTF_8));
+      try (LDClient client = new LDClient(SDK_KEY, uninitializedConfig(FileOverrides.source().filePaths(file)))) {
+        assertEquals(new HashSet<>(Arrays.asList("full-flag", "value-flag")),
+            client.allFlagsState(CONTEXT).toValuesMap().keySet());
+        FeatureFlagsState clientSide = client.allFlagsState(CONTEXT, FlagsStateOption.CLIENT_SIDE_ONLY);
+        assertTrue(clientSide.isValid());
+        assertEquals(Collections.singletonMap("full-flag", LDValue.of(true)), clientSide.toValuesMap());
+      }
     }
   }
 
