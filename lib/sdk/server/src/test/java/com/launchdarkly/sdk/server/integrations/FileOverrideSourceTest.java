@@ -19,10 +19,15 @@ import com.launchdarkly.testhelpers.TempDir;
 import org.junit.After;
 import org.junit.Test;
 
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -146,6 +151,38 @@ public class FileOverrideSourceTest {
     } catch (IllegalArgumentException e) {
       assertThat(e.getMessage(), containsString("poll interval"));
     }
+  }
+
+  @Test
+  public void buildRejectsWatchingAPathOnAnotherFileSystem() throws Exception {
+    // The default watch service cannot watch such a path. Rejecting it here reports the
+    // configuration error when the client is created, instead of a failure when the source starts.
+    try (TempDir dir = TempDir.create(); FileSystem zip = newZipFileSystem(dir)) {
+      Path file = zip.getPath("/overrides.json");
+      try {
+        FileOverrides.source().filePaths(file).changeDetection(ChangeDetection.WATCHING).build(context);
+        fail("expected exception");
+      } catch (IllegalArgumentException e) {
+        assertThat(e.getMessage(), containsString("can watch only files on the default file system"));
+      }
+    }
+  }
+
+  @Test
+  public void pollingLoadsAPathOnAnotherFileSystem() throws Exception {
+    try (TempDir dir = TempDir.create(); FileSystem zip = newZipFileSystem(dir)) {
+      Path file = zip.getPath("/overrides.json");
+      Files.write(file, docWith("flag", "value").getBytes(StandardCharsets.UTF_8));
+      RecordingSink sink = new RecordingSink();
+      start(FileOverrides.source().filePaths(file).changeDetection(ChangeDetection.POLLING), sink);
+
+      assertEquals("value", flagValue(sink.await(), "flag"));
+    }
+  }
+
+  private static FileSystem newZipFileSystem(TempDir dir) throws Exception {
+    URI uri = URI.create("jar:" + dir.getPath().resolve("overrides.zip").toUri());
+    return FileSystems.newFileSystem(uri, Collections.singletonMap("create", "true"));
   }
 
   @Test

@@ -6,6 +6,7 @@ import com.launchdarkly.sdk.server.subsystems.ClientContext;
 import com.launchdarkly.sdk.server.subsystems.ComponentConfigurer;
 import com.launchdarkly.sdk.server.subsystems.OverrideSource;
 
+import java.nio.file.FileSystems;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -88,7 +89,9 @@ public final class FileOverrideSourceBuilder implements ComponentConfigurer<Over
 
   /**
    * Selects how the source detects file changes. The default is {@link ChangeDetection#POLLING}.
-   * The two modes are alternatives, so setting one replaces the other.
+   * The two modes are alternatives, so setting one replaces the other. {@link ChangeDetection#WATCHING}
+   * requires every file path to be on the default file system; a path of another file system provider,
+   * such as a zip file system, can be polled but not watched, and {@link #build(ClientContext)} rejects it.
    *
    * @param changeDetection the change detection mode
    * @return the same builder
@@ -130,6 +133,18 @@ public final class FileOverrideSourceBuilder implements ComponentConfigurer<Over
     }
     if (pollInterval == null) {
       throw new IllegalArgumentException("a poll interval is required for the file-based override source");
+    }
+    // Change notifications come from the default file system's watch service, which cannot watch a
+    // path of another file system provider, such as a zip file system. That is a configuration
+    // error, reported here rather than when the source starts. Polling reads such a path through its
+    // own provider.
+    if (changeDetection == ChangeDetection.WATCHING) {
+      for (Path p : filePaths) {
+        if (!p.getFileSystem().equals(FileSystems.getDefault())) {
+          throw new IllegalArgumentException(
+              "the file-based override source can watch only files on the default file system; use polling for " + p);
+        }
+      }
     }
     LDLogger logger = context.getBaseLogger().subLogger("FileOverrideSource");
 
