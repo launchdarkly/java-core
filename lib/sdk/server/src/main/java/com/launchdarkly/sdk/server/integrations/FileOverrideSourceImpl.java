@@ -26,11 +26,19 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * effect, and the reload is retried.
  */
 final class FileOverrideSourceImpl implements OverrideSource {
+  /**
+   * Creates the watcher for watching mode. Tests substitute one that fails.
+   */
+  interface WatcherFactory {
+    FileDataWatcher create(List<Path> paths, LDLogger logger) throws IOException;
+  }
+
   private final List<Path> paths;
   private final ChangeDetection changeDetection;
   private final Duration pollInterval;
   private final LDLogger logger;
   private final OverrideFileLoader loader;
+  private final WatcherFactory watcherFactory;
 
   private volatile FileDataReloader reloader;
   private volatile FileDataPoller poller;
@@ -44,11 +52,23 @@ final class FileOverrideSourceImpl implements OverrideSource {
       Duration pollInterval,
       LDLogger logger
   ) {
+    this(paths, duplicateKeysHandling, changeDetection, pollInterval, logger, FileDataWatcher::create);
+  }
+
+  FileOverrideSourceImpl(
+      List<Path> paths,
+      FileData.DuplicateKeysHandling duplicateKeysHandling,
+      ChangeDetection changeDetection,
+      Duration pollInterval,
+      LDLogger logger,
+      WatcherFactory watcherFactory
+  ) {
     this.paths = new ArrayList<>(paths);
     this.changeDetection = changeDetection;
     this.pollInterval = pollInterval;
     this.logger = logger;
     this.loader = new OverrideFileLoader(paths, duplicateKeysHandling);
+    this.watcherFactory = watcherFactory;
   }
 
   /**
@@ -87,13 +107,19 @@ final class FileOverrideSourceImpl implements OverrideSource {
     switch (changeDetection) {
     case WATCHING:
       try {
-        FileDataWatcher w = FileDataWatcher.create(paths, logger);
+        FileDataWatcher w = watcherFactory.create(paths, logger);
         watcher = w;
         w.start(reloader::trigger);
       } catch (IOException e) {
-        // COVERAGE: constructing a watcher only fails under unusual OS conditions
-        logger.error("Unable to watch override files: {}", LogValues.exceptionSummary(e));
+        // The watch service itself cannot be created, for example because the limit on inotify
+        // instances is reached. Without change detection a later edit would never take effect, so
+        // the source polls the files instead, no more often than polling mode allows.
+        Duration interval = pollInterval.compareTo(FileOverrides.MINIMUM_POLL_INTERVAL) < 0
+            ? FileOverrides.MINIMUM_POLL_INTERVAL : pollInterval;
+        logger.error("Unable to watch override files; polling them instead every {}: {}", interval,
+            LogValues.exceptionSummary(e));
         logger.debug(LogValues.exceptionTrace(e));
+        poller = new FileDataPoller(paths, interval, reloader::trigger, logger);
       }
       break;
     case POLLING:

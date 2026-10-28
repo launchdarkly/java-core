@@ -19,6 +19,7 @@ import com.launchdarkly.testhelpers.TempDir;
 import org.junit.After;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
@@ -370,6 +371,31 @@ public class FileOverrideSourceTest {
   @Test
   public void watchingModeReloadsOnChange() throws Exception {
     reloadsOnChange(ChangeDetection.WATCHING);
+  }
+
+  @Test
+  public void watchingFallsBackToPollingWhenTheWatcherCannotBeCreated() throws Exception {
+    // Without change detection a later edit would never take effect. The source polls instead, at
+    // no less than the minimum poll interval, which watching mode otherwise ignores.
+    try (TempDir dir = TempDir.create()) {
+      Path file = write(dir, "overrides.json", docWith("flag", "first"));
+      FileOverrideSourceImpl source = new FileOverrideSourceImpl(
+          Collections.singletonList(file.toAbsolutePath()), FileData.DuplicateKeysHandling.FAIL,
+          ChangeDetection.WATCHING, Duration.ofMillis(10), context.getBaseLogger().subLogger("FileOverrideSource"),
+          (paths, logger) -> {
+            throw new IOException("watch service unavailable");
+          });
+      sources.add(source);
+      RecordingSink sink = new RecordingSink();
+      source.start(sink);
+      assertEquals("first", flagValue(sink.await(), "flag"));
+
+      Files.write(file, docWith("flag", "second").getBytes());
+      assertEquals("second", flagValue(sink.await(), "flag"));
+      assertThat(logCapture.getMessageStrings(), hasItem(allOf(
+          startsWith("ERROR:Unable to watch override files; polling them instead every PT1S"),
+          containsString("watch service unavailable"))));
+    }
   }
 
   @Test
