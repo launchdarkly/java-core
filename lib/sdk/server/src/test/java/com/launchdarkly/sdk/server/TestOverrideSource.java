@@ -22,6 +22,12 @@ public final class TestOverrideSource implements OverrideSource, ComponentConfig
   final AtomicBoolean started = new AtomicBoolean(false);
   final AtomicBoolean closed = new AtomicBoolean(false);
   volatile ClientContext buildContext;
+  // When set, start throws it instead of supplying data.
+  volatile RuntimeException startError;
+  // When set with startError, start supplies the data to the sink and then throws.
+  volatile boolean supplyDataBeforeStartError;
+  // When set, close throws it after recording the close.
+  volatile RuntimeException closeError;
 
   public TestOverrideSource(Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> initialData) {
     this.initialData = initialData;
@@ -35,6 +41,12 @@ public final class TestOverrideSource implements OverrideSource, ComponentConfig
 
   @Override
   public void start(OverrideSink sink) {
+    if (startError != null) {
+      if (supplyDataBeforeStartError && initialData != null) {
+        sink.setOverrides(initialData);
+      }
+      throw startError;
+    }
     this.sink = sink;
     started.set(true);
     if (initialData != null) {
@@ -54,8 +66,21 @@ public final class TestOverrideSource implements OverrideSource, ComponentConfig
     }
   }
 
+  /**
+   * Supplies a snapshot to the sink even after the source was closed, as a misbehaving source or a
+   * load that races the close could.
+   *
+   * @param data the complete set of override entries
+   */
+  public void deliverEvenIfClosed(Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data) {
+    sink.setOverrides(data);
+  }
+
   @Override
   public void close() {
     closed.set(true);
+    if (closeError != null) {
+      throw closeError;
+    }
   }
 }

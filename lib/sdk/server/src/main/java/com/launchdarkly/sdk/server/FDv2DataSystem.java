@@ -42,8 +42,9 @@ final class FDv2DataSystem implements DataSystem, Closeable {
   // boundary. The source populates the layer at runtime. None of them take part in
   // initialization or data source status.
   private final OverrideLayer overrideLayer;
-  private final OverrideSource overrideSource;
   private final OverrideSinkImpl overrideSink;
+  // Null after the source failed to start or was closed.
+  private volatile OverrideSource overrideSource;
   private boolean disposed = false;
 
   private FDv2DataSystem(
@@ -216,8 +217,12 @@ final class FDv2DataSystem implements DataSystem, Closeable {
     // same way an invalid data source or data store configuration fails. An offline client starts
     // no data sources and no override source.
     OverrideSource overrideSource = null;
-    if (dataSystemConfiguration.getOverrideSource() != null && !config.offline) {
-      overrideSource = dataSystemConfiguration.getOverrideSource().build(clientContext);
+    if (dataSystemConfiguration.getOverrideSource() != null) {
+      if (config.offline) {
+        logger.warn("Offline mode is enabled; the override source is not started and no overrides are served");
+      } else {
+        overrideSource = dataSystemConfiguration.getOverrideSource().build(clientContext);
+      }
     }
 
     FDv2DataSystem system = new FDv2DataSystem(
@@ -247,8 +252,23 @@ final class FDv2DataSystem implements DataSystem, Closeable {
     if (overrideSource != null) {
       // The source starts before the data source, so a source that loads synchronously has its
       // overrides in place before the client begins evaluating. Its initial load is part of
-      // starting the client.
-      overrideSource.start(overrideSink);
+      // starting the client. A source that fails to start does not prevent the client from
+      // operating: the failure is logged, the source is closed, and the client runs without
+      // overrides. The SDK's own file-based source does not throw from start; it logs a failed
+      // load and retries it. A custom source could throw, and an application in an incident is
+      // better served by a client that runs without its overrides than by one that does not start.
+      try {
+        overrideSource.start(overrideSink);
+      } catch (RuntimeException e) {
+        logger.error("Unable to start the override source; the client runs without overrides: {}",
+            LogValues.exceptionSummary(e));
+        logger.debug(LogValues.exceptionTrace(e));
+        closeOverrideSource("Unable to close the override source after it failed to start: {}");
+        // The source may have supplied a snapshot before it failed. Clearing the layer removes it,
+        // so the client runs without overrides as logged, and a late snapshot from the closed
+        // source is ignored.
+        overrideSink.closeAndClear();
+      }
     }
     return dataSource.start();
   }
@@ -278,6 +298,19 @@ final class FDv2DataSystem implements DataSystem, Closeable {
     return store.getEnvironmentId();
   }
 
+  // A custom source can throw from close. That is logged and not thrown, so the rest of the client
+  // still shuts down, or still starts after a failed start.
+  private void closeOverrideSource(String failureMessage) {
+    OverrideSource source = overrideSource;
+    overrideSource = null;
+    try {
+      source.close();
+    } catch (IOException | RuntimeException e) {
+      logger.warn(failureMessage, LogValues.exceptionSummary(e));
+      logger.debug(LogValues.exceptionTrace(e));
+    }
+  }
+
   @Override
   public OverrideLayer getOverrideLayer() {
     return overrideLayer;
@@ -290,12 +323,11 @@ final class FDv2DataSystem implements DataSystem, Closeable {
     }
     try {
       if (overrideSource != null) {
-        try {
-          overrideSource.close();
-        } catch (IOException | RuntimeException e) {
-          logger.warn("Error closing override source: {}", LogValues.exceptionSummary(e));
-          logger.debug(LogValues.exceptionTrace(e));
-        }
+        // The sink stops accepting snapshots first, so a snapshot that the source supplies while it
+        // shuts down cannot update the layer or notify listeners through components that are being
+        // closed.
+        overrideSink.close();
+        closeOverrideSource("Unable to close the override source: {}");
       }
       dataSource.close();
       store.close();
