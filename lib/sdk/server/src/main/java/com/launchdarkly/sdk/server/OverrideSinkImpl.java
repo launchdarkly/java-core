@@ -11,6 +11,7 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 import com.launchdarkly.sdk.server.subsystems.OverrideSink;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -33,6 +34,7 @@ final class OverrideSinkImpl implements OverrideSink {
   private final ReadOnlyStore base;
   private final EventBroadcasterImpl<FlagChangeListener, FlagChangeEvent> flagChangeBroadcaster;
   private final LDLogger logger;
+  private boolean closed; // guarded by this
 
   /**
    * Creates a sink that writes to the given layer.
@@ -62,6 +64,33 @@ final class OverrideSinkImpl implements OverrideSink {
    */
   @Override
   public synchronized void setOverrides(Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data) {
+    if (closed) {
+      logger.debug("Ignoring an override snapshot supplied after the override source was closed");
+      return;
+    }
+    apply(data);
+  }
+
+  /**
+   * Stops accepting snapshots. Used when the client is closed: a snapshot that the source supplies
+   * while it shuts down is ignored. The layer keeps its contents.
+   */
+  synchronized void close() {
+    closed = true;
+  }
+
+  /**
+   * Stops accepting snapshots and clears the layer. Used when the source failed to start: a snapshot
+   * the source supplied before failing is removed, so the client runs without overrides, and a late
+   * snapshot from the closed source is ignored.
+   */
+  synchronized void closeAndClear() {
+    closed = true;
+    apply(Collections.emptyList());
+  }
+
+  // Called while holding the lock on this.
+  private void apply(Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data) {
     // Computing affected flags requires snapshots of the merged view before and after the
     // replacement. Skip all of that work when nothing is listening.
     if (!flagChangeBroadcaster.hasListeners()) {

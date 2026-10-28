@@ -152,16 +152,23 @@ public class OverrideOverlayStoreTest {
   }
 
   @Test
-  public void getAllServesOverridesWhenBaseFails() {
+  public void getAllPropagatesBaseFailureWhenLayerHoldsEntries() {
+    // A result of the layer's entries alone would look complete to a caller such as the all-flags
+    // state, so the failure propagates as it does without the overlay. A per-key read still serves
+    // the override.
     FakeBaseStore base = new FakeBaseStore();
-    base.getAllError = new RuntimeException("store down");
+    RuntimeException error = new RuntimeException("store down");
+    base.getAllError = error;
     OverrideLayer layer = new OverrideLayer();
     layer.setAll(flagsOnly(flagBuilder("flag").build()));
     OverrideOverlayStore overlay = new OverrideOverlayStore(base, layer);
-
-    Map<String, ItemDescriptor> all = toItemsMap(overlay.getAll(FEATURES));
-    assertEquals(1, all.size());
-    assertTrue(flagOf(all.get("flag")).isOverride());
+    try {
+      overlay.getAll(FEATURES);
+      fail("expected exception");
+    } catch (RuntimeException e) {
+      assertSame(error, e);
+    }
+    assertTrue(flagOf(overlay.get(FEATURES, "flag")).isOverride());
   }
 
   @Test

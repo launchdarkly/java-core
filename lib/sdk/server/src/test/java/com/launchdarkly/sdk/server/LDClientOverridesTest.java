@@ -12,10 +12,14 @@ import com.launchdarkly.sdk.server.DataModel.Segment;
 import com.launchdarkly.sdk.server.integrations.DataSystemBuilder;
 import com.launchdarkly.sdk.server.integrations.TestDataV2;
 import com.launchdarkly.sdk.server.interfaces.FlagChangeEvent;
+import com.launchdarkly.sdk.server.interfaces.DataStoreStatusProvider.CacheStats;
 import com.launchdarkly.sdk.server.subsystems.ComponentConfigurer;
+import com.launchdarkly.sdk.server.subsystems.DataStore;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
+import com.launchdarkly.sdk.server.subsystems.DataSystemConfiguration.DataStoreMode;
 import com.launchdarkly.sdk.server.subsystems.OverrideSource;
 
 import org.junit.Test;
@@ -43,6 +47,7 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -186,6 +191,66 @@ public class LDClientOverridesTest extends BaseTest {
     }
   }
 
+  // A client that reads LaunchDarkly data from the given store and never initializes.
+  private LDConfig uninitializedConfigWithStore(DataStore store, ComponentConfigurer<OverrideSource> source) {
+    return configWith(Components.dataSystem().custom().synchronizers(hangingSynchronizer())
+        .persistentStore(context -> store, DataStoreMode.READ_ONLY).overrides(source))
+        .startWait(Duration.ZERO)
+        .build();
+  }
+
+  @Test
+  public void allFlagsStateWithoutOverrideFlagsIgnoresDataInAStoreWithoutAnInitMarker() throws Exception {
+    // A layer that holds no flags changes nothing: the state is invalid, as it is without a source,
+    // and does not report the LaunchDarkly data in the store. That holds for an empty layer and for
+    // one that holds only segments.
+    FixedDataStore store = new FixedDataStore(flagsOnly(valueFlag("launchdarkly-flag", "ld-value")), false);
+    TestOverrideSource emptySource = new TestOverrideSource(Collections.emptyList());
+    try (LDClient client = new LDClient(SDK_KEY, uninitializedConfigWithStore(store, emptySource))) {
+      FeatureFlagsState state = client.allFlagsState(CONTEXT);
+      assertFalse(state.isValid());
+      assertEquals(Collections.emptyMap(), state.toValuesMap());
+    }
+    TestOverrideSource segmentSource = new TestOverrideSource(OverrideLayerTest.collections(
+        Collections.<FeatureFlag>emptyList(), Collections.singletonList(segmentBuilder("segment").version(1).build())));
+    try (LDClient client = new LDClient(SDK_KEY, uninitializedConfigWithStore(store, segmentSource))) {
+      FeatureFlagsState state = client.allFlagsState(CONTEXT);
+      assertFalse(state.isValid());
+      assertEquals(Collections.emptyMap(), state.toValuesMap());
+    }
+  }
+
+  @Test
+  public void allFlagsStateBeforeInitializationExcludesLaunchDarklyDataFromAStoreWithoutAnInitMarker() throws Exception {
+    FixedDataStore store = new FixedDataStore(flagsOnly(valueFlag("launchdarkly-flag", "ld-value")), false);
+    TestOverrideSource source = new TestOverrideSource(flagsOnly(valueFlag("overridden", "override-value")));
+    try (LDClient client = new LDClient(SDK_KEY, uninitializedConfigWithStore(store, source))) {
+      FeatureFlagsState state = client.allFlagsState(CONTEXT);
+      assertTrue(state.isValid());
+      assertEquals(Collections.singletonMap("overridden", LDValue.of("override-value")), state.toValuesMap());
+    }
+  }
+
+  @Test
+  public void allFlagsStateIsInvalidWhenTheStoreFailsEvenWithOverrides() throws Exception {
+    // A daemon-mode client whose store holds an init marker but cannot list its flags reports an
+    // invalid state and logs the failure, as it does without a source, rather than a valid state that
+    // holds only the overrides.
+    FixedDataStore store = new FixedDataStore(flagsOnly(), true);
+    store.getAllError = new RuntimeException("store failed");
+    TestOverrideSource source = new TestOverrideSource(flagsOnly(valueFlag("overridden", "override-value")));
+    LDConfig config = configWith(Components.dataSystem().daemon(context -> store).overrides(source))
+        .startWait(Duration.ZERO)
+        .build();
+    try (LDClient client = new LDClient(SDK_KEY, config)) {
+      FeatureFlagsState state = client.allFlagsState(CONTEXT);
+      assertFalse(state.isValid());
+      assertEquals(Collections.emptyMap(), state.toValuesMap());
+      assertTrue(logCapture.getMessageStrings().stream().anyMatch(m ->
+          m.startsWith("ERROR:Exception from data store when evaluating all flags") && m.contains("store failed")));
+    }
+  }
+
   @Test
   public void allFlagsStateTurnsOffEventTrackingForOverrideAffectedFlags() throws Exception {
     long debugUntil = System.currentTimeMillis() + 100000;
@@ -309,6 +374,66 @@ public class LDClientOverridesTest extends BaseTest {
   }
 
   @Test
+  public void overrideSourceStartFailureIsLoggedAndTheClientRunsWithoutOverrides() throws Exception {
+    // The SDK's own source never throws from start. A custom source could, and that must not keep
+    // the client from starting: the failure is logged, the source is closed, and the client runs
+    // without overrides.
+    TestOverrideSource source = new TestOverrideSource(flagsOnly(valueFlag("flag", "override-value")));
+    source.startError = new RuntimeException("source failed");
+    try (LDClient client = new LDClient(SDK_KEY, uninitializedConfig(source))) {
+      assertTrue(source.closed.get());
+      assertTrue(logCapture.getMessageStrings().stream().anyMatch(m ->
+          m.startsWith("ERROR:Unable to start the override source; the client runs without overrides")
+              && m.contains("source failed")));
+      assertNotReady(client.jsonValueVariationDetail("flag", CONTEXT, DEFAULT));
+    }
+  }
+
+  @Test
+  public void overrideSourceThatSuppliesASnapshotAndThenFailsToStartLeavesNoOverrides() throws Exception {
+    // The snapshot the source supplied before it failed is removed with the source, so the client
+    // runs without overrides, as the log says, and its all-flags state agrees.
+    TestOverrideSource source = new TestOverrideSource(flagsOnly(valueFlag("flag", "override-value")));
+    source.startError = new RuntimeException("source failed");
+    source.supplyDataBeforeStartError = true;
+    try (LDClient client = new LDClient(SDK_KEY, uninitializedConfig(source))) {
+      assertTrue(source.closed.get());
+      assertNotReady(client.jsonValueVariationDetail("flag", CONTEXT, DEFAULT));
+      assertFalse(client.allFlagsState(CONTEXT).isValid());
+    }
+  }
+
+  @Test
+  public void overrideSourceCloseFailureDoesNotStopTheClientFromShuttingDown() throws Exception {
+    FixedDataStore store = new FixedDataStore(flagsOnly(), false);
+    TestOverrideSource source = new TestOverrideSource(Collections.emptyList());
+    source.closeError = new RuntimeException("close failed");
+    LDConfig config = configWith(Components.dataSystem().custom().synchronizers(hangingSynchronizer())
+        .persistentStore(context -> store, DataStoreMode.READ_WRITE).overrides(source))
+        .startWait(Duration.ZERO)
+        .build();
+    LDClient client = new LDClient(SDK_KEY, config);
+
+    client.close();
+
+    assertTrue(source.closed.get());
+    assertTrue(store.closed);
+    assertTrue(logCapture.getMessageStrings().stream().anyMatch(m ->
+        m.startsWith("WARN:Unable to close the override source") && m.contains("close failed")));
+  }
+
+  @Test
+  public void snapshotSuppliedAfterTheClientIsClosedIsIgnored() throws Exception {
+    TestOverrideSource source = new TestOverrideSource(Collections.emptyList());
+    LDClient client = new LDClient(SDK_KEY, uninitializedConfig(source));
+    client.close();
+
+    source.deliverEvenIfClosed(flagsOnly(valueFlag("late-flag", "override-value")));
+
+    assertNull(client.dataSystem.getOverrideLayer().get(DataModel.FEATURES, "late-flag"));
+  }
+
+  @Test
   public void overrideSourceIsBuiltWithClientContext() throws Exception {
     TestOverrideSource source = new TestOverrideSource(Collections.emptyList());
     try (LDClient client = new LDClient(SDK_KEY, initializedConfig(flagsOnly(), source))) {
@@ -324,6 +449,8 @@ public class LDClientOverridesTest extends BaseTest {
       assertFalse(source.started.get());
       assertNull(client.dataSystem.getOverrideLayer());
       assertEquals(DEFAULT, client.jsonValueVariation("flag", CONTEXT, DEFAULT));
+      assertThat(logCapture.getMessageStrings(), hasItem(
+          "WARN:Offline mode is enabled; the override source is not started and no overrides are served"));
     }
     assertFalse(source.closed.get());
   }
@@ -408,6 +535,76 @@ public class LDClientOverridesTest extends BaseTest {
       td.update(td.flag("prereq").on(false));
       assertEquals(keys("prereq", "overridden"), awaitKeys(events, 2));
       assertNull(events.poll(200, TimeUnit.MILLISECONDS));
+    }
+  }
+
+  // A store with fixed contents. Constructed not initialized, it is like a persistent store that holds
+  // LaunchDarkly data but no init marker. getAll throws getAllError when it is set.
+  private static final class FixedDataStore implements DataStore {
+    private final Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data;
+    private final boolean initialized;
+    volatile RuntimeException getAllError;
+    volatile boolean closed;
+
+    FixedDataStore(Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data, boolean initialized) {
+      this.data = data;
+      this.initialized = initialized;
+    }
+
+    @Override
+    public void init(FullDataSet<ItemDescriptor> allData) {
+    }
+
+    @Override
+    public ItemDescriptor get(DataKind kind, String key) {
+      for (Map.Entry<String, ItemDescriptor> e : items(kind)) {
+        if (e.getKey().equals(key)) {
+          return e.getValue();
+        }
+      }
+      return null;
+    }
+
+    @Override
+    public KeyedItems<ItemDescriptor> getAll(DataKind kind) {
+      if (getAllError != null) {
+        throw getAllError;
+      }
+      return new KeyedItems<>(items(kind));
+    }
+
+    @Override
+    public boolean upsert(DataKind kind, String key, ItemDescriptor item) {
+      return true;
+    }
+
+    @Override
+    public boolean isInitialized() {
+      return initialized;
+    }
+
+    @Override
+    public boolean isStatusMonitoringEnabled() {
+      return false;
+    }
+
+    @Override
+    public CacheStats getCacheStats() {
+      return null;
+    }
+
+    @Override
+    public void close() {
+      closed = true;
+    }
+
+    private Iterable<Map.Entry<String, ItemDescriptor>> items(DataKind kind) {
+      for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> e : data) {
+        if (e.getKey() == kind) {
+          return e.getValue().getItems();
+        }
+      }
+      return Collections.emptyList();
     }
   }
 }

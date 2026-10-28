@@ -123,6 +123,10 @@ public final class DataSystemBuilder {
    * override. At most one override source can be configured; a later call replaces the earlier one.
    * </p>
    * <p>
+   * When the client is offline, the source is not built or started: no overrides are served, and a
+   * configuration error in the source is not reported. The SDK logs a warning instead.
+   * </p>
+   * <p>
    * <b>Example:</b>
    * </p>
    * <pre><code>

@@ -13,6 +13,7 @@ import com.launchdarkly.sdk.server.subsystems.EventProcessor;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -177,10 +178,15 @@ class InputValidatingEvaluator implements EvaluatorInterface {
   public FeatureFlagsState allFlagsState(LDContext context, FlagsStateOption... options) {
     FeatureFlagsState.Builder builder = FeatureFlagsState.builder(options);
 
+    DataStoreTypes.KeyedItems<DataStoreTypes.ItemDescriptor> overrideFlags = null;
     if (!store.isInitialized()) {
-      // With no LaunchDarkly data, the store read below returns only the entries that the override
-      // layer holds. The resulting state contains only those flags.
-      if (overrideLayer == null || overrideLayer.isEmpty()) {
+      // No LaunchDarkly data is available. When the override layer holds flags, the state contains
+      // only those, read from the layer itself: a store that is not initialized can still hold
+      // LaunchDarkly data, which the state must not include. Without override flags the state is
+      // invalid, as it is without an override source.
+      Map<String, DataStoreTypes.ItemDescriptor> layerFlags =
+          overrideLayer == null ? Collections.emptyMap() : overrideLayer.all(FEATURES);
+      if (layerFlags.isEmpty()) {
         logger.warn("allFlagsState() was called before client initialized; data store unavailable, returning no data");
         return builder.valid(false).build();
       }
@@ -188,6 +194,7 @@ class InputValidatingEvaluator implements EvaluatorInterface {
         logger.warn("allFlagsState() was called before client initialized; returning only flags from the override layer."
             + " This message is logged once.");
       }
+      overrideFlags = new DataStoreTypes.KeyedItems<>(layerFlags.entrySet());
     }
 
     if (context == null) {
@@ -201,12 +208,16 @@ class InputValidatingEvaluator implements EvaluatorInterface {
 
     boolean clientSideOnly = FlagsStateOption.hasOption(options, FlagsStateOption.CLIENT_SIDE_ONLY);
     DataStoreTypes.KeyedItems<DataStoreTypes.ItemDescriptor> flags;
-    try {
-      flags = store.getAll(FEATURES);
-    } catch (Exception e) {
-      logger.error("Exception from data store when evaluating all flags: {}", LogValues.exceptionSummary(e));
-      logger.debug(e.toString(), LogValues.exceptionTrace(e));
-      return builder.valid(false).build();
+    if (overrideFlags != null) {
+      flags = overrideFlags;
+    } else {
+      try {
+        flags = store.getAll(FEATURES);
+      } catch (Exception e) {
+        logger.error("Exception from data store when evaluating all flags: {}", LogValues.exceptionSummary(e));
+        logger.debug(e.toString(), LogValues.exceptionTrace(e));
+        return builder.valid(false).build();
+      }
     }
 
     for (Map.Entry<String, DataStoreTypes.ItemDescriptor> entry : flags.getItems()) {
