@@ -28,7 +28,10 @@ class MigrationStageEnforcingEvaluator implements EvaluatorInterface {
     String resStageString = resDetail.getValue();
     if (!MigrationStage.isStage(resStageString)) {
       logger.error("Unrecognized MigrationState for \"{}\"; returning default value.", flagKey);
-      return new EvalResultAndFlag(EvalResult.error(EvaluationReason.ErrorKind.WRONG_TYPE, defaultValue), res.getFlag());
+      // The unrecognized stage replaces the result. The evaluation read the same definitions, so
+      // the new result keeps the override-affected marking.
+      return new EvalResultAndFlag(EvalResult.error(EvaluationReason.ErrorKind.WRONG_TYPE, defaultValue)
+          .withOverrideAffected(res.getResult().isOverrideAffected()), res.getFlag());
     }
 
     return res;
