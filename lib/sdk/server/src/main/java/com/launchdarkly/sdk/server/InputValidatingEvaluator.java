@@ -13,7 +13,9 @@ import com.launchdarkly.sdk.server.subsystems.EventProcessor;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.Collections;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.launchdarkly.sdk.EvaluationDetail.NO_VARIATION;
 import static com.launchdarkly.sdk.server.DataModel.FEATURES;
@@ -28,7 +30,11 @@ class InputValidatingEvaluator implements EvaluatorInterface {
 
   private final Evaluator evaluator;
   private final ReadOnlyStore store;
+  // Null when no override source is configured. The store already applies the layer. The layer is
+  // consulted directly only for the not-initialized short-circuit.
+  private final OverrideLayer overrideLayer;
   private final LDLogger logger;
+  private final AtomicBoolean allFlagsOverridesOnlyWarningLogged = new AtomicBoolean(false);
 
   // these are created at construction to avoid recreation during each evaluation
   private final EvaluationRecorder evaluationEventRecorderWithDetails;
@@ -40,11 +46,14 @@ class InputValidatingEvaluator implements EvaluatorInterface {
    * Creates an {@link InputValidatingEvaluator}
    *
    * @param store          will be used to get flag data
+   * @param overrideLayer  the override layer, or null if no override source is configured
    * @param segmentStore   will be used to get segment data
    * @param eventProcessor will be used to record events during evaluations as necessary
    * @param logger         for logging messages and errors during evaluations
    */
-  InputValidatingEvaluator(ReadOnlyStore store, BigSegmentStoreWrapper segmentStore, @Nonnull EventProcessor eventProcessor, LDLogger logger) {
+  InputValidatingEvaluator(ReadOnlyStore store, @Nullable OverrideLayer overrideLayer, BigSegmentStoreWrapper segmentStore,
+                           @Nonnull EventProcessor eventProcessor, LDLogger logger) {
+    this.overrideLayer = overrideLayer;
     this.evaluator = new Evaluator(new Evaluator.Getters() {
       public DataModel.FeatureFlag getFlag(String key) {
         return InputValidatingEvaluator.getFlag(store, key);
@@ -101,7 +110,9 @@ class InputValidatingEvaluator implements EvaluatorInterface {
    */
   EvalResultAndFlag evaluate(String flagKey, LDContext context, LDValue defaultValue,
                              @Nullable LDValueType requireType, EvaluationRecorder recorder) {
-    if (!store.isInitialized()) {
+    // The override layer is consulted before the not-initialized short-circuit. A flag that the
+    // layer holds is served from it. Any other flag returns the not-ready default as before.
+    if (!store.isInitialized() && !hasOverrideFor(flagKey)) {
       logger.warn("Evaluation called before client initialized for feature flag \"{}\"; data store unavailable, returning default value", flagKey);
       recorder.recordEvaluationUnknownFlagError(flagKey, context, defaultValue, ErrorKind.CLIENT_NOT_READY);
       return new EvalResultAndFlag(EvalResult.error(ErrorKind.CLIENT_NOT_READY, defaultValue), null);
@@ -167,9 +178,23 @@ class InputValidatingEvaluator implements EvaluatorInterface {
   public FeatureFlagsState allFlagsState(LDContext context, FlagsStateOption... options) {
     FeatureFlagsState.Builder builder = FeatureFlagsState.builder(options);
 
+    DataStoreTypes.KeyedItems<DataStoreTypes.ItemDescriptor> overrideFlags = null;
     if (!store.isInitialized()) {
-      logger.warn("allFlagsState() was called before client initialized; data store unavailable, returning no data");
-      return builder.valid(false).build();
+      // No LaunchDarkly data is available. When the override layer holds flags, the state contains
+      // only those, read from the layer itself: a store that is not initialized can still hold
+      // LaunchDarkly data, which the state must not include. Without override flags the state is
+      // invalid, as it is without an override source.
+      Map<String, DataStoreTypes.ItemDescriptor> layerFlags =
+          overrideLayer == null ? Collections.emptyMap() : overrideLayer.all(FEATURES);
+      if (layerFlags.isEmpty()) {
+        logger.warn("allFlagsState() was called before client initialized; data store unavailable, returning no data");
+        return builder.valid(false).build();
+      }
+      if (allFlagsOverridesOnlyWarningLogged.compareAndSet(false, true)) {
+        logger.warn("allFlagsState() was called before client initialized; returning only flags from the override layer."
+            + " This message is logged once.");
+      }
+      overrideFlags = new DataStoreTypes.KeyedItems<>(layerFlags.entrySet());
     }
 
     if (context == null) {
@@ -183,12 +208,27 @@ class InputValidatingEvaluator implements EvaluatorInterface {
 
     boolean clientSideOnly = FlagsStateOption.hasOption(options, FlagsStateOption.CLIENT_SIDE_ONLY);
     DataStoreTypes.KeyedItems<DataStoreTypes.ItemDescriptor> flags;
-    try {
-      flags = store.getAll(FEATURES);
-    } catch (Exception e) {
-      logger.error("Exception from data store when evaluating all flags: {}", LogValues.exceptionSummary(e));
-      logger.debug(e.toString(), LogValues.exceptionTrace(e));
-      return builder.valid(false).build();
+    boolean valid = true;
+    if (overrideFlags != null) {
+      flags = overrideFlags;
+    } else {
+      try {
+        flags = store.getAll(FEATURES);
+      } catch (Exception e) {
+        logger.error("Exception from data store when evaluating all flags: {}", LogValues.exceptionSummary(e));
+        logger.debug(e.toString(), LogValues.exceptionTrace(e));
+        // Overrides only add to the state. Without them the state is invalid and empty here, so it
+        // holds the override layer's flags and stays invalid. A client-side SDK bootstrapped from the
+        // state uses its flags whatever $valid says (js-client-sdk 3.x and the 4.x browser SDK only
+        // log a warning), so the overridden values still reach it.
+        Map<String, DataStoreTypes.ItemDescriptor> layerFlags =
+            overrideLayer == null ? Collections.emptyMap() : overrideLayer.all(FEATURES);
+        if (layerFlags.isEmpty()) {
+          return builder.valid(false).build();
+        }
+        flags = new DataStoreTypes.KeyedItems<>(layerFlags.entrySet());
+        valid = false;
+      }
     }
 
     for (Map.Entry<String, DataStoreTypes.ItemDescriptor> entry : flags.getItems()) {
@@ -208,15 +248,26 @@ class InputValidatingEvaluator implements EvaluatorInterface {
         logger.error("Exception caught for feature flag \"{}\" when evaluating all flags: {}", flag.getKey(),
             LogValues.exceptionSummary(e));
         logger.debug(e.toString(), LogValues.exceptionTrace(e));
-        builder.addFlag(flag, EvalResult.of(LDValue.ofNull(), NO_VARIATION, EvaluationReason.exception(e)));
+        // The flag's definition was read before the failure, so its own marker decides the marking,
+        // and with it the state's event tracking fields for the flag.
+        builder.addFlag(flag, EvalResult.of(LDValue.ofNull(), NO_VARIATION, EvaluationReason.exception(e))
+            .withOverrideAffected(flag.isOverride()));
       }
     }
-    return builder.build();
+    return builder.valid(valid).build();
   }
 
   private static DataModel.FeatureFlag getFlag(ReadOnlyStore store, String key) {
     DataStoreTypes.ItemDescriptor item = store.get(FEATURES, key);
     return item == null ? null : (DataModel.FeatureFlag) item.getItem();
+  }
+
+  private boolean hasOverrideFor(String flagKey) {
+    if (overrideLayer == null) {
+      return false;
+    }
+    DataStoreTypes.ItemDescriptor item = overrideLayer.get(FEATURES, flagKey);
+    return item != null && item.getItem() != null;
   }
 
   private static DataModel.Segment getSegment(ReadOnlyStore store, String key) {
