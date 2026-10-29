@@ -19,6 +19,7 @@ import java.util.Map;
 import static com.launchdarkly.sdk.server.DataModel.FEATURES;
 import static com.launchdarkly.sdk.server.EvaluatorTestUtil.BASE_USER;
 import static com.launchdarkly.sdk.server.ModelBuilders.flagBuilder;
+import static com.launchdarkly.sdk.server.ModelBuilders.prerequisite;
 import static com.launchdarkly.sdk.server.TestComponents.nullLogger;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -47,6 +48,59 @@ public class InputValidatingEvaluatorOverrideTest {
         return true;
       }
     };
+  }
+
+  // A store that holds the given flags and fails when the given key is read, as a store does
+  // when its database is unreachable.
+  private static ReadOnlyStore storeFailingOn(String failingKey, FeatureFlag... flags) {
+    ReadOnlyStore base = storeWith(flags);
+    return new ReadOnlyStore() {
+      @Override
+      public ItemDescriptor get(DataKind kind, String key) {
+        if (key.equals(failingKey)) {
+          throw new RuntimeException("store failed");
+        }
+        return base.get(kind, key);
+      }
+
+      @Override
+      public KeyedItems<ItemDescriptor> getAll(DataKind kind) {
+        return base.getAll(kind);
+      }
+
+      @Override
+      public boolean isInitialized() {
+        return true;
+      }
+    };
+  }
+
+  // A flag whose evaluation reads the prerequisite "prereq".
+  private static FeatureFlag flagWithPrerequisite(String key) {
+    return flagBuilder(key).on(true).prerequisites(prerequisite("prereq", 0)).fallthroughVariation(0)
+        .offVariation(0).variations(LDValue.of("value")).trackEvents(true).build();
+  }
+
+  @Test
+  public void exceptionWhileEvaluatingOverrideFlagKeepsMarking() {
+    FeatureFlag flag = flagWithPrerequisite("flag").markedAsOverride();
+    EvalResultAndFlag result = evaluatorOver(storeFailingOn("prereq", flag)).evaluate("flag", BASE_USER,
+        LDValue.of("default"), null, InputValidatingEvaluator.NO_OP_EVALUATION_EVENT_RECORDER);
+
+    assertEquals(LDValue.of("default"), result.getResult().getValue());
+    assertEquals(EvaluationReason.ErrorKind.EXCEPTION, result.getResult().getReason().getErrorKind());
+    assertTrue(result.getResult().getReason().isOverrideAffected());
+    assertTrue(result.getResult().isOverrideAffected());
+  }
+
+  @Test
+  public void exceptionWhileEvaluatingPlainFlagIsNotMarked() {
+    FeatureFlag flag = flagWithPrerequisite("flag");
+    EvalResultAndFlag result = evaluatorOver(storeFailingOn("prereq", flag)).evaluate("flag", BASE_USER,
+        LDValue.of("default"), null, InputValidatingEvaluator.NO_OP_EVALUATION_EVENT_RECORDER);
+
+    assertEquals(EvaluationReason.ErrorKind.EXCEPTION, result.getResult().getReason().getErrorKind());
+    assertFalse(result.getResult().isOverrideAffected());
   }
 
   private static InputValidatingEvaluator evaluatorOver(ReadOnlyStore store) {
