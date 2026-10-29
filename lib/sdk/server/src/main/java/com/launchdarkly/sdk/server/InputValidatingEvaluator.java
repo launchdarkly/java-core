@@ -155,7 +155,12 @@ class InputValidatingEvaluator implements EvaluatorInterface {
       } else {
         recorder.recordEvaluationError(featureFlag, context, defaultValue, ErrorKind.EXCEPTION);
       }
-      return new EvalResultAndFlag(EvalResult.of(defaultValue, NO_VARIATION, EvaluationReason.exception(e)), null);
+      // The flag's definition was read before the failure, so its own marker decides the marking of
+      // the error result.
+      boolean overrideAffected = featureFlag != null && featureFlag.isOverride();
+      return new EvalResultAndFlag(
+          EvalResult.of(defaultValue, NO_VARIATION, EvaluationReason.exception(e)).withOverrideAffected(overrideAffected),
+          null);
     }
   }
 
