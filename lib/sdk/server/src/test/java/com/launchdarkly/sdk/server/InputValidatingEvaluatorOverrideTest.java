@@ -4,6 +4,7 @@ import com.launchdarkly.sdk.EvaluationReason;
 import com.launchdarkly.sdk.EvaluationReason.ErrorKind;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.LDValueType;
+import com.launchdarkly.sdk.json.JsonSerialization;
 import com.launchdarkly.sdk.server.DataModel.FeatureFlag;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
@@ -152,6 +153,24 @@ public class InputValidatingEvaluatorOverrideTest {
     assertEquals(LDValue.of("fallback"), result.getResult().getValue());
     assertTrue(result.getResult().isNoVariation());
     assertEquals(EvaluationReason.error(ErrorKind.MALFORMED_FLAG).withOverrideAffected(true), result.getResult().getReason());
+  }
+
+  @Test
+  public void allFlagsStateMarksTheExceptionResultOfAnOverrideFlagAndTurnsOffItsTracking() {
+    FeatureFlag marked = flagWithPrerequisite("marked").markedAsOverride();
+    FeatureFlag plain = flagWithPrerequisite("plain");
+    FeatureFlagsState state = evaluatorOver(storeFailingOn("prereq", marked, plain))
+        .allFlagsState(BASE_USER, FlagsStateOption.WITH_REASONS);
+    LDValue flagsState = LDValue.parse(JsonSerialization.serialize(state)).get("$flagsState");
+
+    assertEquals(EvaluationReason.ErrorKind.EXCEPTION, state.getFlagReason("marked").getErrorKind());
+    assertTrue(state.getFlagReason("marked").isOverrideAffected());
+    assertTrue(flagsState.get("marked").get("trackEvents").isNull());
+
+    // A flag that did not come from the override store keeps its unmarked reason and tracking.
+    assertEquals(EvaluationReason.ErrorKind.EXCEPTION, state.getFlagReason("plain").getErrorKind());
+    assertFalse(state.getFlagReason("plain").isOverrideAffected());
+    assertEquals(LDValue.of(true), flagsState.get("plain").get("trackEvents"));
   }
 
   @Test
