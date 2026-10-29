@@ -10,6 +10,7 @@ import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.security.cert.CertificateException;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
@@ -18,6 +19,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -1067,6 +1069,112 @@ public class PollingSynchronizerImplTest extends BaseTest {
             assertEquals(true, result.isFdv1Fallback());
             assertNotNull(result.getChangeSet());
             assertEquals("test-env-combined", result.getChangeSet().getEnvironmentId());
+
+            synchronizer.close();
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    public void retryResetIsReportedOnSecondConsecutiveSuccessfulPoll() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+
+        when(requestor.Poll(any(Selector.class)))
+            .thenReturn(CompletableFuture.completedFuture(makeSuccessResponse()));
+
+        try {
+            PollingSynchronizerImpl synchronizer = new PollingSynchronizerImpl(
+                    requestor,
+                    testLogger,
+                    selectorSource,
+                    executor,
+                    Duration.ofMillis(10)
+            );
+
+            // Read the results of three consecutive successful polls.
+            FDv2SourceResult first = synchronizer.next().get(1, TimeUnit.SECONDS);
+            FDv2SourceResult second = synchronizer.next().get(1, TimeUnit.SECONDS);
+            FDv2SourceResult third = synchronizer.next().get(1, TimeUnit.SECONDS);
+
+            // Only the second successful poll reports a retry reset.
+            assertFalse(first.isRetryReset());
+            assertTrue(second.isRetryReset());
+            assertFalse(third.isRetryReset());
+
+            synchronizer.close();
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    public void failedPollRestartsRetryResetCount() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+
+        when(requestor.Poll(any(Selector.class)))
+            .thenReturn(CompletableFuture.completedFuture(makeSuccessResponse()))
+            .thenReturn(failedFuture(new IOException("network error")))
+            .thenReturn(CompletableFuture.completedFuture(makeSuccessResponse()));
+
+        try {
+            PollingSynchronizerImpl synchronizer = new PollingSynchronizerImpl(
+                    requestor,
+                    testLogger,
+                    selectorSource,
+                    executor,
+                    Duration.ofMillis(10)
+            );
+
+            // Read the results of a successful poll, a failed poll, and two more successful polls.
+            FDv2SourceResult successBeforeFailure = synchronizer.next().get(1, TimeUnit.SECONDS);
+            FDv2SourceResult failure = synchronizer.next().get(1, TimeUnit.SECONDS);
+            FDv2SourceResult firstSuccessAfterFailure = synchronizer.next().get(1, TimeUnit.SECONDS);
+            FDv2SourceResult secondSuccessAfterFailure = synchronizer.next().get(1, TimeUnit.SECONDS);
+
+            // The failure restarts the count, so the reset comes on the second success after it.
+            assertFalse(successBeforeFailure.isRetryReset());
+            assertEquals(SourceSignal.INTERRUPTED, failure.getStatus().getState());
+            assertFalse(failure.isRetryReset());
+            assertFalse(firstSuccessAfterFailure.isRetryReset());
+            assertTrue(secondSuccessAfterFailure.isRetryReset());
+
+            synchronizer.close();
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    public void certificateFailureIsTerminal() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+
+        IOException certificateFailure = new IOException(
+            "TLS handshake failed",
+            new CertificateException("untrusted certificate"));
+        when(requestor.Poll(any(Selector.class))).thenReturn(failedFuture(certificateFailure));
+
+        try {
+            PollingSynchronizerImpl synchronizer = new PollingSynchronizerImpl(
+                    requestor,
+                    testLogger,
+                    selectorSource,
+                    executor,
+                    Duration.ofMillis(10)
+            );
+
+            // Read the result of a poll that fails certificate validation.
+            FDv2SourceResult result = synchronizer.next().get(1, TimeUnit.SECONDS);
+
+            // A certificate failure is terminal for this synchronizer.
+            assertEquals(SourceResultType.STATUS, result.getResultType());
+            assertEquals(SourceSignal.TERMINAL_ERROR, result.getStatus().getState());
 
             synchronizer.close();
         } finally {

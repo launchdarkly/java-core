@@ -10,12 +10,23 @@ import java.time.Duration;
 import java.util.concurrent.*;
 
 class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
+    /**
+     * The number of consecutive successful polls that resets the retry state.
+     */
+    private static final int RETRY_RESET_SUCCESSFUL_POLLS = 2;
+
     private final CompletableFuture<FDv2SourceResult> shutdownFuture = new CompletableFuture<>();
     private final SelectorSource selectorSource;
 
     private final ScheduledFuture<?> task;
 
     private final IterableAsyncQueue<FDv2SourceResult> resultQueue = new IterableAsyncQueue<>();
+
+    /**
+     * Only {@link #doPoll()} reads or writes this. {@code scheduleAtFixedRate} never starts a run of
+     * {@code doPoll} before the previous run has finished.
+     */
+    private int consecutiveSuccessfulPolls = 0;
 
     public PollingSynchronizerImpl(
             FDv2Requestor requestor,
@@ -47,10 +58,15 @@ class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
             boolean shouldShutdown = false;
             switch (res.getResultType()) {
                 case CHANGE_SET:
+                    consecutiveSuccessfulPolls++;
+                    if (consecutiveSuccessfulPolls == RETRY_RESET_SUCCESSFUL_POLLS) {
+                        res = res.withRetryReset();
+                    }
                     break;
                 case STATUS:
                     switch (res.getStatus().getState()) {
                         case INTERRUPTED:
+                            consecutiveSuccessfulPolls = 0;
                             break;
                         case SHUTDOWN:
                             // The base poller doesn't emit shutdown, we instead handle it at this level.

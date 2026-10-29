@@ -4,6 +4,7 @@ import com.launchdarkly.sdk.server.datasources.Initializer;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -88,6 +89,7 @@ class SourceManager implements Closeable {
      */
     private SynchronizerFactoryWithState getNextAvailableSynchronizer() {
         SynchronizerFactoryWithState factory = null;
+        Instant now = Instant.now();
 
         int visited = 0;
         while(visited < synchronizers.size()) {
@@ -101,7 +103,7 @@ class SourceManager implements Closeable {
             }
 
             SynchronizerFactoryWithState candidate = synchronizers.get(synchronizerIndex);
-            if (candidate.getState() == SynchronizerFactoryWithState.State.Available) {
+            if (candidate.isEligible(now)) {
                 factory = candidate;
                 break;
             }
@@ -116,9 +118,6 @@ class SourceManager implements Closeable {
      * <p>
      * If shutdown has been initiated, returns null without building or setting a source.
      * Any previously active source will be closed before setting the new one.
-     * <p>
-     * The current synchronizer factory can be retrieved with {@link #blockCurrentSynchronizer()}
-     * or {@link #isCurrentSynchronizerFDv1Fallback()} to interact with it.
      *
      * @return the built synchronizer that is now active, or null if no more synchronizers are available or shutdown has been initiated
      */
@@ -176,11 +175,40 @@ class SourceManager implements Closeable {
         return initializers.get(initializerIndex);
     }
 
-    public void blockCurrentSynchronizer() {
+    /**
+     * Records an unexpected failure of the current synchronizer.
+     *
+     * @return the park count of the current synchronizer, including this failure
+     */
+    public int incrementCurrentSynchronizerParkCount() {
         synchronized (activeSourceLock) {
-            if (currentSynchronizerFactory != null) {
-                currentSynchronizerFactory.block();
+            return currentSynchronizerFactory.incrementParkCount();
+        }
+    }
+
+    public void parkCurrentSynchronizer(Instant unparkTime) {
+        synchronized (activeSourceLock) {
+            currentSynchronizerFactory.park(unparkTime);
+        }
+    }
+
+    /**
+     * The earliest unpark time of the available synchronizers.
+     *
+     * @return the earliest unpark time, or null if no available synchronizer was ever parked
+     */
+    public Instant getEarliestUnparkTime() {
+        synchronized (activeSourceLock) {
+            Instant earliest = null;
+            for (SynchronizerFactoryWithState factory : synchronizers) {
+                Instant unparkTime = factory.getUnparkTime();
+                if (factory.getState() == SynchronizerFactoryWithState.State.Available
+                    && unparkTime != null
+                    && (earliest == null || unparkTime.isBefore(earliest))) {
+                    earliest = unparkTime;
+                }
             }
+            return earliest;
         }
     }
 

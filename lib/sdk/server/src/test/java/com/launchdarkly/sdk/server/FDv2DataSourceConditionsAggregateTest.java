@@ -11,6 +11,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
@@ -59,7 +60,7 @@ public class FDv2DataSourceConditionsAggregateTest {
      */
     @Test
     public void getFutureReturnsDistinctInstancesPerCall() {
-        Condition fallback = new FallbackCondition(executor, 60);
+        Condition fallback = new FallbackCondition(executor, Duration.ofSeconds(60));
         try (FDv2DataSource.Conditions conditions =
                  new FDv2DataSource.Conditions(Collections.singletonList(fallback))) {
             CompletableFuture<Object> f1 = conditions.getFuture();
@@ -96,7 +97,7 @@ public class FDv2DataSourceConditionsAggregateTest {
     @Test
     public void allFreshFuturesCompleteWhenAggregateFires() throws Exception {
         // 0-second timeout -> fires on first INTERRUPTED inform.
-        Condition fallback = new FallbackCondition(executor, 0);
+        Condition fallback = new FallbackCondition(executor, Duration.ofSeconds(0));
         try (FDv2DataSource.Conditions conditions =
                  new FDv2DataSource.Conditions(Collections.singletonList(fallback))) {
             CompletableFuture<Object> f1 = conditions.getFuture();
@@ -162,7 +163,7 @@ public class FDv2DataSourceConditionsAggregateTest {
     public void getFutureAfterAggregateFiresReturnsCompletedFuture() throws Exception {
         // RecoveryCondition arms its timer in the constructor and fires after
         // the configured timeout. With timeout=0 it fires near-immediately.
-        Condition recovery = new RecoveryCondition(executor, 0);
+        Condition recovery = new RecoveryCondition(executor, Duration.ofSeconds(0));
         try (FDv2DataSource.Conditions conditions =
                  new FDv2DataSource.Conditions(Collections.singletonList(recovery))) {
             // Drain a future to confirm the aggregate has fired.

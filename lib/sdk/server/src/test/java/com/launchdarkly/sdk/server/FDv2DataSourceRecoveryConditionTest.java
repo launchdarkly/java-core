@@ -15,6 +15,7 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 import org.junit.After;
 import org.junit.Test;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -52,7 +53,7 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
     @Test
     public void getTypeReturnsRecovery() {
         executor = Executors.newScheduledThreadPool(1);
-        RecoveryCondition condition = new RecoveryCondition(executor, 120);
+        RecoveryCondition condition = new RecoveryCondition(executor, Duration.ofSeconds(120));
 
         assertEquals(Condition.ConditionType.RECOVERY, condition.getType());
     }
@@ -60,7 +61,7 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
     @Test
     public void timerStartsImmediatelyAndCompletesResultFuture() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        RecoveryCondition condition = new RecoveryCondition(executor, 1);
+        RecoveryCondition condition = new RecoveryCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -78,7 +79,7 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
     @Test
     public void closeCancelsActiveTimer() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        RecoveryCondition condition = new RecoveryCondition(executor, 1);
+        RecoveryCondition condition = new RecoveryCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -95,7 +96,7 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
     @Test
     public void closeAfterTimerFiresDoesNotCauseError() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        RecoveryCondition condition = new RecoveryCondition(executor, 1);
+        RecoveryCondition condition = new RecoveryCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -113,7 +114,7 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
     @Test
     public void closeCanBeCalledMultipleTimes() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        RecoveryCondition condition = new RecoveryCondition(executor, 1);
+        RecoveryCondition condition = new RecoveryCondition(executor, Duration.ofSeconds(1));
 
         // Close multiple times before timer fires
         condition.close();
@@ -126,7 +127,7 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
     @Test
     public void informWithChangeSetDoesNothing() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        RecoveryCondition condition = new RecoveryCondition(executor, 1);
+        RecoveryCondition condition = new RecoveryCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -143,7 +144,7 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
     @Test
     public void informWithInterruptedStatusDoesNothing() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        RecoveryCondition condition = new RecoveryCondition(executor, 1);
+        RecoveryCondition condition = new RecoveryCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -164,7 +165,7 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
     @Test
     public void informWithTerminalErrorStatusDoesNothing() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        RecoveryCondition condition = new RecoveryCondition(executor, 1);
+        RecoveryCondition condition = new RecoveryCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -185,7 +186,7 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
     @Test
     public void informWithShutdownStatusDoesNothing() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        RecoveryCondition condition = new RecoveryCondition(executor, 1);
+        RecoveryCondition condition = new RecoveryCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -201,7 +202,7 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
     @Test
     public void informWithGoodbyeStatusDoesNothing() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        RecoveryCondition condition = new RecoveryCondition(executor, 1);
+        RecoveryCondition condition = new RecoveryCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -217,7 +218,7 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
     @Test
     public void informWithNullDoesNothing() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        RecoveryCondition condition = new RecoveryCondition(executor, 1);
+        RecoveryCondition condition = new RecoveryCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -233,7 +234,7 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
     @Test
     public void multipleInformCallsDoNotAffectTimer() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        RecoveryCondition condition = new RecoveryCondition(executor, 1);
+        RecoveryCondition condition = new RecoveryCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -257,7 +258,7 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
     @Test
     public void factoryCreatesRecoveryCondition() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        RecoveryCondition.Factory factory = new RecoveryCondition.Factory(executor, 1);
+        RecoveryCondition.Factory factory = new RecoveryCondition.Factory(executor, Duration.ofSeconds(1));
 
         RecoveryCondition condition = (RecoveryCondition) factory.build();
 
@@ -273,7 +274,7 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
     @Test
     public void factoryGetTypeReturnsRecovery() {
         executor = Executors.newScheduledThreadPool(1);
-        RecoveryCondition.Factory factory = new RecoveryCondition.Factory(executor, 1);
+        RecoveryCondition.Factory factory = new RecoveryCondition.Factory(executor, Duration.ofSeconds(1));
 
         assertEquals(Condition.ConditionType.RECOVERY, factory.getType());
     }
@@ -281,7 +282,7 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
     @Test
     public void executeReturnsTheSameFutureOnMultipleCalls() {
         executor = Executors.newScheduledThreadPool(1);
-        RecoveryCondition condition = new RecoveryCondition(executor, 120);
+        RecoveryCondition condition = new RecoveryCondition(executor, Duration.ofSeconds(120));
 
         CompletableFuture<Condition> first = condition.execute();
         CompletableFuture<Condition> second = condition.execute();
@@ -294,7 +295,7 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
         executor = Executors.newScheduledThreadPool(1);
 
         // Create condition with very short timeout
-        RecoveryCondition condition = new RecoveryCondition(executor, 1);
+        RecoveryCondition condition = new RecoveryCondition(executor, Duration.ofSeconds(1));
 
         // Get the future
         CompletableFuture<Condition> resultFuture = condition.execute();
@@ -312,7 +313,7 @@ public class FDv2DataSourceRecoveryConditionTest extends BaseTest {
     @Test
     public void closeBeforeExecuteDoesNotPreventFutureAccess() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        RecoveryCondition condition = new RecoveryCondition(executor, 1);
+        RecoveryCondition condition = new RecoveryCondition(executor, Duration.ofSeconds(1));
 
         // Close immediately
         condition.close();

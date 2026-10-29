@@ -6,6 +6,7 @@ import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -61,11 +62,11 @@ class FDv2DataSourceConditions {
         /**
          * Timeout duration for the fallback operation.
          */
-        protected final long timeoutSeconds;
+        protected final Duration timeout;
 
-        public TimedCondition(ScheduledExecutorService sharedExecutor, long timeoutSeconds) {
+        public TimedCondition(ScheduledExecutorService sharedExecutor, Duration timeout) {
             this.sharedExecutor = sharedExecutor;
-            this.timeoutSeconds = timeoutSeconds;
+            this.timeout = timeout;
         }
 
         @Override
@@ -83,11 +84,11 @@ class FDv2DataSourceConditions {
 
         static abstract class Factory implements ConditionFactory {
             protected final ScheduledExecutorService sharedExecutor;
-            protected final long timeoutSeconds;
+            protected final Duration timeout;
 
-            public Factory(ScheduledExecutorService sharedExecutor, long timeout) {
+            public Factory(ScheduledExecutorService sharedExecutor, Duration timeout) {
                 this.sharedExecutor = sharedExecutor;
-                this.timeoutSeconds = timeout;
+                this.timeout = timeout;
             }
         }
     }
@@ -101,13 +102,13 @@ class FDv2DataSourceConditions {
      */
     static class FallbackCondition extends TimedCondition {
         static class Factory extends TimedCondition.Factory {
-            public Factory(ScheduledExecutorService sharedExecutor, long timeout) {
+            public Factory(ScheduledExecutorService sharedExecutor, Duration timeout) {
                 super(sharedExecutor, timeout);
             }
 
             @Override
             public Condition build() {
-                return new FallbackCondition(sharedExecutor, timeoutSeconds);
+                return new FallbackCondition(sharedExecutor, timeout);
             }
 
             @Override
@@ -116,8 +117,8 @@ class FDv2DataSourceConditions {
             }
         }
 
-        public FallbackCondition(ScheduledExecutorService sharedExecutor, long timeoutSeconds) {
-            super(sharedExecutor, timeoutSeconds);
+        public FallbackCondition(ScheduledExecutorService sharedExecutor, Duration timeout) {
+            super(sharedExecutor, timeout);
         }
 
         @Override
@@ -133,7 +134,7 @@ class FDv2DataSourceConditions {
                     timerFuture = sharedExecutor.schedule(() -> {
                         resultFuture.complete(this);
                         return null;
-                    }, timeoutSeconds, TimeUnit.SECONDS);
+                    }, timeout.toMillis(), TimeUnit.MILLISECONDS);
                 }
             }
         }
@@ -147,13 +148,13 @@ class FDv2DataSourceConditions {
     static class RecoveryCondition extends TimedCondition {
 
         static class Factory extends TimedCondition.Factory {
-            public Factory(ScheduledExecutorService sharedExecutor, long timeout) {
+            public Factory(ScheduledExecutorService sharedExecutor, Duration timeout) {
                 super(sharedExecutor, timeout);
             }
 
             @Override
             public Condition build() {
-                return new RecoveryCondition(sharedExecutor, timeoutSeconds);
+                return new RecoveryCondition(sharedExecutor, timeout);
             }
 
             @Override
@@ -162,12 +163,12 @@ class FDv2DataSourceConditions {
             }
         }
 
-        public RecoveryCondition(ScheduledExecutorService sharedExecutor, long timeoutSeconds) {
-            super(sharedExecutor, timeoutSeconds);
+        public RecoveryCondition(ScheduledExecutorService sharedExecutor, Duration timeout) {
+            super(sharedExecutor, timeout);
             timerFuture = sharedExecutor.schedule(() -> {
                 resultFuture.complete(this);
                 return null;
-            }, timeoutSeconds, TimeUnit.SECONDS);
+            }, timeout.toMillis(), TimeUnit.MILLISECONDS);
         }
 
         @Override

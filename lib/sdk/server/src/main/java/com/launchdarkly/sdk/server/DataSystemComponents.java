@@ -105,8 +105,10 @@ public final class DataSystemComponents {
               StandardEndpoints.FDV2_STREAMING_REQUEST_PATH,
               context.getBaseLogger(),
               context.getSelectorSource(),
+              context.getSharedExecutor(),
               payloadFilter,
               initialReconnectDelay,
+              StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
               context.getThreadPriority(),
               context.getDiagnosticStore()
       );
