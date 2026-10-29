@@ -4,8 +4,10 @@ import com.launchdarkly.sdk.EvaluationReason;
 import com.launchdarkly.sdk.EvaluationReason.ErrorKind;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.LDValueType;
+import com.launchdarkly.sdk.internal.events.Event;
 import com.launchdarkly.sdk.json.JsonSerialization;
 import com.launchdarkly.sdk.server.DataModel.FeatureFlag;
+import com.launchdarkly.sdk.server.TestComponents.TestEventProcessor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
@@ -92,6 +94,21 @@ public class InputValidatingEvaluatorOverrideTest {
     assertEquals(EvaluationReason.ErrorKind.EXCEPTION, result.getResult().getReason().getErrorKind());
     assertTrue(result.getResult().getReason().isOverrideAffected());
     assertTrue(result.getResult().isOverrideAffected());
+  }
+
+  @Test
+  public void exceptionWhileEvaluatingOverrideFlagRecordsAMarkedErrorEvent() {
+    TestEventProcessor events = new TestEventProcessor();
+    FeatureFlag flag = flagWithPrerequisite("flag").markedAsOverride();
+    new InputValidatingEvaluator(storeFailingOn("prereq", flag), null, null, events, nullLogger)
+        .evalAndFlag("LDClient.stringVariation", "flag", BASE_USER, LDValue.of("default"), LDValueType.STRING,
+            EvaluationOptions.EVENTS_WITH_REASONS);
+
+    assertEquals(1, events.events.size());
+    Event.FeatureRequest record = (Event.FeatureRequest) events.events.get(0);
+    assertTrue(record.isOverrideAffected());
+    assertEquals(EvaluationReason.ErrorKind.EXCEPTION, record.getReason().getErrorKind());
+    assertTrue(record.getReason().isOverrideAffected());
   }
 
   @Test
