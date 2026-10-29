@@ -162,15 +162,14 @@ class InputValidatingEvaluator implements EvaluatorInterface {
       logger.error("Encountered exception while evaluating feature flag \"{}\": {}", flagKey,
           LogValues.exceptionSummary(e));
       logger.debug("{}", LogValues.exceptionTrace(e));
+      // The flag's definition was read before the failure, so its own marker decides the marking of
+      // the error event and of the error result.
+      boolean overrideAffected = featureFlag != null && featureFlag.isOverride();
       if (featureFlag == null) {
         recorder.recordEvaluationUnknownFlagError(flagKey, context, defaultValue, ErrorKind.EXCEPTION);
       } else {
-        // The evaluation did not complete, so nothing is known about which definitions it read.
-        recorder.recordEvaluationError(featureFlag, context, defaultValue, ErrorKind.EXCEPTION, false);
+        recorder.recordEvaluationError(featureFlag, context, defaultValue, ErrorKind.EXCEPTION, overrideAffected);
       }
-      // The flag's definition was read before the failure, so its own marker decides the marking of
-      // the error result.
-      boolean overrideAffected = featureFlag != null && featureFlag.isOverride();
       return new EvalResultAndFlag(
           EvalResult.of(defaultValue, NO_VARIATION, EvaluationReason.exception(e)).withOverrideAffected(overrideAffected),
           null);
