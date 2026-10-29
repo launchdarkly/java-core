@@ -57,6 +57,54 @@ public interface EventProcessor extends Closeable {
       boolean excludeFromSummaries,
       Long samplingRatio
       );
+
+  /**
+   * Records the action of evaluating a feature flag, with the override-affected marking.
+   * <p>
+   * An override-affected evaluation is one that read at least one definition from the SDK's
+   * override store: the flag itself, a prerequisite at any depth, or a segment consulted during
+   * matching. Such an evaluation produces no individual feature event and no debug event, whatever
+   * the flag's configuration requests, and it is counted in a separate summary counter that
+   * carries the marker. The SDK keys this behavior on the marking alone, not on the reason.
+   * <p>
+   * The default implementation ignores the marking and calls the method without it, so an
+   * existing custom implementation keeps working. Flag overrides are currently experimental and
+   * subject to change.
+   *
+   * @param context the evaluation context
+   * @param flagKey key of the feature flag that was evaluated
+   * @param flagVersion the version of the flag, or {@link #NO_VERSION} if the flag was not found
+   * @param variation the result variation index, or {@link EvaluationDetail#NO_VARIATION} if evaluation failed
+   * @param value the result value
+   * @param reason the evaluation reason, or null if the reason was not requested
+   * @param defaultValue the default value parameter for the evaluation
+   * @param prerequisiteOfFlagKey the key of the flag that this flag was evaluated as a prerequisite of,
+   *   or null if this flag was evaluated for itself
+   * @param requireFullEvent true if full-fidelity analytics events should be sent for this flag
+   * @param debugEventsUntilDate if non-null, debug events are to be generated until this millisecond time
+   * @param excludeFromSummaries true if the event evaluation should not be included in summaries
+   * @param samplingRatio ratio used to control event sampling
+   * @param overrideAffected true if an override affected the evaluation
+   * @since 7.18.0
+   */
+  default void recordEvaluationEvent(
+      LDContext context,
+      String flagKey,
+      int flagVersion,
+      int variation,
+      LDValue value,
+      EvaluationReason reason,
+      LDValue defaultValue,
+      String prerequisiteOfFlagKey,
+      boolean requireFullEvent,
+      Long debugEventsUntilDate,
+      boolean excludeFromSummaries,
+      Long samplingRatio,
+      boolean overrideAffected
+      ) {
+    recordEvaluationEvent(context, flagKey, flagVersion, variation, value, reason, defaultValue,
+        prerequisiteOfFlagKey, requireFullEvent, debugEventsUntilDate, excludeFromSummaries, samplingRatio);
+  }
   
   /**
    * Registers an evaluation context, as when the SDK's {@code identify} method is called.
