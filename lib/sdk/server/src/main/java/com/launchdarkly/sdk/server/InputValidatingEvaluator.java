@@ -248,7 +248,10 @@ class InputValidatingEvaluator implements EvaluatorInterface {
         logger.error("Exception caught for feature flag \"{}\" when evaluating all flags: {}", flag.getKey(),
             LogValues.exceptionSummary(e));
         logger.debug(e.toString(), LogValues.exceptionTrace(e));
-        builder.addFlag(flag, EvalResult.of(LDValue.ofNull(), NO_VARIATION, EvaluationReason.exception(e)));
+        // The flag's definition was read before the failure, so its own marker decides the marking,
+        // and with it the state's event tracking fields for the flag.
+        builder.addFlag(flag, EvalResult.of(LDValue.ofNull(), NO_VARIATION, EvaluationReason.exception(e))
+            .withOverrideAffected(flag.isOverride()));
       }
     }
     return builder.valid(valid).build();
