@@ -11,6 +11,8 @@ import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSinkV2;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -30,16 +32,37 @@ class FDv2DataSource implements DataSource {
     /**
      * Default fallback timeout of 2 minutes. The timeout is only configurable for testing.
      */
-    private static final int defaultFallbackTimeoutSeconds = 2 * 60;
+    private static final Duration DEFAULT_FALLBACK_TIMEOUT = Duration.ofMinutes(2);
 
     /**
      * Default recovery timeout of 5 minutes. The timeout is only configurable for testing.
      */
-    private static final long defaultRecoveryTimeout = 5 * 60;
+    private static final Duration DEFAULT_RECOVERY_TIMEOUT = Duration.ofMinutes(5);
+
+    /**
+     * Default base of the park delay that follows an unexpected failure. The delay is only configurable for testing.
+     */
+    private static final Duration DEFAULT_PARK_INITIAL_DELAY = Duration.ofMinutes(5);
+
+    /**
+     * Default maximum of the park delay. The delay is only configurable for testing.
+     */
+    private static final Duration DEFAULT_PARK_MAX_DELAY = Duration.ofHours(1);
+
+    /**
+     * Default base of the failover delay that follows a park. The delay is only configurable for testing.
+     */
+    private static final Duration DEFAULT_FAILOVER_DELAY = Duration.ofSeconds(1);
 
     private final SourceManager sourceManager;
 
     private final List<ConditionFactory> conditionFactories;
+
+    private final Duration parkInitialDelay;
+
+    private final Duration parkMaxDelay;
+
+    private final Duration failoverDelay;
 
     private final DataSourceUpdateSinkV2 dataSourceUpdates;
 
@@ -51,6 +74,11 @@ class FDv2DataSource implements DataSource {
     private final LDLogger logger;
 
     private volatile boolean closed = false;
+
+    /**
+     * Completes when the data source is closed.
+     */
+    private final CompletableFuture<Void> closedSignal = new CompletableFuture<>();
 
     /**
      * Avoid duplicate orchestration logs for the same synchronizer and {@link SourceSignal}.
@@ -79,8 +107,11 @@ class FDv2DataSource implements DataSource {
             threadPriority,
             logger,
             sharedExecutor,
-            defaultFallbackTimeoutSeconds,
-            defaultRecoveryTimeout
+            DEFAULT_FALLBACK_TIMEOUT,
+            DEFAULT_RECOVERY_TIMEOUT,
+            DEFAULT_PARK_INITIAL_DELAY,
+            DEFAULT_PARK_MAX_DELAY,
+            DEFAULT_FAILOVER_DELAY
         );
     }
 
@@ -92,8 +123,11 @@ class FDv2DataSource implements DataSource {
         int threadPriority,
         LDLogger logger,
         ScheduledExecutorService sharedExecutor,
-        long fallbackTimeout,
-        long recoveryTimeout
+        Duration fallbackTimeout,
+        Duration recoveryTimeout,
+        Duration parkInitialDelay,
+        Duration parkMaxDelay,
+        Duration failoverDelay
     ) {
         List<SynchronizerFactoryWithState> synchronizerFactories = synchronizers
             .stream()
@@ -120,6 +154,9 @@ class FDv2DataSource implements DataSource {
         this.conditionFactories = new ArrayList<>();
         this.conditionFactories.add(new FallbackCondition.Factory(sharedExecutor, fallbackTimeout));
         this.conditionFactories.add(new RecoveryCondition.Factory(sharedExecutor, recoveryTimeout));
+        this.parkInitialDelay = parkInitialDelay;
+        this.parkMaxDelay = parkMaxDelay;
+        this.failoverDelay = failoverDelay;
     }
 
     private void run() {
@@ -350,13 +387,14 @@ class FDv2DataSource implements DataSource {
     private boolean runSynchronizers() {
         // When runSynchronizers exists, no matter how it exits, the synchronizerStateManager will be closed.
         try {
-            Synchronizer synchronizer = sourceManager.getNextAvailableSynchronizerAndSetActive();
+            Synchronizer synchronizer = buildNextAvailableSynchronizer();
 
             // We want to continue running synchronizers for as long as any are available.
             while (synchronizer != null) {
                 String synchronizerName = synchronizer.name();
                 logger.info("Synchronizer '{}' is starting.", synchronizerName);
                 resetSynchronizerStatusDedupe();
+                boolean parked = false;
                 try {
                     boolean running = true;
 
@@ -437,11 +475,8 @@ class FDv2DataSource implements DataSource {
                                                     synchronizer.name(),
                                                     status.getState()
                                                 );
-                                                sourceManager.blockCurrentSynchronizer();
-                                                logger.warn(
-                                                    "Synchronizer '{}' permanently failed and will not be used again until application restart.",
-                                                    synchronizer.name()
-                                                );
+                                                parkActiveSynchronizer(synchronizer.name(), status.getErrorInfo());
+                                                parked = true;
                                                 running = false;
                                                 dataSourceUpdates.updateStatus(
                                                     DataSourceStatusProvider.State.INTERRUPTED,
@@ -486,25 +521,26 @@ class FDv2DataSource implements DataSource {
                             }
                         }
                     }
-                } catch (ExecutionException | InterruptedException | CancellationException e) {
-                    dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.INTERRUPTED,
-                        new DataSourceStatusProvider.ErrorInfo(
-                            DataSourceStatusProvider.ErrorKind.UNKNOWN,
-                            0,
-                            e.toString(),
-                            new Date().toInstant()
-                        ));
+                } catch (ExecutionException | InterruptedException | RuntimeException e) {
+                    DataSourceStatusProvider.ErrorInfo errorInfo = new DataSourceStatusProvider.ErrorInfo(
+                        DataSourceStatusProvider.ErrorKind.UNKNOWN,
+                        0,
+                        e.toString(),
+                        new Date().toInstant()
+                    );
+                    dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.INTERRUPTED, errorInfo);
                     Throwable root = e instanceof ExecutionException && e.getCause() != null ? e.getCause() : e;
                     logger.error("Error running synchronizer '{}': {}",
                         synchronizer.name(),
                         root.getMessage() != null ? root.getMessage() : LogValues.exceptionSummary(root));
-                    // Move to the next synchronizer.
+                    parkActiveSynchronizer(synchronizer.name(), errorInfo);
+                    parked = true;
+                }
+                if (parked && !waitUnlessClosed(jittered(failoverDelay))) {
+                    break;
                 }
                 // Get the next available synchronizer and set it active
-                synchronizer = sourceManager.getNextAvailableSynchronizerAndSetActive();
-            }
-            if (!closed) {
-                logger.warn("No more synchronizers available.");
+                synchronizer = buildNextAvailableSynchronizer();
             }
         } catch (Exception e) {
             // We are not expecting to encounter this situation, but if we do, then we should log it.
@@ -523,6 +559,115 @@ class FDv2DataSource implements DataSource {
             return errorInfo.getMessage();
         }
         return errorInfo.toString();
+    }
+
+    /**
+     * Waits for the given duration, or until the data source is closed.
+     *
+     * @param duration the time to wait
+     * @return true if the full duration passed, or false if the data source was closed
+     */
+    private boolean waitUnlessClosed(Duration duration) {
+        try {
+            closedSignal.get(Math.max(0, duration.toMillis()), TimeUnit.MILLISECONDS);
+            return false;
+        } catch (TimeoutException e) {
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (ExecutionException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Subtracts a random jitter of up to half of the given delay.
+     *
+     * @param delay the delay before jitter
+     * @return the delay after jitter
+     */
+    private static Duration jittered(Duration delay) {
+        return delay.minusMillis(ThreadLocalRandom.current().nextLong(delay.toMillis() / 2 + 1));
+    }
+
+    /**
+     * Computes the park delay for a synchronizer.
+     *
+     * @param parkCount the park count of the synchronizer, including the current failure
+     * @return the park delay
+     */
+    private Duration parkDelay(int parkCount) {
+        double delayMillis = Math.min(
+            parkInitialDelay.toMillis() * Math.pow(2, parkCount - 1),
+            parkMaxDelay.toMillis());
+        return jittered(Duration.ofMillis((long) delayMillis));
+    }
+
+    /**
+     * Parks the active synchronizer after an unexpected failure.
+     *
+     * @param synchronizerName the name of the active synchronizer, or null if it failed to build
+     * @param errorInfo the error that caused the park
+     */
+    private void parkActiveSynchronizer(String synchronizerName, DataSourceStatusProvider.ErrorInfo errorInfo) {
+        Duration parkDelay = parkDelay(sourceManager.incrementCurrentSynchronizerParkCount());
+        sourceManager.parkCurrentSynchronizer(Instant.now().plus(parkDelay));
+        logger.warn(
+            "{} is backing off for {}s after an unexpected error ({}).",
+            synchronizerName != null ? "Synchronizer '" + synchronizerName + "'" : "A synchronizer that failed to build",
+            parkDelay.getSeconds(),
+            detailForError(errorInfo)
+        );
+    }
+
+    /**
+     * Gets the next available synchronizer, builds it, and sets it active. While no synchronizer is available, this
+     * waits for the earliest unpark time. A synchronizer that fails to build is parked, and the next available
+     * synchronizer is tried after the failover delay.
+     *
+     * @return the active synchronizer, or null if the data source was closed
+     */
+    private Synchronizer buildNextAvailableSynchronizer() {
+        while (!closed) {
+            Synchronizer synchronizer;
+            try {
+                synchronizer = sourceManager.getNextAvailableSynchronizerAndSetActive();
+            } catch (RuntimeException e) {
+                DataSourceStatusProvider.ErrorInfo errorInfo = new DataSourceStatusProvider.ErrorInfo(
+                    DataSourceStatusProvider.ErrorKind.UNKNOWN,
+                    0,
+                    e.toString(),
+                    Instant.now()
+                );
+                dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.INTERRUPTED, errorInfo);
+                parkActiveSynchronizer(null, errorInfo);
+                if (!waitUnlessClosed(jittered(failoverDelay))) {
+                    return null;
+                }
+                continue;
+            }
+            if (synchronizer != null) {
+                return synchronizer;
+            }
+
+            Instant earliestUnparkTime = sourceManager.getEarliestUnparkTime();
+            Duration wait;
+            if (earliestUnparkTime == null) {
+                // This should never happen.
+                wait = parkInitialDelay;
+                logger.error("No synchronizer can be started; checking again in {}s.", wait.getSeconds());
+            } else {
+                wait = Duration.between(Instant.now(), earliestUnparkTime);
+                logger.warn("All synchronizers are backing off for at least {}s.", Math.max(0, wait.getSeconds()));
+            }
+            if (!waitUnlessClosed(wait)) {
+                return null;
+            }
+            // Start the most-preferred synchronizer that is no longer parked.
+            sourceManager.resetSourceIndex();
+        }
+        return null;
     }
 
     private void resetSynchronizerStatusDedupe() {
@@ -564,6 +709,7 @@ class FDv2DataSource implements DataSource {
     @Override
     public void close() {
         closed = true;
+        closedSignal.complete(null);
         // If there is an active source, we will shut it down, and that will result in the loop handling that source
         // exiting.
         // If we do not have an active source, then the loop will check isShutdown when attempting to set one. When

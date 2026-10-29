@@ -2,6 +2,7 @@ package com.launchdarkly.sdk.server;
 
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.internal.events.DiagnosticStore;
+import com.launchdarkly.sdk.fdv2.ChangeSetType;
 import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.internal.http.HttpProperties;
 import com.launchdarkly.sdk.fdv2.SourceResultType;
@@ -12,14 +13,18 @@ import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.testhelpers.httptest.Handlers;
 import com.launchdarkly.testhelpers.httptest.HttpServer;
 import com.launchdarkly.testhelpers.httptest.RequestInfo;
+import com.launchdarkly.testhelpers.httptest.ServerTLSConfiguration;
 import com.launchdarkly.testhelpers.tcptest.TcpHandler;
 import com.launchdarkly.testhelpers.tcptest.TcpHandlers;
 import com.launchdarkly.testhelpers.tcptest.TcpServer;
+import org.junit.After;
 import org.junit.Test;
 
 import java.net.URI;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -44,6 +49,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class StreamingSynchronizerImplTest extends BaseTest {
+
+    private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+
+    @After
+    public void shutDownExecutor() {
+        executor.shutdownNow();
+    }
 
     private SelectorSource mockSelectorSource() {
         SelectorSource source = mock(SelectorSource.class);
@@ -79,8 +91,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -117,8 +131,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -147,8 +163,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -178,8 +196,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                 "/stream",
                 testLogger,
                 selectorSource,
+                executor,
                     null,
                 Duration.ofMillis(100),
+                StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
         );
@@ -213,8 +233,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -246,8 +268,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -288,8 +312,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -332,8 +358,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -394,8 +422,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                         "/stream",
                         testLogger,
                         mockSelectorSource(),
+                        executor,
                         null,
                         Duration.ofMillis(100),
+                        StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                         Thread.NORM_PRIORITY,
                         null
                 );
@@ -435,8 +465,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -475,8 +507,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -531,8 +565,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -593,8 +629,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -633,8 +671,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -675,8 +715,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -710,8 +752,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -748,8 +792,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -785,8 +831,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     "myFilter",
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -828,8 +876,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     "testFilter",
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -869,8 +919,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     "",
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -910,8 +962,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -952,8 +1006,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -989,8 +1045,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -1021,8 +1079,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -1060,8 +1120,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -1100,8 +1162,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -1139,8 +1203,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -1179,8 +1245,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -1221,8 +1289,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     diagnosticStore
             );
@@ -1273,8 +1343,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     diagnosticStore
             );
@@ -1341,8 +1413,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     diagnosticStore
             );
@@ -1394,8 +1468,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null  // null diagnosticStore
             );
@@ -1451,8 +1527,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     diagnosticStore
             );
@@ -1524,8 +1602,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     diagnosticStore
             );
@@ -1579,8 +1659,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     diagnosticStore
             );
@@ -1657,8 +1739,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     diagnosticStore
             );
@@ -1733,8 +1817,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     diagnosticStore
             );
@@ -1808,8 +1894,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     diagnosticStore
             );
@@ -1881,8 +1969,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(200),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -1939,8 +2029,10 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                     "/stream",
                     testLogger,
                     selectorSource,
+                    executor,
                     null,
                     Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
                     Thread.NORM_PRIORITY,
                     null
             );
@@ -1958,6 +2050,131 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             // Wait longer than the longest possible reconnect delay
             Thread.sleep(1000);
             assertEquals(2, server.getRecorder().count());
+        }
+    }
+
+    @Test
+    public void retryResetIsReportedAfterStreamStaysHealthy() throws Exception {
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.SSE.start(),
+                Handlers.SSE.event(serverIntent),
+                Handlers.SSE.event(payloadTransferred),
+                Handlers.SSE.leaveOpen()))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    mockSelectorSource(),
+                    executor,
+                    null,
+                    Duration.ofMillis(100),
+                    Duration.ofMillis(100),
+                    Thread.NORM_PRIORITY,
+                    null
+            );
+
+            // Read the first valid result, then the result that follows while the stream stays open.
+            FDv2SourceResult changeSet = synchronizer.next().get(5, TimeUnit.SECONDS);
+            FDv2SourceResult reset = synchronizer.next().get(5, TimeUnit.SECONDS);
+
+            // After the stream stays healthy for the threshold, it reports a retry reset with no changes.
+            assertFalse(changeSet.isRetryReset());
+            assertEquals(SourceResultType.CHANGE_SET, reset.getResultType());
+            assertEquals(ChangeSetType.None, reset.getChangeSet().getType());
+            assertTrue(reset.isRetryReset());
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void streamFailureCancelsPendingRetryReset() throws Exception {
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+
+        try (HttpServer server = HttpServer.start(Handlers.sequential(
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred)),
+                Handlers.all(
+                        Handlers.SSE.start(),
+                        Handlers.SSE.event(serverIntent),
+                        Handlers.SSE.event(payloadTransferred),
+                        Handlers.SSE.leaveOpen())))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+
+            // The reconnect delay is longer than the reset threshold, so a reset from the first stream
+            // would arrive before the second stream connects.
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    mockSelectorSource(),
+                    executor,
+                    null,
+                    Duration.ofSeconds(1),
+                    Duration.ofMillis(200),
+                    Thread.NORM_PRIORITY,
+                    null
+            );
+
+            // Read the results of a stream that ends after one change set, then of a second stream that stays open.
+            FDv2SourceResult firstStreamChangeSet = synchronizer.next().get(5, TimeUnit.SECONDS);
+            FDv2SourceResult failure = synchronizer.next().get(5, TimeUnit.SECONDS);
+            FDv2SourceResult secondStreamChangeSet = synchronizer.next().get(5, TimeUnit.SECONDS);
+            FDv2SourceResult reset = synchronizer.next().get(5, TimeUnit.SECONDS);
+
+            // The failure cancels the first stream's reset, so the only reset follows the second stream's change set.
+            assertEquals(SourceResultType.CHANGE_SET, firstStreamChangeSet.getResultType());
+            assertFalse(firstStreamChangeSet.isRetryReset());
+            assertEquals(SourceSignal.INTERRUPTED, failure.getStatus().getState());
+            assertEquals(SourceResultType.CHANGE_SET, secondStreamChangeSet.getResultType());
+            assertFalse(secondStreamChangeSet.isRetryReset());
+            assertTrue(reset.isRetryReset());
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void certificateFailureIsTerminal() throws Exception {
+        ServerTLSConfiguration untrustedCertificate = ServerTLSConfiguration.makeSelfSignedCertificate();
+
+        try (HttpServer server = HttpServer.startSecure(untrustedCertificate, Handlers.SSE.start())) {
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    mockSelectorSource(),
+                    executor,
+                    null,
+                    Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
+                    Thread.NORM_PRIORITY,
+                    null
+            );
+
+            // Connect to a server whose certificate the client does not trust.
+            FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
+
+            // A certificate failure is terminal for this synchronizer.
+            assertEquals(SourceResultType.STATUS, result.getResultType());
+            assertEquals(SourceSignal.TERMINAL_ERROR, result.getStatus().getState());
+
+            synchronizer.close();
         }
     }
 }

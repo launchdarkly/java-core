@@ -1,6 +1,8 @@
 package com.launchdarkly.sdk.server;
 
 import com.launchdarkly.sdk.internal.collections.IterableAsyncQueue;
+import com.launchdarkly.sdk.internal.http.FailureClass;
+import com.launchdarkly.sdk.internal.http.HttpErrors;
 import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
@@ -189,7 +191,13 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
             // Convert state changes to FDv2SourceResult status events
             switch (newState) {
                 case INTERRUPTED:
-                    resultQueue.put(FDv2SourceResult.interrupted(newError, false));
+                    if (newError != null
+                        && newError.getKind() == DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE
+                        && HttpErrors.classifyHttpFailure(newError.getStatusCode()) == FailureClass.UNEXPECTED) {
+                        resultQueue.put(FDv2SourceResult.terminalError(newError, false));
+                    } else {
+                        resultQueue.put(FDv2SourceResult.interrupted(newError, false));
+                    }
                     break;
                 case OFF:
                     if (newError != null) {

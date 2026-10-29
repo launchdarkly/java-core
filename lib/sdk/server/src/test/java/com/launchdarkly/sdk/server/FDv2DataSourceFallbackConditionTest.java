@@ -17,6 +17,7 @@ import java.util.Map;
 
 import org.junit.Test;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
@@ -52,7 +53,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     @Test
     public void executeReturnsCompletableFuture() {
         executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition condition = new FallbackCondition(executor, 120);
+        FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(120));
 
         CompletableFuture<Condition> result = condition.execute();
 
@@ -62,7 +63,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     @Test
     public void getTypeReturnsFallback() {
         executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition condition = new FallbackCondition(executor, 120);
+        FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(120));
 
         assertEquals(Condition.ConditionType.FALLBACK, condition.getType());
     }
@@ -70,7 +71,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     @Test
     public void interruptedStatusStartsTimerThatCompletesResultFuture() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition condition = new FallbackCondition(executor, 1);
+        FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
         assertFalse(resultFuture.isDone());
@@ -97,7 +98,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     @Test
     public void changeSetCancelsActiveTimer() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition condition = new FallbackCondition(executor, 1);
+        FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -123,7 +124,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     @Test
     public void changeSetWithoutActiveTimerDoesNothing() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition condition = new FallbackCondition(executor, 1);
+        FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -141,7 +142,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     @Test
     public void multipleInterruptedStatusesDoNotStartMultipleTimers() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition condition = new FallbackCondition(executor, 2);
+        FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(2));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -181,7 +182,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     @Test
     public void terminalErrorStatusDoesNotStartTimer() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition condition = new FallbackCondition(executor, 1);
+        FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -203,7 +204,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     @Test
     public void shutdownStatusDoesNotStartTimer() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition condition = new FallbackCondition(executor, 1);
+        FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -220,7 +221,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     @Test
     public void goodbyeStatusDoesNotStartTimer() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition condition = new FallbackCondition(executor, 1);
+        FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -237,7 +238,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     @Test
     public void closeCancelsActiveTimer() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition condition = new FallbackCondition(executor, 1);
+        FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -262,7 +263,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     @Test
     public void closeWithoutActiveTimerDoesNotFail() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition condition = new FallbackCondition(executor, 120);
+        FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(120));
 
         // Close without starting a timer
         condition.close();
@@ -273,7 +274,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     @Test
     public void timerCanBeStartedAfterBeingCancelled() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition condition = new FallbackCondition(executor, 1);
+        FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -307,7 +308,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     @Test
     public void changeSetAfterTimerFiresDoesNotAffectCompletedFuture() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition condition = new FallbackCondition(executor, 1);
+        FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -335,7 +336,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     @Test
     public void factoryCreatesFallbackCondition() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition.Factory factory = new FallbackCondition.Factory(executor, 1);
+        FallbackCondition.Factory factory = new FallbackCondition.Factory(executor, Duration.ofSeconds(1));
 
         FallbackCondition condition = (FallbackCondition) factory.build();
 
@@ -358,7 +359,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     @Test
     public void executeReturnsTheSameFutureOnMultipleCalls() {
         executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition condition = new FallbackCondition(executor, 120);
+        FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(120));
 
         CompletableFuture<Condition> first = condition.execute();
         CompletableFuture<Condition> second = condition.execute();
@@ -369,7 +370,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     @Test
     public void changeSetDuringTimerExecutionCancelsTimer() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition condition = new FallbackCondition(executor, 1);
+        FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -398,7 +399,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     @Test
     public void multipleChangeSetCallsWithActiveTimerAreHandled() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition condition = new FallbackCondition(executor, 1);
+        FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(1));
 
         CompletableFuture<Condition> resultFuture = condition.execute();
 
@@ -426,7 +427,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     @Test
     public void closeCanBeCalledMultipleTimes() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition condition = new FallbackCondition(executor, 1);
+        FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(1));
 
         // Start timer
         condition.inform(
