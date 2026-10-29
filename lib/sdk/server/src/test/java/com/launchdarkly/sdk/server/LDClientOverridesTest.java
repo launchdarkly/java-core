@@ -232,23 +232,40 @@ public class LDClientOverridesTest extends BaseTest {
   }
 
   @Test
-  public void allFlagsStateIsInvalidWhenTheStoreFailsEvenWithOverrides() throws Exception {
-    // A daemon-mode client whose store holds an init marker but cannot list its flags reports an
-    // invalid state and logs the failure, as it does without a source, rather than a valid state that
-    // holds only the overrides.
+  public void allFlagsStateWhenTheStoreFailsHoldsTheOverridesAndIsInvalid() throws Exception {
+    // A daemon-mode client whose store holds an init marker but cannot list its flags logs the
+    // failure. Without a source the state is invalid and empty; the overrides add to it, so it holds
+    // the overridden flags and stays invalid.
     FixedDataStore store = new FixedDataStore(flagsOnly(), true);
     store.getAllError = new RuntimeException("store failed");
     TestOverrideSource source = new TestOverrideSource(flagsOnly(valueFlag("overridden", "override-value")));
-    LDConfig config = configWith(Components.dataSystem().daemon(context -> store).overrides(source))
-        .startWait(Duration.ZERO)
-        .build();
-    try (LDClient client = new LDClient(SDK_KEY, config)) {
+    try (LDClient client = new LDClient(SDK_KEY, daemonConfig(store, source))) {
+      FeatureFlagsState state = client.allFlagsState(CONTEXT, FlagsStateOption.WITH_REASONS);
+      assertFalse(state.isValid());
+      assertEquals(Collections.singletonMap("overridden", LDValue.of("override-value")), state.toValuesMap());
+      assertTrue(state.getFlagReason("overridden").isOverrideAffected());
+      assertTrue(logCapture.getMessageStrings().stream().anyMatch(m ->
+          m.startsWith("ERROR:Exception from data store when evaluating all flags") && m.contains("store failed")));
+    }
+  }
+
+  @Test
+  public void allFlagsStateWhenTheStoreFailsAndTheLayerHoldsNoFlagsIsInvalidAndEmpty() throws Exception {
+    FixedDataStore store = new FixedDataStore(flagsOnly(), true);
+    store.getAllError = new RuntimeException("store failed");
+    try (LDClient client = new LDClient(SDK_KEY, daemonConfig(store, new TestOverrideSource(Collections.emptyList())))) {
       FeatureFlagsState state = client.allFlagsState(CONTEXT);
       assertFalse(state.isValid());
       assertEquals(Collections.emptyMap(), state.toValuesMap());
       assertTrue(logCapture.getMessageStrings().stream().anyMatch(m ->
           m.startsWith("ERROR:Exception from data store when evaluating all flags") && m.contains("store failed")));
     }
+  }
+
+  private LDConfig daemonConfig(DataStore store, TestOverrideSource source) {
+    return configWith(Components.dataSystem().daemon(context -> store).overrides(source))
+        .startWait(Duration.ZERO)
+        .build();
   }
 
   @Test

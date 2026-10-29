@@ -208,6 +208,7 @@ class InputValidatingEvaluator implements EvaluatorInterface {
 
     boolean clientSideOnly = FlagsStateOption.hasOption(options, FlagsStateOption.CLIENT_SIDE_ONLY);
     DataStoreTypes.KeyedItems<DataStoreTypes.ItemDescriptor> flags;
+    boolean valid = true;
     if (overrideFlags != null) {
       flags = overrideFlags;
     } else {
@@ -216,7 +217,17 @@ class InputValidatingEvaluator implements EvaluatorInterface {
       } catch (Exception e) {
         logger.error("Exception from data store when evaluating all flags: {}", LogValues.exceptionSummary(e));
         logger.debug(e.toString(), LogValues.exceptionTrace(e));
-        return builder.valid(false).build();
+        // Overrides only add to the state. Without them the state is invalid and empty here, so it
+        // holds the override layer's flags and stays invalid. A client-side SDK bootstrapped from the
+        // state uses its flags whatever $valid says (js-client-sdk 3.x and the 4.x browser SDK only
+        // log a warning), so the overridden values still reach it.
+        Map<String, DataStoreTypes.ItemDescriptor> layerFlags =
+            overrideLayer == null ? Collections.emptyMap() : overrideLayer.all(FEATURES);
+        if (layerFlags.isEmpty()) {
+          return builder.valid(false).build();
+        }
+        flags = new DataStoreTypes.KeyedItems<>(layerFlags.entrySet());
+        valid = false;
       }
     }
 
@@ -240,7 +251,7 @@ class InputValidatingEvaluator implements EvaluatorInterface {
         builder.addFlag(flag, EvalResult.of(LDValue.ofNull(), NO_VARIATION, EvaluationReason.exception(e)));
       }
     }
-    return builder.build();
+    return builder.valid(valid).build();
   }
 
   private static DataModel.FeatureFlag getFlag(ReadOnlyStore store, String key) {
