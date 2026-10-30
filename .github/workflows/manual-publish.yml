@@ -14,6 +14,7 @@ on:
           - lib/sdk/server-ai
           - lib/java-server-sdk-otel
           - lib/java-server-sdk-redis-store
+          - lib/java-server-sdk-dynamodb-store
       prerelease:
         description: 'Is this a prerelease.'
         type: boolean

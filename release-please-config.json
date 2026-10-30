@@ -28,6 +28,14 @@
         "gradle.properties"
       ]
     },
+    "lib/java-server-sdk-dynamodb-store": {
+      "package-name": "launchdarkly-java-server-sdk-dynamodb-store",
+      "bump-minor-pre-major": true,
+      "include-v-in-tag": false,
+      "extra-files": [
+        "gradle.properties"
+      ]
+    },
     "lib/shared/internal": {
       "package-name": "launchdarkly-java-sdk-internal",
       "bump-minor-pre-major": true,

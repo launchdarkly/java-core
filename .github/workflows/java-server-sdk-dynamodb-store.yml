@@ -1,0 +1,90 @@
+name: java-server-sdk-dynamodb-store
+
+on:
+  push:
+    branches: [main, 'feat/**']
+    paths-ignore:
+      - '**.md' #Do not need to run CI for markdown changes.
+  pull_request:
+    branches: [main, 'feat/**']
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  build-test-java-server-sdk-dynamodb-store:
+    strategy:
+      matrix:
+        java-version: [8, 11, 17, 19]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Shared CI Steps
+        uses: ./.github/actions/ci
+        with:
+          workspace_path: 'lib/java-server-sdk-dynamodb-store'
+          java_version: ${{ matrix.java-version }}
+
+  build-test-java-server-sdk-dynamodb-store-windows:
+    strategy:
+      matrix:
+        java-version: [11, 17]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      # DynamoDB Local 2.6.0+ requires Java 17, so it gets its own JDK independent of the version under test.
+      - name: Setup Java for DynamoDB Local
+        id: dynamodb-java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ matrix.java-version }}
+
+      - name: Setup DynamoDB Service
+        shell: pwsh
+        env:
+          DYNAMODB_JAVA_HOME: ${{ steps.dynamodb-java.outputs.path }}
+        run: |
+          $ProgressPreference = "SilentlyContinue"
+          iwr -outf dynamo.zip https://d1ni2b6xgvw0s0.cloudfront.net/v2.x/dynamodb_local_latest.zip
+          mkdir dynamo
+          Expand-Archive -Path dynamo.zip -DestinationPath dynamo
+          cd dynamo
+          $java = Join-Path $env:DYNAMODB_JAVA_HOME "bin\java.exe"
+          $proc = Start-Process -PassThru -FilePath $java -ArgumentList "-D`"java.library.path=./DynamoDBLocal_lib`"","-jar","DynamoDBLocal.jar"
+          $deadline = (Get-Date).AddSeconds(60)
+          while ($true) {
+            try { (New-Object System.Net.Sockets.TcpClient("127.0.0.1", 8000)).Close(); break } catch {}
+            if ($proc.HasExited) { throw "DynamoDB Local exited before it started listening on port 8000" }
+            if ((Get-Date) -gt $deadline) { throw "DynamoDB Local did not start listening on port 8000 within 60 seconds" }
+            Start-Sleep -Seconds 1
+          }
+
+      - name: Restore dependencies
+        shell: bash
+        run: lib/java-server-sdk-dynamodb-store/gradlew dependencies -p lib/java-server-sdk-dynamodb-store
+
+      - name: Build
+        shell: bash
+        id: build
+        run: lib/java-server-sdk-dynamodb-store/gradlew build -p lib/java-server-sdk-dynamodb-store
+
+      - name: Build Jar
+        shell: bash
+        run: lib/java-server-sdk-dynamodb-store/gradlew jar -p lib/java-server-sdk-dynamodb-store
+
+      - name: Run Tests
+        if: steps.build.outcome == 'success'
+        shell: bash
+        run: lib/java-server-sdk-dynamodb-store/gradlew test -p lib/java-server-sdk-dynamodb-store
+
+      - name: Build Documentation
+        shell: bash
+        run: lib/java-server-sdk-dynamodb-store/gradlew javadoc -p lib/java-server-sdk-dynamodb-store
