@@ -332,6 +332,25 @@ public class LDClientTest extends BaseTest {
   }
 
   @Test
+  public void startWaitTooLargeForMillisIsClampedRatherThanOverflowing() throws Exception {
+    // A start wait time too large to represent in milliseconds must be clamped, not converted directly:
+    // converting it throws ArithmeticException, and it would do so after the data source has started, leaving
+    // the data source running with no reference available to close it.
+    LDConfig.Builder config = new LDConfig.Builder()
+        .startWait(Duration.ofSeconds(Long.MAX_VALUE));
+
+    expect(dataSource.start()).andReturn(initFuture);
+    expect(initFuture.get(Long.MAX_VALUE, TimeUnit.MILLISECONDS)).andReturn(null);
+    expect(dataSource.isInitialized()).andReturn(false).anyTimes();
+    mocks.replayAll();
+
+    client = createMockClient(config);
+    assertFalse(client.isInitialized());
+
+    mocks.verifyAll();
+  }
+
+  @Test
   public void noWaitForDataSourceIfWaitMillisIsNegative() throws Exception {
     LDConfig.Builder config = new LDConfig.Builder()
         .startWait(Duration.ofMillis(-10));
