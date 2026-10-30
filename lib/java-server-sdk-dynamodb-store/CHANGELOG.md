@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK DynamoDB integration will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [5.0.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-dynamodb-store-5.0.0...launchdarkly-java-server-sdk-dynamodb-store-5.0.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* Update Maven POM URLs to java-core ([4d40f5c](https://github.com/launchdarkly/java-core/commit/4d40f5cc6b30ea5a1ba1cdeee61925f057de0954))
+
 ## [5.0.0] - 2022-12-07
 This release corresponds to the 6.0.0 release of the LaunchDarkly Java SDK. Any application code that is being updated to use the 6.0.0 SDK, and was using a 4.x version of `launchdarkly-java-server-sdk-dynamodb`, should now use a 5.x version instead.
 
