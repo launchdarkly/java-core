@@ -27,7 +27,8 @@ public final class SynchronizerChangeContext {
      */
     RECOVER("recover"),
     /**
-     * The previous synchronizer failed with an unexpected error and is parked. The SDK does not try it again.
+     * The previous synchronizer reported an unexpected failure and is parked for a bounded time. The SDK can
+     * select it again when its unpark time arrives.
      */
     PARKED("parked"),
     /**
