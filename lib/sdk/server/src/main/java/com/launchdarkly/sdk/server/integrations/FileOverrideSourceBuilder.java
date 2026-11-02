@@ -41,8 +41,8 @@ public final class FileOverrideSourceBuilder implements ComponentConfigurer<Over
    * order is significant: it determines which file wins under the duplicate keys handling when the
    * same key appears in more than one file.
    * <p>
-   * Files are parsed as JSON if their first non-whitespace character is '{'. Otherwise, they are
-   * parsed as YAML.
+   * A file whose name ends in {@code .yaml} or {@code .yml}, in any case, is parsed as YAML, and any
+   * other file is parsed as JSON.
    *
    * @param filePaths path(s) to the file(s); may be absolute or relative to the current working directory
    * @return the same builder

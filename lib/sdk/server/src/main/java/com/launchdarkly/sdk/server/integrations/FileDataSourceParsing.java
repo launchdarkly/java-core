@@ -19,6 +19,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Map;
 
 import static com.launchdarkly.sdk.server.DataModel.FEATURES;
@@ -91,7 +93,23 @@ abstract class FileDataSourceParsing {
       Reader r = new InputStreamReader(new ByteArrayInputStream(data));
       return detectJson(r) ? JsonParserHolder.getInstance() : YamlParserHolder.getInstance();
     }
-    
+
+    /**
+     * Chooses the parser by the extension of the file name: a file whose name ends in {@code .yaml}
+     * or {@code .yml}, in any case, is parsed as YAML, and any other file is parsed as JSON. The
+     * override source uses this. The file data source keeps choosing by content, with
+     * {@link #selectForContent(byte[])}.
+     *
+     * @param path the file
+     * @return the parser for the file
+     */
+    static FlagFileParser selectForPath(Path path) {
+      Path fileName = path.getFileName();
+      String name = fileName == null ? "" : fileName.toString().toLowerCase(Locale.ROOT);
+      return name.endsWith(".yaml") || name.endsWith(".yml")
+          ? YamlParserHolder.getInstance() : JsonParserHolder.getInstance();
+    }
+
     private static boolean detectJson(Reader r) {
       // A valid JSON file for our purposes must be an object, i.e. it must start with '{'
       while (true) {
@@ -119,11 +137,21 @@ abstract class FileDataSourceParsing {
   
     @Override
     public FlagFileRep parse(InputStream input) throws FileDataException, IOException {
+      JsonElement tree;
       try {
-        return parseJson(gson.fromJson(new InputStreamReader(input), JsonElement.class));
+        tree = gson.fromJson(new InputStreamReader(input), JsonElement.class);
       } catch (JsonSyntaxException e) {
         throw new FileDataException("cannot parse JSON", e);
-      }    
+      }
+      if (tree == null) {
+        // Gson finds no value in a file that is empty or white space only, or, since it reads
+        // leniently, one that holds only comments. That is not a JSON document. A file that is being
+        // rewritten in place can be empty for a moment, and the failure keeps its last good data
+        // until it is complete. The file data source never gets here: it parses a file as JSON only
+        // when the file starts with '{'.
+        throw new FileDataException("the file has no content, which is not a JSON document", null);
+      }
+      return parseJson(tree);
     }
     
     public FlagFileRep parseJson(JsonElement tree) throws FileDataException, IOException {

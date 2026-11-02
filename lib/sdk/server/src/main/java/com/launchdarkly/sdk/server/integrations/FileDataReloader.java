@@ -6,8 +6,12 @@ import com.launchdarkly.sdk.server.integrations.FileDataSourceParsing.FileDataEx
 import com.launchdarkly.sdk.server.integrations.OverrideFileLoader.LoadResult;
 
 import java.io.Closeable;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
@@ -22,6 +26,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * The reload work itself is delegated to a {@link Loader}. The loader reads every configured file
  * and returns the merged result, or throws {@link FileDataException} when a file cannot be read or
  * parsed or when the files cannot be merged.
+ * <p>
+ * A file whose content is in effect and is found empty may be in the middle of an in-place rewrite.
+ * The loader can defer such a file with {@link EmptiedFileException}: the reloader keeps the current
+ * data, reports no failure, and reads the files again after the retry delay.
  * <p>
  * The file data source does not use this class. It keeps its own reload behavior.
  */
@@ -43,7 +51,46 @@ final class FileDataReloader implements Closeable {
    * Performs one full load of all configured files.
    */
   interface Loader {
-    LoadResult load() throws FileDataException;
+    /**
+     * Reads every configured file and merges the entries.
+     *
+     * @param retryDelay the reloader's retry delay, or zero if it does not retry. A loader may defer
+     *   an empty file for a time based on it, because a retry reads the files again. With zero,
+     *   nothing would read them again, so it must not defer.
+     * @return the merged result
+     * @throws FileDataException if a file cannot be read or parsed, or the files cannot be merged
+     * @throws EmptiedFileException if a file was found empty and is deferred
+     */
+    LoadResult load(Duration retryDelay) throws FileDataException, EmptiedFileException;
+
+    /**
+     * Called with the result of a load that is now the data in effect: it was applied, or it was
+     * skipped because it is unchanged. It is called with the reload lock held.
+     *
+     * @param result the result
+     */
+    void accepted(LoadResult result);
+  }
+
+  /**
+   * Thrown by a {@link Loader} that defers a file it found empty. The file may be in the middle of an
+   * in-place rewrite: a writer that truncates the file and then writes the new content.
+   */
+  @SuppressWarnings("serial")
+  static final class EmptiedFileException extends Exception {
+    private final List<Path> paths;
+
+    EmptiedFileException(List<Path> paths) {
+      super("files " + paths + " are empty");
+      this.paths = Collections.unmodifiableList(new ArrayList<>(paths));
+    }
+
+    /**
+     * The deferred files, in configuration order.
+     */
+    List<Path> getPaths() {
+      return paths;
+    }
   }
 
   /**
@@ -66,7 +113,8 @@ final class FileDataReloader implements Closeable {
      * Called when a reload fails, including when {@link #apply(LoadResult)} throws, once per
      * distinct failure. With automatic retries, repeats of an identical failure do not call this
      * again. A success re-arms it. The reloader logs failures itself, so implementations only need
-     * to update their own state.
+     * to update their own state. A load that defers an empty file and reads it again later is not a
+     * failure and does not call this.
      *
      * @param e the failure
      */
@@ -84,6 +132,9 @@ final class FileDataReloader implements Closeable {
   private final Object reloadLock = new Object();
   private byte[] lastGoodHash = null;
   private String lastErrorMessage = null;
+  // True from a load that found an emptied file until the next load starts. Written inside the
+  // reload lock. It only chooses the log message of the retry that such a load arms.
+  private volatile boolean readAgainPending = false;
 
   // Guards the worker and the two timers.
   private final Object timerLock = new Object();
@@ -97,16 +148,17 @@ final class FileDataReloader implements Closeable {
    * Creates a reloader. The caller performs the initial load with {@link #reloadNow()}, routes
    * change signals to {@link #trigger()}, and calls {@link #close()} when finished.
    * <p>
-   * The worker thread starts on the first {@link #trigger()} call or the first failed load that
-   * arms a retry, not here. Construction alone does not start a thread.
+   * The worker thread starts on the first {@link #trigger()} call or the first load that arms a
+   * retry, not here. Construction alone does not start a thread.
    *
    * @param loader performs each full load
    * @param handler receives results and failures
    * @param logger receives log output about reloads and failures
    * @param debounceDelay how long to wait after a trigger for further triggers to settle before
    *   reloading. Zero or negative reloads on every trigger without waiting.
-   * @param retryDelay how long to wait after a failed reload before retrying without a trigger.
-   *   Zero or negative disables the automatic retry.
+   * @param retryDelay how long to wait after a failed reload before retrying without a trigger,
+   *   and after a load that defers an empty file before reading the files again. Zero or negative
+   *   disables the automatic retry, and the loader then parses an empty file as it is.
    * @param skipUnchanged if true, a successful load whose raw file contents are identical to the
    *   last applied contents does not call the apply callback
    */
@@ -245,7 +297,8 @@ final class FileDataReloader implements Closeable {
   private void runReload(boolean isRetry) {
     try {
       if (isRetry) {
-        logger.debug("Retrying flag data load after earlier failure");
+        logger.debug(readAgainPending ? "Reading flag data again after finding an empty file"
+            : "Retrying flag data load after earlier failure");
       } else {
         logger.info("Reloading flag data after detecting a change");
       }
@@ -268,19 +321,22 @@ final class FileDataReloader implements Closeable {
   }
 
   // Performs one full load of all configured files. It reports whether the load succeeded, which
-  // decides whether a retry gets armed. A skipped no-op application counts as success. The whole
-  // set is re-read on every reload because entries are combined across files in order, so a
-  // change to one file can alter which file wins for a key.
+  // decides whether a retry gets armed. A skipped no-op application counts as success, and a load
+  // that defers an empty file does not. The whole set is re-read on every reload because entries are
+  // combined across files in order, so a change to one file can alter which file wins for a key.
   private boolean reload() {
     synchronized (reloadLock) {
       // A trigger already queued when close was called can still reach here.
       if (closed.get()) {
         return true;
       }
+      readAgainPending = false;
 
       LoadResult result;
       try {
-        result = loader.load();
+        result = loader.load(retryDelayMillis > 0 ? Duration.ofMillis(retryDelayMillis) : Duration.ZERO);
+      } catch (EmptiedFileException e) {
+        return readAgainLater(e.getPaths());
       } catch (FileDataException e) {
         return fail(e);
       }
@@ -296,6 +352,7 @@ final class FileDataReloader implements Closeable {
       boolean recovering = lastErrorMessage != null;
       byte[] hash = result.getContentHash();
       if (skipUnchanged && !recovering && hash != null && Arrays.equals(hash, lastGoodHash)) {
+        loader.accepted(result);
         return true;
       }
       // Nothing is remembered until the consumer has accepted the result. A result that the
@@ -308,8 +365,24 @@ final class FileDataReloader implements Closeable {
       }
       lastErrorMessage = null;
       lastGoodHash = hash;
+      loader.accepted(result);
       return true;
     }
+  }
+
+  // Called inside the reload lock. The loader deferred a file that it found empty: a file whose content
+  // is in effect may be in the middle of an in-place rewrite, a writer that truncates the file and then
+  // writes the new content. Whatever the file's format, the load keeps the current data and arms the
+  // retry without reporting a failure, so the files are read again after the retry delay. The change
+  // signal for the write starts a load sooner. The loader decides how long a file can be deferred, and
+  // defers nothing when retries are off, because nothing would read the file again. A closed reloader
+  // arms no retry.
+  private boolean readAgainLater(List<Path> paths) {
+    for (Path path : paths) {
+      logger.debug("File {} is empty, possibly while it is being rewritten; reading it again before applying it", path);
+    }
+    readAgainPending = true;
+    return false;
   }
 
   private boolean fail(FileDataException e) {

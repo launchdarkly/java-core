@@ -77,7 +77,10 @@ public abstract class FileOverrides {
    * <p>
    * The files use the same document format as the file data source (see {@link FileData}): each
    * file is a JSON or YAML document with optional {@code "flags"}, {@code "flagValues"}, and
-   * {@code "segments"} members. A {@code "flagValues"} entry is expanded into a full flag
+   * {@code "segments"} members. A file whose name ends in {@code .yaml} or {@code .yml}, in any case,
+   * is parsed as YAML, and any other file is parsed as JSON. This differs from the file data source,
+   * which parses a file as JSON when it starts with <code>'{'</code> and as YAML otherwise. A
+   * {@code "flagValues"} entry is expanded into a full flag
    * definition that is on and serves the given value as its single variation by fallthrough for
    * every context. Such a flag is not available to client-side SDKs, so
    * {@link com.launchdarkly.sdk.server.LDClient#allFlagsState} with
@@ -93,6 +96,16 @@ public abstract class FileOverrides {
    * but cannot be read or parsed makes that whole reload fail: the previously loaded overrides
    * stay in effect, the source logs the failure, retries after a short delay, and recovers on its
    * own once the file is readable again.
+   * <p>
+   * A file can be rewritten in place. To remove a file's overrides, delete the file or write a
+   * document with no entries, such as <code>{}</code>. A JSON file with no content is not a valid
+   * document: it fails to load, and the overrides in effect stay. A file whose content is in effect
+   * and that is found empty may be in the middle of a rewrite, so the source keeps the overrides in
+   * effect until the file has stayed empty for about a second: then an emptied YAML file removes its
+   * overrides, and an emptied JSON file fails to load. A file that keeps being emptied takes effect
+   * within about five seconds. YAML that is cut off between two entries can still parse, so for a
+   * YAML file, replacing its entire contents in one operation, such as renaming a fully written
+   * temporary file over it, avoids briefly applying only a part of it.
    * <p>
    * Whenever the set of overrides in effect changes, including at startup, the source logs the
    * overrides in effect and what each configured file supplied, at Info level.
