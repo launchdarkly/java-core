@@ -35,7 +35,7 @@ public final class InitializerContext {
     /**
      * The initializer asked the SDK to fall back to the FDv1 protocol.
      */
-    FALLBACK("fallback"),
+    FDV1_FALLBACK("fdv1_fallback"),
     /**
      * The SDK closed while the initializer was running.
      */

@@ -271,7 +271,7 @@ class FDv2DataSource implements DataSource {
                         case CHANGE_SET:
                             // Hooks learn which initializer provided the data before the status that the
                             // data produces. Applying a basis can itself report the VALID status.
-                            reportInitializer(source, result.isFdv1Fallback() ? InitializerContext.Outcome.FALLBACK
+                            reportInitializer(source, result.isFdv1Fallback() ? InitializerContext.Outcome.FDV1_FALLBACK
                                 : result.getChangeSet().getSelector().isEmpty()
                                     ? InitializerContext.Outcome.SUCCEEDED_WITHOUT_SELECTOR
                                     : InitializerContext.Outcome.SUCCEEDED,
@@ -303,7 +303,7 @@ class FDv2DataSource implements DataSource {
                                         initializerName,
                                         detailForError(status.getErrorInfo()));
                                     fallbackErrorInfo = status.getErrorInfo();
-                                    reportInitializer(source, result.isFdv1Fallback() ? InitializerContext.Outcome.FALLBACK
+                                    reportInitializer(source, result.isFdv1Fallback() ? InitializerContext.Outcome.FDV1_FALLBACK
                                         : InitializerContext.Outcome.FAILED, status.getErrorInfo(), attemptStart, false);
                                     // The data source updates handler will filter the state during initializing, but this
                                     // will make the error information available.
@@ -516,7 +516,7 @@ class FDv2DataSource implements DataSource {
                                                     synchronizer.name()
                                                 );
                                                 running = false;
-                                                nextSynchronizerReason = SynchronizerChangeContext.Reason.REMOVED;
+                                                nextSynchronizerReason = SynchronizerChangeContext.Reason.PARKED;
                                                 updateStatus(
                                                     DataSourceStatusProvider.State.INTERRUPTED,
                                                     status.getErrorInfo());

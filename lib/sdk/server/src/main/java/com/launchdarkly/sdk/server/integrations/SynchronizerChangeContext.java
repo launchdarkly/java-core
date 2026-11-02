@@ -27,9 +27,9 @@ public final class SynchronizerChangeContext {
      */
     RECOVER("recover"),
     /**
-     * The previous synchronizer failed permanently. The SDK does not try it again.
+     * The previous synchronizer failed with an unexpected error and is parked. The SDK does not try it again.
      */
-    REMOVED("removed"),
+    PARKED("parked"),
     /**
      * LaunchDarkly asked the SDK to use the FDv1 protocol.
      */
