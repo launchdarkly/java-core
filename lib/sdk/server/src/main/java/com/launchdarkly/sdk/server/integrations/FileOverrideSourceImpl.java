@@ -24,8 +24,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * A configured file that does not exist contributes no overrides. A file that exists but cannot
  * be read or parsed fails that reload: the sink is not called, so the last good overrides stay in
  * effect, and the reload is retried. A file whose content is in effect and is found empty may be in
- * the middle of an in-place rewrite, so it is applied only once it has stayed empty for about the
- * retry delay, or has been found empty for five retry delays in all.
+ * the middle of an in-place rewrite, so it is held back until it has stayed empty, without being
+ * written, for the retry delay, or until loads have held files back for five retry delays in a row.
  */
 final class FileOverrideSourceImpl implements OverrideSource {
   /**

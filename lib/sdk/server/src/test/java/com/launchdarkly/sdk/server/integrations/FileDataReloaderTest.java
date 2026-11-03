@@ -108,8 +108,12 @@ public class FileDataReloaderTest {
     }
 
     ScriptedLoader thenEmptied(Path path) {
+      return thenEmptied(path, SHORT);
+    }
+
+    ScriptedLoader thenEmptied(Path path, Duration retryAfter) {
       steps.add(() -> {
-        throw new EmptiedFileException(Collections.singletonList(path));
+        throw new EmptiedFileException(Collections.singletonList(path), retryAfter.toNanos());
       });
       return this;
     }
@@ -583,6 +587,39 @@ public class FileDataReloaderTest {
     for (String message : messages) {
       assertFalse(message, message.startsWith("ERROR:"));
     }
+  }
+
+  @Test
+  public void holdIsRetriedAfterTheTimeTheLoaderAsksFor() throws Exception {
+    // The loader asks for a retry sooner than the retry delay, which would not come in this test.
+    LoadResult rewritten = resultWithHash(2);
+    ScriptedLoader loader = new ScriptedLoader().then(resultWithHash(1)).thenEmptied(EMPTIED, Duration.ofMillis(30))
+        .then(rewritten);
+    RecordingHandler handler = new RecordingHandler();
+    FileDataReloader r = reloader(loader, handler, Duration.ZERO, Duration.ofHours(1), true);
+    r.reloadNow();
+
+    r.trigger();
+    awaitSize(handler.applied, 2);
+    assertEquals(rewritten, handler.applied.get(1));
+    assertEquals(3, loader.calls.get());
+  }
+
+  @Test
+  public void failureAfterAHoldIsRetriedAfterTheRetryDelay() throws Exception {
+    // A hold asks for a retry soon. The failure that follows arms the normal retry delay, which does
+    // not come in this test.
+    ScriptedLoader loader = new ScriptedLoader().then(resultWithHash(1)).thenEmptied(EMPTIED, Duration.ofMillis(30))
+        .thenFail("broken").then(resultWithHash(2));
+    RecordingHandler handler = new RecordingHandler();
+    FileDataReloader r = reloader(loader, handler, Duration.ZERO, Duration.ofHours(1), true);
+    r.reloadNow();
+
+    r.trigger();
+    awaitSize(handler.errors, 1);
+    Thread.sleep(300);
+    assertEquals(3, loader.calls.get());
+    assertEquals(1, handler.applied.size());
   }
 
   @Test

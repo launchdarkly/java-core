@@ -24,6 +24,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.LongSupplier;
 
 import static com.launchdarkly.sdk.server.DataModel.FEATURES;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -98,6 +100,10 @@ public class FileDataReloaderEmptiedFileTest {
       loader = new OverrideFileLoader(Arrays.asList(paths), FileData.DuplicateKeysHandling.FAIL);
     }
 
+    CountingLoader(LongSupplier clock, Path... paths) {
+      loader = new OverrideFileLoader(Arrays.asList(paths), FileData.DuplicateKeysHandling.FAIL, clock);
+    }
+
     @Override
     public LoadResult load(Duration retryDelay) throws FileDataException, EmptiedFileException {
       try {
@@ -155,6 +161,54 @@ public class FileDataReloaderEmptiedFileTest {
 
   private static String readAgainLog(Path file) {
     return "DEBUG:File " + file + " is empty, possibly while it is being rewritten; reading it again before applying it";
+  }
+
+  // For the tests that move a clock themselves: a retry delay so long that no retry fires during the
+  // test, so every load is one the test starts with reloadNow.
+  private static final Duration HOUR = Duration.ofHours(1);
+
+  @Test
+  public void holdEndsExactlyAfterTheRetryDelay() throws Exception {
+    try (TempDir dir = TempDir.create()) {
+      Path file = write(dir, "overrides.yaml", yaml("a"));
+      AtomicLong clock = new AtomicLong();
+      CountingLoader loader = new CountingLoader(clock::get, file);
+      Recorder recorder = new Recorder();
+      FileDataReloader r = reloader(loader, recorder, HOUR);
+      r.reloadNow();
+
+      InPlaceWrites.truncate(file);
+      r.reloadNow();
+      clock.addAndGet(HOUR.toNanos() * 95 / 100);
+      r.reloadNow();
+      assertEquals(Collections.singletonList("a"), recorder.applied);
+      clock.addAndGet(HOUR.toNanos() * 5 / 100);
+      r.reloadNow();
+      assertEquals(Arrays.asList("a", "none"), recorder.applied);
+      assertTrue(recorder.errors.isEmpty());
+    }
+  }
+
+  @Test
+  public void changesToOtherFilesWaitWhileAFileIsHeld() throws Exception {
+    // A reload applies all the files or none.
+    try (TempDir dir = TempDir.create()) {
+      Path emptied = write(dir, "emptied.yaml", "flagValues:\n  other: \"x\"\n");
+      Path changed = write(dir, "changed.yaml", yaml("b1"));
+      AtomicLong clock = new AtomicLong();
+      CountingLoader loader = new CountingLoader(clock::get, emptied, changed);
+      Recorder recorder = new Recorder();
+      FileDataReloader r = reloader(loader, recorder, HOUR);
+      r.reloadNow();
+
+      InPlaceWrites.truncate(emptied);
+      InPlaceWrites.rewrite(changed, yaml("b2"), () -> { });
+      r.reloadNow();
+      assertEquals(Collections.singletonList("b1"), recorder.applied);
+      clock.addAndGet(HOUR.toNanos());
+      r.reloadNow();
+      assertEquals(Arrays.asList("b1", "b2"), recorder.applied);
+    }
   }
 
   @Test

@@ -2,7 +2,6 @@ package com.launchdarkly.sdk.server.integrations;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.ObjectBuilder;
@@ -66,6 +65,13 @@ abstract class FileDataSourceParsing {
    * parse the flags or segments at this level; that will be done by {@link FlagFactory}.
    */
   static final class FlagFileRep {
+    /**
+     * What a parser returns for content that holds no document, such as YAML with only a comment or a
+     * document marker. It has no entries. The override source compares a result with it by identity,
+     * so it must not be modified.
+     */
+    static final FlagFileRep NO_DOCUMENT = new FlagFileRep();
+
     Map<String, LDValue> flags;
     Map<String, LDValue> flagValues;
     Map<String, LDValue> segments;
@@ -202,8 +208,12 @@ abstract class FileDataSourceParsing {
       } catch (YAMLException e) {
         throw new FileDataException("unable to parse YAML", e);
       }
-      JsonElement jsonRoot = root == null ? new JsonObject() : gson.toJsonTree(root);
-      return jsonFileParser.parseJson(jsonRoot);
+      if (root == null) {
+        // Empty content, or content with only comments or document markers, holds no document. It has
+        // no entries.
+        return FlagFileRep.NO_DOCUMENT;
+      }
+      return jsonFileParser.parseJson(gson.toJsonTree(root));
     }
   }
 

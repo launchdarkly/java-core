@@ -15,6 +15,7 @@ import org.junit.Test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
@@ -30,6 +31,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -297,10 +299,11 @@ public class OverrideFileLoaderTest {
   private static final Duration RETRY = Duration.ofSeconds(1);
 
   /**
-   * A monotonic clock that the test moves.
+   * A monotonic clock that the test moves. It starts near the largest value, so that elapsed times
+   * cross the overflow of the clock's readings.
    */
   private static final class TestClock {
-    final AtomicLong nanos = new AtomicLong(1_000_000_000L);
+    final AtomicLong nanos = new AtomicLong(Long.MAX_VALUE - RETRY.toNanos() / 2);
 
     void advance(double retryDelays) {
       nanos.addAndGet((long) (retryDelays * RETRY.toNanos()));
@@ -328,25 +331,35 @@ public class OverrideFileLoaderTest {
     }
   }
 
-  private static void assertDeferred(OverrideFileLoader loader, Path... files) throws Exception {
+  // Asserts that a load holds back the given files and returns how long it asks the reloader to
+  // wait, in retry delays.
+  private static double assertHeld(OverrideFileLoader loader, Path... files) throws Exception {
     try {
       loader.load(RETRY);
-      fail("expected the empty files " + Arrays.asList(files) + " to be deferred");
+      fail("expected the empty files " + Arrays.asList(files) + " to be held back");
+      return 0;
     } catch (EmptiedFileException e) {
       assertEquals(Arrays.asList(files), e.getPaths());
+      return (double) e.getRetryAfterNanos() / RETRY.toNanos();
     }
   }
 
-  // Truncates the file again with a later modification time than the previous write. File system
-  // timestamps can be coarse, so it waits until the time differs.
-  private static void truncateAgain(Path file) throws Exception {
+  // Writes the file again, in place, with a later modification time than the previous write. File
+  // system timestamps can be coarse, so it waits until the time differs. It writes other content first,
+  // so that the file is modified even when the new content is what it already holds.
+  private static void writeAgain(Path file, String contents) throws Exception {
     long before = Files.getLastModifiedTime(file).toMillis();
     long deadline = System.currentTimeMillis() + 5000;
     do {
       Thread.sleep(20);
       InPlaceWrites.rewrite(file, "x", () -> { });
-      InPlaceWrites.truncate(file);
+      InPlaceWrites.rewrite(file, contents, () -> { });
     } while (Files.getLastModifiedTime(file).toMillis() == before && System.currentTimeMillis() < deadline);
+    assertThat(Files.getLastModifiedTime(file).toMillis(), not(equalTo(before)));
+  }
+
+  private static void truncateAgain(Path file) throws Exception {
+    writeAgain(file, "");
   }
 
   @Test
@@ -384,21 +397,32 @@ public class OverrideFileLoaderTest {
   }
 
   @Test
-  public void emptyOrWhiteSpaceYamlFileHasNoEntries() throws Exception {
+  public void yamlFileWithNoDocumentHasNoEntries() throws Exception {
     try (TempDir dir = TempDir.create()) {
       for (String name : new String[] { "empty.yaml", "empty.yml" }) {
-        for (String contents : new String[] { "", "  \n\n" }) {
+        for (String contents : new String[] { "", "  \n\n", "# only a comment\n", "---\n" }) {
           LoadResult result = loader(write(dir, name, contents)).load(RETRY);
           assertEquals(0, result.getFlagCount());
           assertTrue(result.getFiles().get(0).isPresent());
-          assertFalse(result.getFiles().get(0).hasContent());
+          assertFalse(contents, result.getFiles().get(0).hasContent());
         }
       }
     }
   }
 
   @Test
-  public void emptiedYamlFileIsDeferredForOneRetryDelayAndThenHasNoEntries() throws Exception {
+  public void documentWithNoEntriesHasContent() throws Exception {
+    try (TempDir dir = TempDir.create()) {
+      for (String name : new String[] { "empty.yaml", "empty.json" }) {
+        LoadResult result = loader(write(dir, name, "{}")).load(RETRY);
+        assertEquals(0, result.getFlagCount());
+        assertTrue(name, result.getFiles().get(0).hasContent());
+      }
+    }
+  }
+
+  @Test
+  public void emptiedYamlFileIsHeldForExactlyTheRetryDelayAndThenHasNoEntries() throws Exception {
     try (TempDir dir = TempDir.create()) {
       Path file = write(dir, "overrides.yaml", YAML_DOC);
       TestClock clock = new TestClock();
@@ -406,20 +430,19 @@ public class OverrideFileLoaderTest {
       assertTrue(loadAndAccept(loader).getFiles().get(0).hasContent());
 
       InPlaceWrites.truncate(file);
-      assertDeferred(loader, file);
-      clock.advance(0.85);
-      assertDeferred(loader, file);
-      // The file has stayed empty without being written for nine tenths of a retry delay, which is
-      // when the retry armed by the first deferral can fire if its timer is slightly early.
+      assertHeld(loader, file);
+      clock.advance(0.95);
+      assertHeld(loader, file);
+      // The file has stayed empty without being written for the retry delay.
       clock.advance(0.05);
       assertEquals(0, loader.load(RETRY).getFlagCount());
-      // It is not deferred again until it changes.
+      // It is not held back again until it changes.
       assertEquals(0, loader.load(RETRY).getFlagCount());
     }
   }
 
   @Test
-  public void emptiedJsonFileIsDeferredForOneRetryDelayAndThenFailsToParse() throws Exception {
+  public void emptiedJsonFileIsHeldForTheRetryDelayAndThenFailsToParse() throws Exception {
     try (TempDir dir = TempDir.create()) {
       Path file = write(dir, "overrides.json", JSON_DOC);
       TestClock clock = new TestClock();
@@ -427,7 +450,7 @@ public class OverrideFileLoaderTest {
       loadAndAccept(loader);
 
       InPlaceWrites.truncate(file);
-      assertDeferred(loader, file);
+      assertHeld(loader, file);
       clock.advance(1);
       assertNoContentFailure(loader, file);
       assertNoContentFailure(loader, file);
@@ -435,21 +458,125 @@ public class OverrideFileLoaderTest {
   }
 
   @Test
+  public void holdAsksForARetryWhenTheFirstDelayEnds() throws Exception {
+    try (TempDir dir = TempDir.create()) {
+      Path first = write(dir, "first.yaml", YAML_DOC);
+      Path second = write(dir, "second.yaml", "flagValues:\n  other: \"value\"\n");
+      TestClock clock = new TestClock();
+      OverrideFileLoader loader = loader(clock, first, second);
+      loadAndAccept(loader);
+
+      // The retry comes when the delay ends, plus a tenth of the retry delay for a timer that fires a
+      // little early.
+      InPlaceWrites.truncate(first);
+      assertEquals(1.1, assertHeld(loader, first), 1e-9);
+      clock.advance(0.4);
+      assertEquals(0.7, assertHeld(loader, first), 1e-9);
+      // A second file found empty later does not delay the retry for the first.
+      InPlaceWrites.truncate(second);
+      clock.advance(0.2);
+      assertEquals(0.5, assertHeld(loader, first, second), 1e-9);
+    }
+  }
+
+  @Test
+  public void holdAsksForARetryWhenTheRunOfHoldsEnds() throws Exception {
+    try (TempDir dir = TempDir.create()) {
+      Path file = write(dir, "overrides.yaml", YAML_DOC);
+      TestClock clock = new TestClock();
+      OverrideFileLoader loader = loader(clock, file);
+      loadAndAccept(loader);
+
+      InPlaceWrites.truncate(file);
+      assertHeld(loader, file);
+      for (int i = 0; i < 4; i++) {
+        clock.advance(0.9);
+        writeAgain(file, " ");
+        assertHeld(loader, file);
+      }
+      // 4.6 retry delays into the run, the file is written again. Its own delay would end at 5.6, the
+      // run's at 5.0.
+      clock.advance(1.0);
+      writeAgain(file, "  ");
+      assertEquals(0.5, assertHeld(loader, file), 1e-9);
+    }
+  }
+
+  @Test
   public void contentThatIsOnlyWhiteSpaceOrAByteOrderMarkCountsAsEmpty() throws Exception {
+    // A read can see only the byte order mark that an editor writes first. For JSON that is not a
+    // parse failure to report but an empty file to hold back.
+    for (String name : new String[] { "overrides.yaml", "overrides.json" }) {
+      try (TempDir dir = TempDir.create()) {
+        String doc = name.endsWith(".json") ? JSON_DOC : YAML_DOC;
+        Path file = write(dir, name, doc);
+        OverrideFileLoader loader = loader(new TestClock(), file);
+        for (String contents : new String[] { " \n\t\r\n", "\uFEFF", "\uFEFF\n" }) {
+          assertEquals(name, 1, loadAndAccept(loader).getFlagCount());
+          InPlaceWrites.rewrite(file, contents, () -> { });
+          assertHeld(loader, file);
+          InPlaceWrites.rewrite(file, doc, () -> { });
+        }
+      }
+    }
+  }
+
+  @Test
+  public void fileEmptiedAgainWithTheSameStateAfterContentStartsANewDelay() throws Exception {
+    // File system timestamps are coarse, so a file can be emptied again with the modification time
+    // and size that it had when it was last found empty. A load that read content in between shows
+    // that this is a new emptying.
+    try (TempDir dir = TempDir.create()) {
+      Path file = write(dir, "overrides.yaml", YAML_DOC);
+      TestClock clock = new TestClock();
+      OverrideFileLoader loader = loader(clock, file);
+      loadAndAccept(loader);
+
+      InPlaceWrites.truncate(file);
+      java.nio.file.attribute.FileTime emptiedAt = Files.getLastModifiedTime(file);
+      assertHeld(loader, file);
+      clock.advance(2);
+      InPlaceWrites.rewrite(file, YAML_DOC, () -> { });
+      assertEquals(1, loader.load(RETRY).getFlagCount());
+
+      InPlaceWrites.truncate(file);
+      Files.setLastModifiedTime(file, emptiedAt);
+      assertHeld(loader, file);
+    }
+  }
+
+  @Test
+  public void yamlWithOnlyACommentOrADocumentMarkerIsHeld() throws Exception {
+    // A read can see only the first line of a YAML file that is being written.
     try (TempDir dir = TempDir.create()) {
       Path file = write(dir, "overrides.yaml", YAML_DOC);
       OverrideFileLoader loader = loader(new TestClock(), file);
-      for (String contents : new String[] { " \n\t\r\n", "\uFEFF", "\uFEFF\n" }) {
+      for (String contents : new String[] { "# overrides for the incident\n", "---\n" }) {
         assertEquals(1, loadAndAccept(loader).getFlagCount());
         InPlaceWrites.rewrite(file, contents, () -> { });
-        assertDeferred(loader, file);
+        assertHeld(loader, file);
         InPlaceWrites.rewrite(file, YAML_DOC, () -> { });
       }
     }
   }
 
   @Test
-  public void contentThatWasReadButNotAppliedDoesNotDeferTheFile() throws Exception {
+  public void documentWithNoEntriesIsAppliedRightAway() throws Exception {
+    // {} is how to remove a file's overrides without deleting it.
+    try (TempDir dir = TempDir.create()) {
+      for (String name : new String[] { "overrides.yaml", "overrides.json" }) {
+        Path file = write(dir, name, name.endsWith(".json") ? JSON_DOC : YAML_DOC);
+        OverrideFileLoader loader = loader(new TestClock(), file);
+        loadAndAccept(loader);
+
+        InPlaceWrites.rewrite(file, "{}", () -> { });
+        assertEquals(name, 0, loader.load(RETRY).getFlagCount());
+      }
+    }
+  }
+
+  @Test
+  public void contentThatWasReadButNotAppliedDoesNotHoldTheFile() throws Exception {
     // Only the data in effect counts. A load whose result was not applied, for example because
     // another file failed to parse, does not make the file's later emptiness a rewrite.
     try (TempDir dir = TempDir.create()) {
@@ -463,21 +590,23 @@ public class OverrideFileLoaderTest {
   }
 
   @Test
-  public void fileThatIsEmptyFromTheStartIsNeverDeferred() throws Exception {
-    try (TempDir dir = TempDir.create()) {
-      Path placeholder = write(dir, "placeholder.yaml", "");
-      Path data = write(dir, "data.json", JSON_DOC);
-      OverrideFileLoader loader = loader(new TestClock(), placeholder, data);
-      for (int i = 0; i < 3; i++) {
+  public void fileThatHasNoContentFromTheStartIsNeverHeld() throws Exception {
+    for (String placeholderContents : new String[] { "", "# placeholder\n" }) {
+      try (TempDir dir = TempDir.create()) {
+        Path placeholder = write(dir, "placeholder.yaml", placeholderContents);
+        Path data = write(dir, "data.json", JSON_DOC);
+        OverrideFileLoader loader = loader(new TestClock(), placeholder, data);
+        for (int i = 0; i < 3; i++) {
+          assertEquals(1, loadAndAccept(loader).getFlagCount());
+        }
+        truncateAgain(placeholder);
         assertEquals(1, loadAndAccept(loader).getFlagCount());
       }
-      truncateAgain(placeholder);
-      assertEquals(1, loadAndAccept(loader).getFlagCount());
     }
   }
 
   @Test
-  public void fileWhoseEmptyStateIsInEffectIsNotDeferredAgain() throws Exception {
+  public void fileWhoseEmptyStateIsInEffectIsNotHeldAgain() throws Exception {
     try (TempDir dir = TempDir.create()) {
       Path file = write(dir, "overrides.yaml", YAML_DOC);
       TestClock clock = new TestClock();
@@ -485,12 +614,12 @@ public class OverrideFileLoaderTest {
       loadAndAccept(loader);
 
       InPlaceWrites.truncate(file);
-      assertDeferred(loader, file);
+      assertHeld(loader, file);
       clock.advance(1);
       assertEquals(0, loadAndAccept(loader).getFlagCount());
 
       // A new truncation of the file whose empty state is in effect is parsed right away.
-      truncateAgain(file);
+      writeAgain(file, " ");
       assertEquals(0, loader.load(RETRY).getFlagCount());
     }
   }
@@ -512,8 +641,8 @@ public class OverrideFileLoaderTest {
   }
 
   @Test
-  public void newTruncationStartsTheGraceAgain() throws Exception {
-    // A write and a new truncation that no load saw in between: the file is a new rewrite, not one
+  public void newWriteStartsTheDelayAgain() throws Exception {
+    // A write and a new truncation that no load saw in between: the file is in a new rewrite, not one
     // that has stayed empty.
     try (TempDir dir = TempDir.create()) {
       Path file = write(dir, "overrides.yaml", YAML_DOC);
@@ -522,19 +651,48 @@ public class OverrideFileLoaderTest {
       loadAndAccept(loader);
 
       InPlaceWrites.truncate(file);
-      assertDeferred(loader, file);
+      assertHeld(loader, file);
       clock.advance(0.8);
-      truncateAgain(file);
-      assertDeferred(loader, file);
-      clock.advance(0.8);
-      assertDeferred(loader, file);
-      clock.advance(0.1);
+      writeAgain(file, YAML_DOC);
+      InPlaceWrites.truncate(file);
+      assertHeld(loader, file);
+      clock.advance(0.95);
+      assertHeld(loader, file);
+      clock.advance(0.05);
       assertEquals(0, loader.load(RETRY).getFlagCount());
     }
   }
 
   @Test
-  public void fileThatKeepsBeingEmptiedIsParsedAfterTheCap() throws Exception {
+  public void newWriteOfALinkedFileStartsTheDelayAgain() throws Exception {
+    // The state of a file that is configured through a symbolic link is that of the file it points
+    // to; the link itself does not change when the file is written.
+    try (TempDir dir = TempDir.create()) {
+      Path target = write(dir, "target.yaml", YAML_DOC);
+      Path link = dir.getPath().resolve("overrides.yaml");
+      try {
+        Files.createSymbolicLink(link, target);
+      } catch (UnsupportedOperationException | java.io.IOException e) {
+        org.junit.Assume.assumeNoException("symbolic links are not available", e);
+      }
+      TestClock clock = new TestClock();
+      OverrideFileLoader loader = loader(clock, link);
+      loadAndAccept(loader);
+
+      InPlaceWrites.truncate(target);
+      assertHeld(loader, link);
+      clock.advance(0.8);
+      truncateAgain(target);
+      assertHeld(loader, link);
+      clock.advance(0.95);
+      assertHeld(loader, link);
+      clock.advance(0.05);
+      assertEquals(0, loader.load(RETRY).getFlagCount());
+    }
+  }
+
+  @Test
+  public void fileThatKeepsBeingWrittenIsParsedAfterTheRunOfHolds() throws Exception {
     try (TempDir dir = TempDir.create()) {
       Path file = write(dir, "overrides.yaml", YAML_DOC);
       TestClock clock = new TestClock();
@@ -542,13 +700,13 @@ public class OverrideFileLoaderTest {
       loadAndAccept(loader);
 
       InPlaceWrites.truncate(file);
-      assertDeferred(loader, file);
-      // Every load finds a new truncation, so the grace keeps starting again, up to the cap of five
-      // retry delays from when the file was first found empty.
+      assertHeld(loader, file);
+      // Every load finds a new write, so the delay keeps starting again, up to the limit of five
+      // retry delays for the run of loads that hold files back.
       for (int i = 0; i < 5; i++) {
         clock.advance(0.9);
         truncateAgain(file);
-        assertDeferred(loader, file);
+        assertHeld(loader, file);
       }
       clock.advance(0.5);
       truncateAgain(file);
@@ -557,30 +715,35 @@ public class OverrideFileLoaderTest {
   }
 
   @Test
-  public void contentReadEndsTheEpisode() throws Exception {
-    // The cap counts from when the file was first found empty in the current episode.
+  public void filesRewrittenInTurnAreParsedAfterTheRunOfHolds() throws Exception {
+    // Each load finds one of the files empty and the other with content, so each file's own delay
+    // starts again whenever it is found empty. The run of holds still ends.
     try (TempDir dir = TempDir.create()) {
-      Path file = write(dir, "overrides.yaml", YAML_DOC);
+      Path a = write(dir, "a.yaml", YAML_DOC);
+      Path b = write(dir, "b.yaml", "flagValues:\n  other: \"value\"\n");
       TestClock clock = new TestClock();
-      OverrideFileLoader loader = loader(clock, file);
+      OverrideFileLoader loader = loader(clock, a, b);
       loadAndAccept(loader);
 
-      InPlaceWrites.truncate(file);
-      assertDeferred(loader, file);
-      clock.advance(4.5);
-      InPlaceWrites.rewrite(file, YAML_DOC, () -> { });
-      assertEquals(1, loader.load(RETRY).getFlagCount());
-
-      truncateAgain(file);
-      clock.advance(0.1);
-      assertDeferred(loader, file);
+      InPlaceWrites.truncate(a);
+      assertHeld(loader, a);
+      for (int i = 0; i < 9; i++) {
+        clock.advance(0.5);
+        Path emptied = i % 2 == 0 ? b : a;
+        Path written = i % 2 == 0 ? a : b;
+        writeAgain(written, written == a ? YAML_DOC : "flagValues:\n  other: \"value\"\n");
+        truncateAgain(emptied);
+        assertHeld(loader, emptied);
+      }
       clock.advance(0.5);
-      assertDeferred(loader, file);
+      writeAgain(b, "flagValues:\n  other: \"value\"\n");
+      truncateAgain(a);
+      assertEquals(1, loader.load(RETRY).getFlagCount());
     }
   }
 
   @Test
-  public void missingFileEndsTheEpisode() throws Exception {
+  public void loadThatHoldsNothingBackEndsTheRun() throws Exception {
     try (TempDir dir = TempDir.create()) {
       Path file = write(dir, "overrides.yaml", YAML_DOC);
       TestClock clock = new TestClock();
@@ -588,14 +751,44 @@ public class OverrideFileLoaderTest {
       loadAndAccept(loader);
 
       InPlaceWrites.truncate(file);
-      assertDeferred(loader, file);
-      clock.advance(4.5);
-      Files.delete(file);
-      assertFalse(loader.load(RETRY).getFiles().get(0).isPresent());
+      assertHeld(loader, file);
+      for (int i = 0; i < 5; i++) {
+        clock.advance(0.9);
+        truncateAgain(file);
+        assertHeld(loader, file);
+      }
+      // A load that reads the file with content ends the run, so the next emptying starts a new one.
+      writeAgain(file, YAML_DOC);
+      assertEquals(1, loader.load(RETRY).getFlagCount());
+      truncateAgain(file);
+      clock.advance(0.1);
+      assertHeld(loader, file);
+      clock.advance(0.5);
+      assertHeld(loader, file);
+    }
+  }
 
-      Files.write(file, new byte[0]);
-      clock.advance(0.6);
-      assertDeferred(loader, file);
+  @Test
+  public void failingLoadEndsTheRun() throws Exception {
+    // A JSON file that stays empty is parsed after the delay and fails, which ends the run. When it is
+    // later rewritten in place, the new truncation is held back again instead of reported.
+    try (TempDir dir = TempDir.create()) {
+      Path file = write(dir, "overrides.json", JSON_DOC);
+      TestClock clock = new TestClock();
+      OverrideFileLoader loader = loader(clock, file);
+      loadAndAccept(loader);
+
+      InPlaceWrites.truncate(file);
+      assertHeld(loader, file);
+      clock.advance(1);
+      assertNoContentFailure(loader, file);
+      clock.advance(10);
+      assertNoContentFailure(loader, file);
+
+      writeAgain(file, " ");
+      assertHeld(loader, file);
+      InPlaceWrites.rewrite(file, JSON_DOC, () -> { });
+      assertEquals(1, loader.load(RETRY).getFlagCount());
     }
   }
 
@@ -612,9 +805,9 @@ public class OverrideFileLoaderTest {
   }
 
   @Test
-  public void filesEmptiedTogetherAreDeferredFromTheSameLoad() throws Exception {
-    // A load that defers one file still reads the others, so each emptied file starts its delay in
-    // that load and all of them are parsed after one retry delay, not one retry delay per file.
+  public void filesEmptiedTogetherAreHeldFromTheSameLoad() throws Exception {
+    // A load that holds back one file still reads the others, so each emptied file starts its delay
+    // in that load and all of them are parsed after one retry delay, not one retry delay per file.
     try (TempDir dir = TempDir.create()) {
       Path first = write(dir, "first.yaml", YAML_DOC);
       Path second = write(dir, "second.yaml", "flagValues:\n  other: \"value\"\n");
@@ -624,14 +817,14 @@ public class OverrideFileLoaderTest {
 
       InPlaceWrites.truncate(first);
       InPlaceWrites.truncate(second);
-      assertDeferred(loader, first, second);
-      clock.advance(0.9);
+      assertHeld(loader, first, second);
+      clock.advance(1);
       assertEquals(0, loader.load(RETRY).getFlagCount());
     }
   }
 
   @Test
-  public void failureOfAnotherFileFailsALoadThatDefersAFile() throws Exception {
+  public void failureOfAnotherFileFailsALoadThatHoldsAFile() throws Exception {
     try (TempDir dir = TempDir.create()) {
       Path first = write(dir, "first.yaml", YAML_DOC);
       Path second = write(dir, "second.json", JSON_DOC.replace("flag", "other"));
