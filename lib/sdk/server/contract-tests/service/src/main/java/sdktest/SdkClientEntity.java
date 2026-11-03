@@ -1,5 +1,6 @@
 package sdktest;
 
+import com.launchdarkly.sdk.AttributeRef;
 import com.launchdarkly.sdk.ContextBuilder;
 import com.launchdarkly.sdk.ContextMultiBuilder;
 import com.launchdarkly.sdk.EvaluationDetail;
@@ -24,6 +25,7 @@ import com.launchdarkly.sdk.server.integrations.ApplicationInfoBuilder;
 import com.launchdarkly.sdk.server.integrations.BigSegmentsConfigurationBuilder;
 import com.launchdarkly.sdk.server.integrations.EventProcessorBuilder;
 import com.launchdarkly.sdk.server.integrations.HooksConfigurationBuilder;
+import com.launchdarkly.sdk.server.integrations.HttpConfigurationBuilder;
 import com.launchdarkly.sdk.server.integrations.ServiceEndpointsBuilder;
 import com.launchdarkly.sdk.server.integrations.StreamingDataSourceBuilder;
 import com.launchdarkly.sdk.server.integrations.PollingDataSourceBuilder;
@@ -42,6 +44,7 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
 import java.net.URL;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -50,10 +53,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import sdktest.Representations.AttributeDefinition;
 import sdktest.Representations.CommandParams;
 import sdktest.Representations.ContextBuildParams;
 import sdktest.Representations.ContextBuildResponse;
 import sdktest.Representations.ContextBuildSingleParams;
+import sdktest.Representations.ContextComparisonPairParams;
+import sdktest.Representations.ContextComparisonParams;
+import sdktest.Representations.ContextComparisonResponse;
+import sdktest.Representations.ContextComparisonSingleParams;
 import sdktest.Representations.ContextConvertParams;
 import sdktest.Representations.CreateInstanceParams;
 import sdktest.Representations.CustomEventParams;
@@ -63,6 +71,7 @@ import sdktest.Representations.EvaluateFlagParams;
 import sdktest.Representations.EvaluateFlagResponse;
 import sdktest.Representations.GetBigSegmentsStoreStatusResponse;
 import sdktest.Representations.IdentifyEventParams;
+import sdktest.Representations.PrivateAttribute;
 import sdktest.Representations.RegisterFlagChangeListenerParams;
 import sdktest.Representations.RegisterFlagValueChangeListenerParams;
 import sdktest.Representations.UnregisterListenerParams;
@@ -120,6 +129,8 @@ public class SdkClientEntity {
       return doContextBuild(params.contextBuild);
     case "contextConvert":
       return doContextConvert(params.contextConvert);
+    case "contextComparison":
+      return doContextComparison(params.contextComparison);
     case "secureModeHash":
       return doSecureModeHash(params.secureModeHash);
     case "migrationVariation":
@@ -297,6 +308,38 @@ public class SdkClientEntity {
       resp.error = e.getMessage();
     }
     return resp;
+  }
+
+  private ContextComparisonResponse doContextComparison(ContextComparisonPairParams params) {
+    ContextComparisonResponse resp = new ContextComparisonResponse();
+    resp.equals = buildComparisonContext(params.context1).equals(buildComparisonContext(params.context2));
+    return resp;
+  }
+
+  private LDContext buildComparisonContext(ContextComparisonParams params) {
+    if (params.single != null) {
+      return buildComparisonSingle(params.single);
+    }
+    ContextMultiBuilder b = LDContext.multiBuilder();
+    for (ContextComparisonSingleParams s : params.multi) {
+      b.add(buildComparisonSingle(s));
+    }
+    return b.build();
+  }
+
+  private LDContext buildComparisonSingle(ContextComparisonSingleParams params) {
+    ContextBuilder b = LDContext.builder(params.key).kind(params.kind);
+    if (params.attributes != null) {
+      for (AttributeDefinition a : params.attributes) {
+        b.set(a.name, a.value);
+      }
+    }
+    if (params.privateAttributes != null) {
+      for (PrivateAttribute p : params.privateAttributes) {
+        b.privateAttributes(p.literal ? AttributeRef.fromLiteral(p.value) : AttributeRef.fromPath(p.value));
+      }
+    }
+    return b.build();
   }
 
   private SecureModeHashResponse doSecureModeHash(SecureModeHashParams params) {
@@ -498,6 +541,20 @@ public class SdkClientEntity {
 
     builder.serviceEndpoints(endpoints);
 
+    if (params.wrapper != null) {
+      // The harness sends "" for an unset name or version. The SDK treats only null as unset.
+      builder.wrapper(Components.wrapperInfo()
+          .wrapperName(emptyToNull(params.wrapper.name))
+          .wrapperVersion(emptyToNull(params.wrapper.version)));
+    }
+
+    if (params.proxy != null && params.proxy.httpProxy != null) {
+      URI proxyUri = URI.create(params.proxy.httpProxy);
+      HttpConfigurationBuilder http = Components.httpConfiguration()
+          .proxyHostAndPort(proxyUri.getHost(), proxyUri.getPort());
+      builder.http(http);
+    }
+
     if (params.hooks != null && params.hooks.hooks != null) {
       List<Hook> hookList = new ArrayList<>();
       for (HookConfig hookConfig : params.hooks.hooks) {
@@ -646,4 +703,7 @@ public class SdkClientEntity {
     return null;
   }
 
+  private static String emptyToNull(String s) {
+    return s == null || s.isEmpty() ? null : s;
+  }
 }
