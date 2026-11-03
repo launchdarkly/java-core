@@ -24,7 +24,7 @@ class SynchronizerFactoryWithState {
     private boolean isFDv1Fallback = false;
 
     /**
-     * The number of unexpected failures since the synchronizer last reported a retry reset.
+     * The number of unexpected failures since the synchronizer last reported that it met its reset threshold.
      */
     private int parkCount = 0;
 

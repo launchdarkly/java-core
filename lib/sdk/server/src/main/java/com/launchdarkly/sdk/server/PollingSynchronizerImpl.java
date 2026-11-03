@@ -11,9 +11,9 @@ import java.util.concurrent.*;
 
 class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
     /**
-     * The number of consecutive successful polls that resets the retry state.
+     * The number of consecutive successful polls that meets the reset threshold.
      */
-    private static final int RETRY_RESET_SUCCESSFUL_POLLS = 2;
+    private static final int RESET_THRESHOLD_SUCCESSFUL_POLLS = 2;
 
     private final CompletableFuture<FDv2SourceResult> shutdownFuture = new CompletableFuture<>();
     private final SelectorSource selectorSource;
@@ -59,8 +59,8 @@ class PollingSynchronizerImpl extends PollingBase implements Synchronizer {
             switch (res.getResultType()) {
                 case CHANGE_SET:
                     consecutiveSuccessfulPolls++;
-                    if (consecutiveSuccessfulPolls == RETRY_RESET_SUCCESSFUL_POLLS) {
-                        res = res.withRetryReset();
+                    if (consecutiveSuccessfulPolls == RESET_THRESHOLD_SUCCESSFUL_POLLS) {
+                        res = res.withResetThresholdMet();
                     }
                     break;
                 case STATUS:

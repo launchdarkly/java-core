@@ -108,7 +108,7 @@ public final class DataSystemComponents {
               context.getSharedExecutor(),
               payloadFilter,
               initialReconnectDelay,
-              StreamingSynchronizerImpl.RETRY_RESET_THRESHOLD,
+              StreamingSynchronizerImpl.RESET_THRESHOLD,
               context.getThreadPriority(),
               context.getDiagnosticStore()
       );

@@ -59,9 +59,9 @@ class StreamingSynchronizerImpl implements Synchronizer {
     private static final Duration DEAD_CONNECTION_INTERVAL = Duration.ofSeconds(300);
 
     /**
-     * The time a stream must stay healthy, from its first valid result, before the retry state resets.
+     * The time a stream must stay healthy, from its first valid result, to meet the reset threshold.
      */
-    static final Duration RETRY_RESET_THRESHOLD = Duration.ofSeconds(60);
+    static final Duration RESET_THRESHOLD = Duration.ofSeconds(60);
 
     private final HttpProperties httpProperties;
     private final SelectorSource selectorSource;
@@ -81,16 +81,16 @@ class StreamingSynchronizerImpl implements Synchronizer {
     private final int threadPriority;
     private final DiagnosticStore diagnosticStore;
     private final ScheduledExecutorService sharedExecutor;
-    private final Duration retryResetThreshold;
+    private final Duration resetThreshold;
     private volatile long streamStarted = 0;
 
-    private final Object retryResetLock = new Object();
+    private final Object resetThresholdLock = new Object();
 
     /**
-     * The timer that reports a retry reset for the current stream, or null if the current stream has
-     * not produced a valid result. Guarded by {@link #retryResetLock}.
+     * The timer that reports that the current stream met its reset threshold, or null if the current stream has
+     * not produced a valid result. Guarded by {@link #resetThresholdLock}.
      */
-    private ScheduledFuture<?> retryResetFuture;
+    private ScheduledFuture<?> resetThresholdFuture;
 
     public StreamingSynchronizerImpl(
             HttpProperties httpProperties,
@@ -101,7 +101,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
             ScheduledExecutorService sharedExecutor,
             String payloadFilter,
             Duration initialReconnectDelaySeconds,
-            Duration retryResetThreshold,
+            Duration resetThreshold,
             int threadPriority,
             DiagnosticStore diagnosticStore
     ) {
@@ -114,7 +114,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
         this.threadPriority = threadPriority;
         this.diagnosticStore = diagnosticStore;
         this.sharedExecutor = sharedExecutor;
-        this.retryResetThreshold = retryResetThreshold;
+        this.resetThreshold = resetThreshold;
 
         // The stream will lazily start when `next` is called.
     }
@@ -210,7 +210,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 logger.error("Stream thread ended with exception: {}", LogValues.exceptionSummary(e));
                 logger.debug(LogValues.exceptionTrace(e));
 
-                cancelRetryResetTimer();
+                cancelResetThresholdTimer();
                 recordStreamInit(true);  // Record failed init for unexpected thread exception
 
                 DataSourceStatusProvider.ErrorInfo errorInfo = new DataSourceStatusProvider.ErrorInfo(
@@ -262,7 +262,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
             }
         }
 
-        cancelRetryResetTimer();
+        cancelResetThresholdTimer();
         shutdownFuture.complete(FDv2SourceResult.shutdown());
     }
 
@@ -274,37 +274,37 @@ class StreamingSynchronizerImpl implements Synchronizer {
     }
 
     /**
-     * Starts the retry reset timer if the current stream does not have one yet. Call this for each
+     * Starts the reset threshold timer if the current stream does not have one yet. Call this for each
      * valid result, so that the first valid result on a stream starts the timer.
      */
-    private void startRetryResetTimerIfNeeded() {
-        synchronized (retryResetLock) {
-            if (retryResetFuture != null) {
+    private void startResetThresholdTimerIfNeeded() {
+        synchronized (resetThresholdLock) {
+            if (resetThresholdFuture != null) {
                 return;
             }
-            retryResetFuture = sharedExecutor.schedule(
-                    this::reportRetryReset,
-                    retryResetThreshold.toMillis(),
+            resetThresholdFuture = sharedExecutor.schedule(
+                    this::reportResetThresholdMet,
+                    resetThreshold.toMillis(),
                     TimeUnit.MILLISECONDS);
         }
     }
 
     /**
-     * Stops the retry reset timer of the current stream. Call this when the stream ends.
+     * Stops the reset threshold timer of the current stream. Call this when the stream ends.
      */
-    private void cancelRetryResetTimer() {
-        synchronized (retryResetLock) {
-            if (retryResetFuture != null) {
-                retryResetFuture.cancel(false);
-                retryResetFuture = null;
+    private void cancelResetThresholdTimer() {
+        synchronized (resetThresholdLock) {
+            if (resetThresholdFuture != null) {
+                resetThresholdFuture.cancel(false);
+                resetThresholdFuture = null;
             }
         }
     }
 
-    private void reportRetryReset() {
-        synchronized (retryResetLock) {
-            // The timer can start to run before a cancel. Do not report a reset for a stream that ended.
-            if (retryResetFuture == null) {
+    private void reportResetThresholdMet() {
+        synchronized (resetThresholdLock) {
+            // The timer can start to run before a cancel. Do not report anything for a stream that ended.
+            if (resetThresholdFuture == null) {
                 return;
             }
             ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> noChanges = new ChangeSet<>(
@@ -313,7 +313,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                     Collections.emptyList(),
                     /* environmentId= */ null,
                     /* shouldPersist= */ true);
-            resultQueue.put(FDv2SourceResult.changeSet(noChanges, /* fdv1Fallback= */ false).withRetryReset());
+            resultQueue.put(FDv2SourceResult.changeSet(noChanges, /* fdv1Fallback= */ false).withResetThresholdMet());
         }
     }
 
@@ -365,7 +365,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                     // Reset to 0 after successful init to prevent duplicate recordings until next restart
                     streamStarted = 0;
                     result = FDv2SourceResult.changeSet(converted, getFallback(event));
-                    startRetryResetTimerIfNeeded();
+                    startResetThresholdTimerIfNeeded();
                 } catch (Exception e) {
                     logger.error("Failed to convert FDv2 changeset: {}", LogValues.exceptionSummary(e));
                     logger.debug(LogValues.exceptionTrace(e));
@@ -457,7 +457,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
             return true;
         }
 
-        cancelRetryResetTimer();
+        cancelResetThresholdTimer();
         recordStreamInit(true);
 
         if (e instanceof StreamHttpErrorException) {
@@ -500,7 +500,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
 
     private void restartStream(boolean failed) {
         Objects.requireNonNull(eventSource, "eventSource must not be null");
-        cancelRetryResetTimer();
+        cancelResetThresholdTimer();
         recordStreamInit(failed);
         streamStarted = System.currentTimeMillis();
         eventSource.interrupt();

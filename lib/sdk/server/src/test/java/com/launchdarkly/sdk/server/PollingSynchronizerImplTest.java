@@ -1077,7 +1077,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
     }
 
     @Test
-    public void retryResetIsReportedOnSecondConsecutiveSuccessfulPoll() throws Exception {
+    public void resetThresholdMetIsReportedOnSecondConsecutiveSuccessfulPoll() throws Exception {
         FDv2Requestor requestor = mockRequestor();
         SelectorSource selectorSource = mockSelectorSource();
         ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
@@ -1099,10 +1099,10 @@ public class PollingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult second = synchronizer.next().get(1, TimeUnit.SECONDS);
             FDv2SourceResult third = synchronizer.next().get(1, TimeUnit.SECONDS);
 
-            // Only the second successful poll reports a retry reset.
-            assertFalse(first.isRetryReset());
-            assertTrue(second.isRetryReset());
-            assertFalse(third.isRetryReset());
+            // Only the second successful poll reports that the reset threshold was met.
+            assertFalse(first.isResetThresholdMet());
+            assertTrue(second.isResetThresholdMet());
+            assertFalse(third.isResetThresholdMet());
 
             synchronizer.close();
         } finally {
@@ -1111,7 +1111,7 @@ public class PollingSynchronizerImplTest extends BaseTest {
     }
 
     @Test
-    public void failedPollRestartsRetryResetCount() throws Exception {
+    public void failedPollRestartsResetThresholdCount() throws Exception {
         FDv2Requestor requestor = mockRequestor();
         SelectorSource selectorSource = mockSelectorSource();
         ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
@@ -1136,12 +1136,12 @@ public class PollingSynchronizerImplTest extends BaseTest {
             FDv2SourceResult firstSuccessAfterFailure = synchronizer.next().get(1, TimeUnit.SECONDS);
             FDv2SourceResult secondSuccessAfterFailure = synchronizer.next().get(1, TimeUnit.SECONDS);
 
-            // The failure restarts the count, so the reset comes on the second success after it.
-            assertFalse(successBeforeFailure.isRetryReset());
+            // The failure restarts the count, so the threshold is met on the second success after it.
+            assertFalse(successBeforeFailure.isResetThresholdMet());
             assertEquals(SourceSignal.INTERRUPTED, failure.getStatus().getState());
-            assertFalse(failure.isRetryReset());
-            assertFalse(firstSuccessAfterFailure.isRetryReset());
-            assertTrue(secondSuccessAfterFailure.isRetryReset());
+            assertFalse(failure.isResetThresholdMet());
+            assertFalse(firstSuccessAfterFailure.isResetThresholdMet());
+            assertTrue(secondSuccessAfterFailure.isResetThresholdMet());
 
             synchronizer.close();
         } finally {
