@@ -104,7 +104,14 @@ final class FileDataPoller implements Closeable {
     return states;
   }
 
-  private static FileState observe(Path path) {
+  /**
+   * Observes one file. The attributes are read through any symbolic link, so they describe the file
+   * that the link points to.
+   *
+   * @param path the file
+   * @return its state, or {@link FileState#ABSENT} if its attributes cannot be read
+   */
+  static FileState observe(Path path) {
     try {
       BasicFileAttributes attributes = Files.readAttributes(path, BasicFileAttributes.class);
       return new FileState(true, attributes.lastModifiedTime().toMillis(), attributes.size());

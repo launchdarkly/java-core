@@ -2,7 +2,7 @@ package com.launchdarkly.sdk.server.integrations;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
+import com.google.gson.JsonIOException;
 import com.google.gson.JsonSyntaxException;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.ObjectBuilder;
@@ -12,6 +12,7 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.reader.UnicodeReader;
 import org.yaml.snakeyaml.representer.Representer;
 
 import java.io.ByteArrayInputStream;
@@ -19,6 +20,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Map;
 
 import static com.launchdarkly.sdk.server.DataModel.FEATURES;
@@ -64,6 +67,13 @@ abstract class FileDataSourceParsing {
    * parse the flags or segments at this level; that will be done by {@link FlagFactory}.
    */
   static final class FlagFileRep {
+    /**
+     * What a parser returns for content that holds no document, such as YAML with only a comment or a
+     * document marker. It has no entries. The override source compares a result with it by identity,
+     * so it must not be modified.
+     */
+    static final FlagFileRep NO_DOCUMENT = new FlagFileRep();
+
     Map<String, LDValue> flags;
     Map<String, LDValue> flagValues;
     Map<String, LDValue> segments;
@@ -91,7 +101,43 @@ abstract class FileDataSourceParsing {
       Reader r = new InputStreamReader(new ByteArrayInputStream(data));
       return detectJson(r) ? JsonParserHolder.getInstance() : YamlParserHolder.getInstance();
     }
-    
+
+    /**
+     * Chooses the parser by the extension of the file name: a file whose name ends in {@code .yaml}
+     * or {@code .yml}, in any case, is parsed as YAML, and any other file is parsed as JSON. The
+     * override source uses this. The file data source keeps choosing by content, with
+     * {@link #selectForContent(byte[])}.
+     *
+     * @param path the file
+     * @return the parser for the file
+     */
+    static FlagFileParser selectForPath(Path path) {
+      Path fileName = path.getFileName();
+      String name = fileName == null ? "" : fileName.toString().toLowerCase(Locale.ROOT);
+      return name.endsWith(".yaml") || name.endsWith(".yml")
+          ? YamlParserHolder.getInstance() : JsonParserHolder.getInstance();
+    }
+
+    /**
+     * Parses the content of a file with the parser that {@link #selectForPath(Path)} chooses. The
+     * text encoding is detected from a byte order mark, UTF-8, UTF-16 or UTF-32, and is UTF-8
+     * otherwise, for both formats; the YAML parser does that itself. The override source uses this.
+     * The file data source keeps reading JSON in the platform's default encoding.
+     *
+     * @param path the file
+     * @param data its content
+     * @return the parsed content
+     * @throws FileDataException if the content cannot be decoded or parsed
+     * @throws IOException if the content cannot be read
+     */
+    static FlagFileRep parseForPath(Path path, byte[] data) throws FileDataException, IOException {
+      FlagFileParser parser = selectForPath(path);
+      if (parser instanceof JsonFlagFileParser) {
+        return ((JsonFlagFileParser) parser).parse(new UnicodeReader(new ByteArrayInputStream(data)));
+      }
+      return parser.parse(new ByteArrayInputStream(data));
+    }
+
     private static boolean detectJson(Reader r) {
       // A valid JSON file for our purposes must be an object, i.e. it must start with '{'
       while (true) {
@@ -119,11 +165,40 @@ abstract class FileDataSourceParsing {
   
     @Override
     public FlagFileRep parse(InputStream input) throws FileDataException, IOException {
+      return parse(new InputStreamReader(input));
+    }
+
+    /**
+     * Parses JSON from text that is already decoded.
+     *
+     * @param reader the text
+     * @return the parsed content
+     * @throws FileDataException if the text is not a JSON object, or cannot be decoded
+     * @throws IOException if the text cannot be read
+     */
+    FlagFileRep parse(Reader reader) throws FileDataException, IOException {
+      JsonElement tree;
       try {
-        return parseJson(gson.fromJson(new InputStreamReader(input), JsonElement.class));
+        tree = gson.fromJson(reader, JsonElement.class);
       } catch (JsonSyntaxException e) {
         throw new FileDataException("cannot parse JSON", e);
-      }    
+      } catch (JsonIOException e) {
+        // For example, bytes that are not valid in the detected encoding.
+        throw new FileDataException("cannot read JSON", e);
+      }
+      if (tree == null) {
+        // Gson finds no value in a file that is empty or white space only, or, since it reads
+        // leniently, one that holds only comments. That is not a JSON document. A file that is being
+        // rewritten in place can be empty for a moment, and the failure keeps its last good data
+        // until it is complete. The file data source never gets here: it parses a file as JSON only
+        // when the file starts with '{'.
+        throw new FileDataException("the file has no content, which is not a JSON document", null);
+      }
+      if (!tree.isJsonObject()) {
+        // A document such as null or [] holds no flags. The file data source never gets here either.
+        throw new FileDataException("the JSON document is not an object", null);
+      }
+      return parseJson(tree);
     }
     
     public FlagFileRep parseJson(JsonElement tree) throws FileDataException, IOException {
@@ -174,8 +249,12 @@ abstract class FileDataSourceParsing {
       } catch (YAMLException e) {
         throw new FileDataException("unable to parse YAML", e);
       }
-      JsonElement jsonRoot = root == null ? new JsonObject() : gson.toJsonTree(root);
-      return jsonFileParser.parseJson(jsonRoot);
+      if (root == null) {
+        // Empty content, or content with only comments or document markers, holds no document. It has
+        // no entries.
+        return FlagFileRep.NO_DOCUMENT;
+      }
+      return jsonFileParser.parseJson(gson.toJsonTree(root));
     }
   }
 
