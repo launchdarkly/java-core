@@ -31,6 +31,8 @@ public abstract class Representations {
     SdkConfigEventParams events;
     SdkConfigBigSegmentsParams bigSegments;
     SdkConfigTagParams tags;
+    SdkConfigWrapperParams wrapper;
+    SdkConfigProxyParams proxy;
     SdkConfigServiceEndpointParams serviceEndpoints;
     SdkConfigHookParams hooks;
     SdkConfigDataSystemParams dataSystem;
@@ -63,6 +65,15 @@ public abstract class Representations {
   public static class SdkConfigTagParams {
     String applicationId;
     String applicationVersion;
+  }
+
+  public static class SdkConfigWrapperParams {
+    String name;
+    String version;
+  }
+
+  public static class SdkConfigProxyParams {
+    String httpProxy;
   }
 
   public static class SdkConfigServiceEndpointParams {
@@ -210,6 +221,7 @@ public abstract class Representations {
     CustomEventParams customEvent;
     ContextBuildParams contextBuild;
     ContextConvertParams contextConvert;
+    ContextComparisonPairParams contextComparison;
     SecureModeHashParams secureModeHash;
 
     MigrationVariationParams migrationVariation;
@@ -331,6 +343,37 @@ public abstract class Representations {
   
   public static class ContextConvertParams {
     String input;
+  }
+
+  public static class ContextComparisonPairParams {
+    ContextComparisonParams context1;
+    ContextComparisonParams context2;
+  }
+
+  public static class ContextComparisonParams {
+    ContextComparisonSingleParams single;
+    ContextComparisonSingleParams[] multi;
+  }
+
+  public static class ContextComparisonSingleParams {
+    String kind;
+    String key;
+    AttributeDefinition[] attributes;
+    PrivateAttribute[] privateAttributes;
+  }
+
+  public static class AttributeDefinition {
+    String name;
+    LDValue value;
+  }
+
+  public static class PrivateAttribute {
+    String value;
+    boolean literal;
+  }
+
+  public static class ContextComparisonResponse {
+    boolean equals;
   }
   
   public static class SecureModeHashParams {
