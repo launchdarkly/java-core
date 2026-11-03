@@ -23,7 +23,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <p>
  * A configured file that does not exist contributes no overrides. A file that exists but cannot
  * be read or parsed fails that reload: the sink is not called, so the last good overrides stay in
- * effect, and the reload is retried.
+ * effect, and the reload is retried. A file whose content is in effect and is found empty may be in
+ * the middle of an in-place rewrite, so it is held back until it has stayed empty, without being
+ * written, for the retry delay, and for at most five retry delays from the first load that held it
+ * back.
  */
 final class FileOverrideSourceImpl implements OverrideSource {
   /**
@@ -36,6 +39,7 @@ final class FileOverrideSourceImpl implements OverrideSource {
   private final List<Path> paths;
   private final ChangeDetection changeDetection;
   private final Duration pollInterval;
+  private final Duration retryDelay;
   private final LDLogger logger;
   private final OverrideFileLoader loader;
   private final WatcherFactory watcherFactory;
@@ -52,20 +56,26 @@ final class FileOverrideSourceImpl implements OverrideSource {
       Duration pollInterval,
       LDLogger logger
   ) {
-    this(paths, duplicateKeysHandling, changeDetection, pollInterval, logger, FileDataWatcher::create);
+    this(paths, duplicateKeysHandling, changeDetection, pollInterval, FileDataReloader.DEFAULT_RETRY_DELAY, logger,
+        FileDataWatcher::create);
   }
 
+  /**
+   * Creates a source with a specific retry delay and watcher factory. Visible for tests.
+   */
   FileOverrideSourceImpl(
       List<Path> paths,
       FileData.DuplicateKeysHandling duplicateKeysHandling,
       ChangeDetection changeDetection,
       Duration pollInterval,
+      Duration retryDelay,
       LDLogger logger,
       WatcherFactory watcherFactory
   ) {
     this.paths = new ArrayList<>(paths);
     this.changeDetection = changeDetection;
     this.pollInterval = pollInterval;
+    this.retryDelay = retryDelay;
     this.logger = logger;
     this.loader = new OverrideFileLoader(paths, duplicateKeysHandling);
     this.watcherFactory = watcherFactory;
@@ -81,7 +91,7 @@ final class FileOverrideSourceImpl implements OverrideSource {
   @Override
   public void start(OverrideSink sink) {
     reloader = new FileDataReloader(
-        loader::load,
+        loader,
         new FileDataReloader.Handler() {
           @Override
           public void apply(LoadResult result) {
@@ -96,7 +106,7 @@ final class FileOverrideSourceImpl implements OverrideSource {
         },
         logger,
         FileDataReloader.DEFAULT_DEBOUNCE_DELAY,
-        FileDataReloader.DEFAULT_RETRY_DELAY,
+        retryDelay,
         true
     );
     reloader.reloadNow();

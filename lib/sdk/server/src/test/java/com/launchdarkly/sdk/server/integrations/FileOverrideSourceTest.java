@@ -323,6 +323,35 @@ public class FileOverrideSourceTest {
   }
 
   @Test
+  public void emptyYamlFileAtStartupHasNoEntries() throws Exception {
+    for (String contents : new String[] { "", "  \n\n" }) {
+      try (TempDir dir = TempDir.create()) {
+        Path file = write(dir, "overrides.yaml", contents);
+        RecordingSink sink = new RecordingSink();
+        start(FileOverrides.source().filePaths(file), sink);
+        assertTrue(sink.await().get(FEATURES.getName()).isEmpty());
+        assertThat(logCapture.getMessageStrings(), hasItem("INFO:Flag overrides: none in effect (" + file + ": no entries)"));
+      }
+    }
+  }
+
+  @Test
+  public void emptyJsonFileAtStartupFailsToLoad() throws Exception {
+    for (String name : new String[] { "overrides.json", "overrides" }) {
+      for (String contents : new String[] { "", " \n\t\n" }) {
+        try (TempDir dir = TempDir.create()) {
+          Path file = write(dir, name, contents);
+          RecordingSink sink = new RecordingSink();
+          start(FileOverrides.source().filePaths(file), sink);
+          sink.assertNoSnapshot(200);
+          assertThat(logCapture.getMessageStrings(), hasItem("ERROR:Unable to load flags: file " + file
+              + ": the file has no content, which is not a JSON document"));
+        }
+      }
+    }
+  }
+
+  @Test
   public void malformedFileAtStartupSuppliesNothingAndLogsError() throws Exception {
     try (TempDir dir = TempDir.create()) {
       Path file = write(dir, "bad.json", "{\"flagValues\"");
@@ -381,7 +410,8 @@ public class FileOverrideSourceTest {
       Path file = write(dir, "overrides.json", docWith("flag", "first"));
       FileOverrideSourceImpl source = new FileOverrideSourceImpl(
           Collections.singletonList(file.toAbsolutePath()), FileData.DuplicateKeysHandling.FAIL,
-          ChangeDetection.WATCHING, Duration.ofMillis(10), context.getBaseLogger().subLogger("FileOverrideSource"),
+          ChangeDetection.WATCHING, Duration.ofMillis(10), FileDataReloader.DEFAULT_RETRY_DELAY,
+          context.getBaseLogger().subLogger("FileOverrideSource"),
           (paths, logger) -> {
             throw new IOException("watch service unavailable");
           });

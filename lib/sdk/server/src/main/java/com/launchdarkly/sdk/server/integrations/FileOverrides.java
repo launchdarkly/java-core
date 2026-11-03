@@ -45,12 +45,14 @@ public abstract class FileOverrides {
      * the size of a file changes. Polling works on every file system, including network mounts and
      * directories whose contents are swapped through symbolic links, as Kubernetes does for mounted
      * ConfigMaps. It is the default.
+     * Flag overrides are currently experimental and subject to change.
      */
     POLLING,
 
     /**
      * The source reloads in response to file system change notifications. It reacts faster than
      * polling. It depends on notifications, which some file systems do not deliver reliably.
+     * Flag overrides are currently experimental and subject to change.
      */
     WATCHING
   }
@@ -60,12 +62,14 @@ public abstract class FileOverrides {
    * {@link ChangeDetection#POLLING} mode when no interval was specified. Because the source reads
    * local files rather than contacting a service, a short interval keeps an override responsive
    * during an incident at negligible cost.
+   * Flag overrides are currently experimental and subject to change.
    */
   public static final Duration DEFAULT_POLL_INTERVAL = Duration.ofSeconds(1);
 
   /**
    * The shortest allowed polling interval. A configured interval below this is raised to it. The
    * minimum exists only to prevent a pathological tight loop over the file system.
+   * Flag overrides are currently experimental and subject to change.
    */
   public static final Duration MINIMUM_POLL_INTERVAL = Duration.ofSeconds(1);
 
@@ -77,9 +81,12 @@ public abstract class FileOverrides {
    * <p>
    * The files use the same document format as the file data source (see {@link FileData}): each
    * file is a JSON or YAML document with optional {@code "flags"}, {@code "flagValues"}, and
-   * {@code "segments"} members. A {@code "flagValues"} entry is expanded into a full flag
-   * definition that is on and serves the given value as its single variation by fallthrough for
-   * every context. Such a flag is not available to client-side SDKs, so
+   * {@code "segments"} members. A file whose name ends in {@code .yaml} or {@code .yml}, in any case,
+   * is YAML, and any other file is JSON; the YAML parser does not accept every JSON document, so give
+   * a JSON file a name that does not end in {@code .yaml} or {@code .yml}. A file is read as UTF-8,
+   * or in the encoding that a byte order mark names. A {@code "flagValues"} entry is expanded into a
+   * full flag definition that is on and serves the given value as its single variation by fallthrough
+   * for every context. Such a flag is not available to client-side SDKs, so
    * {@link com.launchdarkly.sdk.server.LDClient#allFlagsState} with
    * {@link com.launchdarkly.sdk.server.FlagsStateOption#CLIENT_SIDE_ONLY} leaves it out, even when
    * the flag it overrides is available to them. To override such a flag, define it in
@@ -88,11 +95,16 @@ public abstract class FileOverrides {
    * the duplicate keys handling decides which file wins for a key that appears more than once.
    * <p>
    * A reload replaces the entire override set, so removing an entry from the files removes the
-   * override. A configured file that does not exist contributes no overrides. Deleting a file
-   * therefore removes its overrides, and deleting every file removes them all. A file that exists
-   * but cannot be read or parsed makes that whole reload fail: the previously loaded overrides
-   * stay in effect, the source logs the failure, retries after a short delay, and recovers on its
-   * own once the file is readable again.
+   * override. A configured file that does not exist contributes no overrides, so deleting every file
+   * removes them all. A file that exists but cannot be read or parsed makes the reload fail: the
+   * overrides in effect stay, the source logs the failure, and it recovers on its own once the file
+   * can be read again.
+   * <p>
+   * Files can be rewritten in place: if the source finds a file empty while it is being rewritten, it
+   * keeps the overrides in effect until the new content is written. To remove a file's overrides,
+   * delete the file or write a document with no entries, such as <code>{}</code>. An empty JSON file
+   * is not a valid document. For a YAML file, replacing its contents in one operation, such as by
+   * renaming a fully written temporary file over it, avoids briefly applying a partly written file.
    * <p>
    * Whenever the set of overrides in effect changes, including at startup, the source logs the
    * overrides in effect and what each configured file supplied, at Info level.
