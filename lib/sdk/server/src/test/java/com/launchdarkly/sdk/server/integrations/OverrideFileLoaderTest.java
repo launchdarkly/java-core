@@ -936,10 +936,10 @@ public class OverrideFileLoaderTest {
   }
 
   @Test
-  public void fileFoundMissingDuringAFailureGetsAFreshBound() throws Exception {
-    // a.yaml is held back, then deleted while b.json fails to load. A load that finds it missing and
-    // holds nothing back starts its bound over, so when it comes back empty much later, while b.json
-    // is fixed, it is held back again.
+  public void fileFoundMissingStartsANewDelayWhenItIsCreatedEmptyAgain() throws Exception {
+    // While b.json fails, a.yaml is emptied, deleted, and created empty again with the state it had
+    // when it was first found empty, as within one tick of a coarse clock. Being missing ended its
+    // empty state, so it is held back with a new delay.
     try (TempDir dir = TempDir.create()) {
       Path a = write(dir, "a.yaml", YAML_DOC);
       String other = "{\"flagValues\":{\"other\":\"value\"}}";
@@ -948,26 +948,148 @@ public class OverrideFileLoaderTest {
       OverrideFileLoader loader = loader(clock, a, b);
       loadAndAccept(loader);
 
-      InPlaceWrites.truncate(a);
-      long emptiedAt = Files.getLastModifiedTime(a).toMillis();
-      assertHeld(loader, a);
-      Files.delete(a);
       InPlaceWrites.rewrite(b, "{bad", () -> { });
+      InPlaceWrites.truncate(a);
+      java.nio.file.attribute.FileTime emptiedAt = Files.getLastModifiedTime(a);
       assertLoadFailsFor(loader, b);
-      clock.advance(6);
+      clock.advance(0.5);
+      Files.delete(a);
+      assertLoadFailsFor(loader, b);
+      clock.advance(0.67);
+      Files.write(a, new byte[0]);
+      Files.setLastModifiedTime(a, emptiedAt);
+      assertLoadFailsFor(loader, b);
 
       InPlaceWrites.rewrite(b, other, () -> { });
-      // File system timestamps are coarse; the file must not look as it did when it was found empty.
-      do {
-        Thread.sleep(20);
-        Files.write(a, new byte[0]);
-      } while (Files.getLastModifiedTime(a).toMillis() == emptiedAt);
       assertHeld(loader, a);
     }
   }
 
   @Test
-  public void fileThatAFailingLoadDidNotReadKeepsItsBound() throws Exception {
+  public void fixOfAFileSavedInPlaceWithAnErrorIsHeldBack() throws Exception {
+    // An operator saves the file in place with a mistake, and saves the fix in place long after. The
+    // loads in between fail on the file, and the fix's own gap is held back.
+    for (String name : new String[] { "data.yaml", "data.json" }) {
+      try (TempDir dir = TempDir.create()) {
+        boolean yaml = name.endsWith(".yaml");
+        Path file = write(dir, name, yaml ? YAML_DOC : JSON_DOC);
+        TestClock clock = new TestClock();
+        OverrideFileLoader loader = loader(clock, file);
+        loadAndAccept(loader);
+
+        InPlaceWrites.truncate(file);
+        assertHeld(loader, file);
+        InPlaceWrites.rewrite(file, yaml ? "flagValues: [\n" : "{\"flagValues\": ", () -> { });
+        assertLoadFailsFor(loader, file);
+        for (int i = 0; i < 6; i++) {
+          clock.advance(1);
+          assertLoadFailsFor(loader, file);
+        }
+
+        InPlaceWrites.truncate(file);
+        assertHeld(loader, file);
+        InPlaceWrites.rewrite(file, yaml ? "flagValues:\n  flag: \"fixed\"\n" : "{\"flagValues\":{\"flag\":\"fixed\"}}",
+            () -> { });
+        assertEquals(name, 1, loader.load(RETRY).getFlagCount());
+      }
+    }
+  }
+
+  @Test
+  public void fileThatFailedToParseStartsANewDelayWhenItIsEmptiedAgain() throws Exception {
+    // Content that fails to parse also ends the file's empty state, so an emptying after it starts a
+    // new delay, even when a coarse clock gives it the state of the earlier emptying.
+    try (TempDir dir = TempDir.create()) {
+      Path file = write(dir, "overrides.yaml", YAML_DOC);
+      TestClock clock = new TestClock();
+      OverrideFileLoader loader = loader(clock, file);
+      loadAndAccept(loader);
+
+      InPlaceWrites.truncate(file);
+      java.nio.file.attribute.FileTime emptiedAt = Files.getLastModifiedTime(file);
+      assertHeld(loader, file);
+      clock.advance(0.5);
+      InPlaceWrites.rewrite(file, "flagValues: [\n", () -> { });
+      assertLoadFailsFor(loader, file);
+      clock.advance(0.7);
+      InPlaceWrites.truncate(file);
+      Files.setLastModifiedTime(file, emptiedAt);
+      assertHeld(loader, file);
+    }
+  }
+
+  @Test
+  public void fileThatFailsToReadStartsItsBoundOver() throws Exception {
+    // A load that fails because a file cannot be read holds nothing back, so it starts that file's
+    // bound over too.
+    try (TempDir dir = TempDir.create()) {
+      Path file = write(dir, "overrides.yaml", YAML_DOC);
+      TestClock clock = new TestClock();
+      AtomicLong unreadable = new AtomicLong();
+      OverrideFileLoader loader = new OverrideFileLoader(Collections.singletonList(file),
+          FileData.DuplicateKeysHandling.FAIL, clock.nanos::get, path -> {
+            if (unreadable.get() != 0) {
+              throw new java.io.IOException("permission denied");
+            }
+            return Files.readAllBytes(path);
+          });
+      loadAndAccept(loader);
+
+      InPlaceWrites.truncate(file);
+      assertHeld(loader, file);
+      unreadable.set(1);
+      for (int i = 0; i < 6; i++) {
+        clock.advance(1);
+        assertLoadFailsFor(loader, file);
+      }
+      unreadable.set(0);
+      writeAgain(file, " ");
+      assertHeld(loader, file);
+    }
+  }
+
+  // Loads the files and applies the result, as the reloader does, or reports that the load held a
+  // file back or failed.
+  private static boolean loadAppliesOrFails(OverrideFileLoader loader) throws Exception {
+    try {
+      loader.accepted(loader.load(RETRY));
+      return true;
+    } catch (EmptiedFileException | FileDataException e) {
+      return false;
+    }
+  }
+
+  @Test
+  public void loadThatHoldsAFileBackAndThenFailsDoesNotStartBoundsOver() throws Exception {
+    // a.yaml and b.yaml are rewritten in turn, so that every load holds one of them back, and c.json
+    // fails at every other load. Those loads hold a file back, so they start no bound over.
+    try (TempDir dir = TempDir.create()) {
+      Path a = write(dir, "a.yaml", YAML_DOC);
+      String bDoc = "flagValues:\n  other: \"value\"\n";
+      Path b = write(dir, "b.yaml", bDoc);
+      String cGood = "{\"flagValues\":{\"third\":\"value\"}}";
+      Path c = write(dir, "c.json", cGood);
+      TestClock clock = new TestClock();
+      OverrideFileLoader loader = loader(clock, a, b, c);
+      loadAndAccept(loader);
+
+      InPlaceWrites.truncate(a);
+      assertHeld(loader, a);
+      boolean applied = false;
+      for (int i = 1; i <= 12 && !applied; i++) {
+        clock.advance(0.5);
+        boolean odd = i % 2 == 1;
+        InPlaceWrites.rewrite(odd ? a : b, odd ? YAML_DOC : bDoc, () -> { });
+        InPlaceWrites.truncate(odd ? b : a);
+        InPlaceWrites.rewrite(c, odd ? "{bad" : cGood, () -> { });
+        applied = loadAppliesOrFails(loader);
+      }
+      assertTrue("the files were held back without end", applied);
+    }
+  }
+
+  @Test
+  public void fileThatAFailingLoadDidNotReachKeepsItsBound() throws Exception {
     // c.json comes first and fails now and then, so those loads never read a.yaml, which keeps being
     // written while empty. They do not start a.yaml's bound over.
     try (TempDir dir = TempDir.create()) {

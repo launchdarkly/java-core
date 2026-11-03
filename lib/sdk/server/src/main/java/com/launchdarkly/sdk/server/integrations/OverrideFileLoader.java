@@ -182,12 +182,12 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
    */
   private static final class EmptyFile {
     // Since when the file has been empty without being written, or null after a load read it with
-    // content.
+    // content, even content that fails to parse, or found it missing.
     Long sinceNanos;
     // The state of the file then: its modification time and size, read through any symbolic link. It
     // is only compared for equality.
     FileDataPoller.FileState state;
-    // When a load first held the file back, or null if no load has since the last load that read the
+    // When a load first held the file back, or null if no load has since the last load that got to the
     // file and held nothing back. Loads that hold another file back keep it, so that a file that keeps
     // being rewritten stays bounded.
     Long firstHeldNanos;
@@ -250,9 +250,9 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
     Map<DataKind, Map<String, ItemDescriptor>> data = new HashMap<>();
     List<FileSummary> files = new ArrayList<>(paths.size());
     List<Path> heldBack = new ArrayList<>();
-    // The files that this load read and did not hold back: read with content, parsed empty, or
-    // found missing.
-    List<Path> read = new ArrayList<>();
+    // The files that this load got to and did not hold back: read with content, parsed empty, found
+    // missing, or failing to read or parse.
+    List<Path> reached = new ArrayList<>();
     try {
       for (Path path : paths) {
         byte[] raw;
@@ -260,10 +260,11 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
           raw = reader.read(path);
         } catch (NoSuchFileException e) {
           // Absence is a valid state, not a failure.
-          read.add(path);
+          noteNotEmpty(path, reached);
           files.add(new FileSummary(path, false, false, 0, 0));
           continue;
         } catch (IOException e) {
+          reached.add(path);
           throw new FileDataException("file " + path + ": unable to read file", e);
         }
         // Content that the parser reads as no document, such as YAML with only a comment, has no
@@ -272,22 +273,25 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
         FlagFileRep document = null;
         boolean hasContent = hasContent(raw);
         if (hasContent) {
-          document = parse(path, raw);
+          try {
+            document = parse(path, raw);
+          } catch (FileDataException e) {
+            noteNotEmpty(path, reached);
+            throw e;
+          }
           hasContent = document != FlagFileRep.NO_DOCUMENT;
         }
         if (hasContent) {
-          EmptyFile empty = emptyFiles.get(path);
-          if (empty != null) {
-            empty.sinceNanos = null;
-          }
+          noteNotEmpty(path, reached);
         } else if (shouldHoldBack(path, retryDelay, nanoClock.getAsLong())) {
           // The clock is read after this file's own read, so a slow read of another file does not
           // shorten its delay. The other files are still read, so that each emptied file starts its
           // delay in this load, and a failure of another file still fails the load.
           heldBack.add(path);
           continue;
+        } else {
+          reached.add(path);
         }
-        read.add(path);
         // One read feeds both the digest and the parse, so the skip-unchanged digest can never disagree
         // with the content that was applied.
         if (digest != null) {
@@ -316,15 +320,27 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
     } finally {
       if (heldBack.isEmpty()) {
         // A load that holds nothing back, whether it is applied, skipped as unchanged, or fails,
-        // starts the bound over for every file that it read: such a file is no longer held, so its
-        // next rewrite is a new one. A file that the load did not get to keeps its bound.
-        for (Path path : read) {
+        // starts the bound over for every file that it got to, including the one that failed: such a
+        // file is no longer held, so its next rewrite is a new one. A file after a failing one, which
+        // the load did not get to, keeps its bound.
+        for (Path path : reached) {
           EmptyFile empty = emptyFiles.get(path);
           if (empty != null) {
             empty.firstHeldNanos = null;
           }
         }
       }
+    }
+  }
+
+  // For a file that a load read with content, including content that fails to parse, or found
+  // missing: if it was empty before, its empty state has ended, so its next emptying starts a new delay
+  // even where a coarse modification time makes it look the same.
+  private void noteNotEmpty(Path path, List<Path> reached) {
+    reached.add(path);
+    EmptyFile empty = emptyFiles.get(path);
+    if (empty != null) {
+      empty.sinceNanos = null;
     }
   }
 
@@ -400,8 +416,8 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
   // over. A file that keeps being written while loads find it empty would be held back without end, so
   // each file is held back for at most MAX_HOLD_RETRY_DELAYS retry delays from the first load that held
   // it back. The bound is the file's own, so one file reaching it does not cut short another file's
-  // rewrite. It starts over only at a load that holds nothing back, for every file that load read,
-  // whatever the load's outcome. Loads that hold another file back keep it, which bounds files
+  // rewrite. It starts over only at a load that holds nothing back, for every file that load got to,
+  // including one that fails to read or parse, whatever the load's outcome. Loads that hold another file back keep it, which bounds files
   // rewritten in turn or emptied in staggered turns, and a file that was read during a long failure
   // of another file has a fresh bound when that failure ends. A file whose content is not in effect,
   // such as a placeholder that has always been empty, or a file whose empty state was applied, is
