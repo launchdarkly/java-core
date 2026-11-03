@@ -2,6 +2,14 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.17.5](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.4...launchdarkly-java-server-sdk-7.17.5) (2026-11-03)
+
+
+### Bug Fixes
+
+* Bump embedded Guava to 33.8.0-jre to address CVE-2026-102554 ([#246](https://github.com/launchdarkly/java-core/issues/246)) ([0d66cfb](https://github.com/launchdarkly/java-core/commit/0d66cfb885957a7aa91d58dbc8a5081fcb94b6db))
+* Deliver the terminal OFF data source status when the client is closed ([#247](https://github.com/launchdarkly/java-core/issues/247)) ([f444bee](https://github.com/launchdarkly/java-core/commit/f444bee54b7c72b74e61b8254a5405e19399f427))
+
 ## [7.17.4](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.3...launchdarkly-java-server-sdk-7.17.4) (2026-11-02)
 
 
