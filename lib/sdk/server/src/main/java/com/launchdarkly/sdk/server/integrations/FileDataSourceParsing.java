@@ -2,6 +2,7 @@ package com.launchdarkly.sdk.server.integrations;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonIOException;
 import com.google.gson.JsonSyntaxException;
 import com.launchdarkly.sdk.LDValue;
 import com.launchdarkly.sdk.ObjectBuilder;
@@ -11,6 +12,7 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.reader.UnicodeReader;
 import org.yaml.snakeyaml.representer.Representer;
 
 import java.io.ByteArrayInputStream;
@@ -116,6 +118,26 @@ abstract class FileDataSourceParsing {
           ? YamlParserHolder.getInstance() : JsonParserHolder.getInstance();
     }
 
+    /**
+     * Parses the content of a file with the parser that {@link #selectForPath(Path)} chooses. The
+     * text encoding is detected from a byte order mark, UTF-8, UTF-16 or UTF-32, and is UTF-8
+     * otherwise, for both formats; the YAML parser does that itself. The override source uses this.
+     * The file data source keeps reading JSON in the platform's default encoding.
+     *
+     * @param path the file
+     * @param data its content
+     * @return the parsed content
+     * @throws FileDataException if the content cannot be decoded or parsed
+     * @throws IOException if the content cannot be read
+     */
+    static FlagFileRep parseForPath(Path path, byte[] data) throws FileDataException, IOException {
+      FlagFileParser parser = selectForPath(path);
+      if (parser instanceof JsonFlagFileParser) {
+        return ((JsonFlagFileParser) parser).parse(new UnicodeReader(new ByteArrayInputStream(data)));
+      }
+      return parser.parse(new ByteArrayInputStream(data));
+    }
+
     private static boolean detectJson(Reader r) {
       // A valid JSON file for our purposes must be an object, i.e. it must start with '{'
       while (true) {
@@ -143,11 +165,26 @@ abstract class FileDataSourceParsing {
   
     @Override
     public FlagFileRep parse(InputStream input) throws FileDataException, IOException {
+      return parse(new InputStreamReader(input));
+    }
+
+    /**
+     * Parses JSON from text that is already decoded.
+     *
+     * @param reader the text
+     * @return the parsed content
+     * @throws FileDataException if the text is not a JSON object, or cannot be decoded
+     * @throws IOException if the text cannot be read
+     */
+    FlagFileRep parse(Reader reader) throws FileDataException, IOException {
       JsonElement tree;
       try {
-        tree = gson.fromJson(new InputStreamReader(input), JsonElement.class);
+        tree = gson.fromJson(reader, JsonElement.class);
       } catch (JsonSyntaxException e) {
         throw new FileDataException("cannot parse JSON", e);
+      } catch (JsonIOException e) {
+        // For example, bytes that are not valid in the detected encoding.
+        throw new FileDataException("cannot read JSON", e);
       }
       if (tree == null) {
         // Gson finds no value in a file that is empty or white space only, or, since it reads
@@ -156,6 +193,10 @@ abstract class FileDataSourceParsing {
         // until it is complete. The file data source never gets here: it parses a file as JSON only
         // when the file starts with '{'.
         throw new FileDataException("the file has no content, which is not a JSON document", null);
+      }
+      if (!tree.isJsonObject()) {
+        // A document such as null or [] holds no flags. The file data source never gets here either.
+        throw new FileDataException("the JSON document is not an object", null);
       }
       return parseJson(tree);
     }

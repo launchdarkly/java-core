@@ -43,6 +43,8 @@ public final class FileOverrideSourceBuilder implements ComponentConfigurer<Over
    * <p>
    * A file whose name ends in {@code .yaml} or {@code .yml}, in any case, is parsed as YAML, and any
    * other file is parsed as JSON.
+   * <p>
+   * Flag overrides are currently experimental and subject to change.
    *
    * @param filePaths path(s) to the file(s); may be absolute or relative to the current working directory
    * @return the same builder
@@ -59,6 +61,11 @@ public final class FileOverrideSourceBuilder implements ComponentConfigurer<Over
    * Adds any number of files to load overrides from, specifying each file path as a Path. The
    * order is significant: it determines which file wins under the duplicate keys handling when the
    * same key appears in more than one file.
+   * <p>
+   * A file whose name ends in {@code .yaml} or {@code .yml}, in any case, is parsed as YAML, and any
+   * other file is parsed as JSON.
+   * <p>
+   * Flag overrides are currently experimental and subject to change.
    *
    * @param filePaths path(s) to the file(s); may be absolute or relative to the current working directory
    * @return the same builder
@@ -77,6 +84,8 @@ public final class FileOverrideSourceBuilder implements ComponentConfigurer<Over
    * segment key appears in more than one file, and the previously loaded overrides stay in effect.
    * With {@link FileData.DuplicateKeysHandling#IGNORE}, the entry from the first configured file that
    * defines the key is kept and the others are discarded. A null value selects the default.
+   * <p>
+   * Flag overrides are currently experimental and subject to change.
    *
    * @param duplicateKeysHandling specifies how to handle duplicate keys
    * @return the same builder
@@ -92,6 +101,8 @@ public final class FileOverrideSourceBuilder implements ComponentConfigurer<Over
    * The two modes are alternatives, so setting one replaces the other. {@link ChangeDetection#WATCHING}
    * requires every file path to be on the default file system; a path of another file system provider,
    * such as a zip file system, can be polled but not watched, and {@link #build(ClientContext)} rejects it.
+   * <p>
+   * Flag overrides are currently experimental and subject to change.
    *
    * @param changeDetection the change detection mode
    * @return the same builder
@@ -106,6 +117,8 @@ public final class FileOverrideSourceBuilder implements ComponentConfigurer<Over
    * {@link ChangeDetection#WATCHING} mode ignores it. The default is
    * {@link FileOverrides#DEFAULT_POLL_INTERVAL}. An interval below
    * {@link FileOverrides#MINIMUM_POLL_INTERVAL} is raised to the minimum.
+   * <p>
+   * Flag overrides are currently experimental and subject to change.
    *
    * @param pollInterval the polling interval
    * @return the same builder
@@ -117,6 +130,8 @@ public final class FileOverrideSourceBuilder implements ComponentConfigurer<Over
 
   /**
    * Called internally by the SDK to create the override source.
+   * <p>
+   * Flag overrides are currently experimental and subject to change.
    *
    * @param context the client context
    * @return the override source

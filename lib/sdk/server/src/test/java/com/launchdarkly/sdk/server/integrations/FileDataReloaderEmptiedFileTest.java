@@ -76,7 +76,8 @@ public class FileDataReloaderEmptiedFileTest {
         }
         for (Map.Entry<String, ItemDescriptor> item : kind.getValue().getItems()) {
           if (item.getKey().equals("flag")) {
-            value = LDValue.parse(FEATURES.serialize(item.getValue())).get("variations").get(0).stringValue();
+            LDValue v = LDValue.parse(FEATURES.serialize(item.getValue())).get("variations").get(0);
+            value = v.isString() ? v.stringValue() : v.toJsonString();
           }
         }
       }
@@ -332,6 +333,22 @@ public class FileDataReloaderEmptiedFileTest {
   }
 
   @Test
+  public void sameBytesMovedToAFileOfAnotherFormatAreApplied() throws Exception {
+    // The format depends on the path, so the load after the move is not skipped as unchanged: YAML
+    // reads on as true, and JSON reads it as a string.
+    try (TempDir dir = TempDir.create()) {
+      Path yaml = write(dir, "overrides.yaml", "{\"flagValues\": {\"flag\": on}}");
+      Path json = dir.getPath().resolve("overrides.json");
+      Recorder recorder = new Recorder();
+      FileDataReloader r = reloader(new CountingLoader(yaml, json), recorder, HOUR);
+      r.reloadNow();
+      Files.move(yaml, json);
+      r.reloadNow();
+      assertEquals(Arrays.asList("true", "on"), recorder.applied);
+    }
+  }
+
+  @Test
   public void changesToOtherFilesWaitWhileAFileIsHeld() throws Exception {
     // A reload applies all the files or none.
     try (TempDir dir = TempDir.create()) {
@@ -546,9 +563,10 @@ public class FileDataReloaderEmptiedFileTest {
 
   @Test
   public void fileMovedToAnotherConfiguredPathIsDeferredWhenItIsRewritten() throws Exception {
-    // Moving a file from one configured path to another leaves the same content in effect, so the
-    // load is skipped as unchanged. It must still record that the content now comes from the new
-    // path, or an in-place rewrite of that path would be applied while it is empty.
+    // Moving a file from one configured path to another leaves the same flags in effect. The load
+    // after the move records that the content now comes from the new path, or an in-place rewrite
+    // of that path would be applied while it is empty. The skip-unchanged digest covers the paths,
+    // so that load is applied rather than skipped.
     try (TempDir dir = TempDir.create()) {
       Path a = write(dir, "a.yaml", yaml("a"));
       Path b = dir.getPath().resolve("b.yaml");
@@ -559,17 +577,17 @@ public class FileDataReloaderEmptiedFileTest {
 
       Files.move(a, b);
       r.trigger();
-      loader.awaitFinished(2);
-      assertEquals(Collections.singletonList("a"), recorder.applied);
+      awaitSize(recorder.applied, 2);
+      assertEquals(Arrays.asList("a", "a"), recorder.applied);
 
       InPlaceWrites.rewrite(b, yaml("b"), () -> {
         r.trigger();
         loader.awaitFinished(3);
       });
       r.trigger();
-      awaitSize(recorder.applied, 2);
+      awaitSize(recorder.applied, 3);
 
-      assertEquals(Arrays.asList("a", "b"), recorder.applied);
+      assertEquals(Arrays.asList("a", "a", "b"), recorder.applied);
       assertThat(logCapture.getMessageStrings(), hasItem(readAgainLog(b)));
     }
   }

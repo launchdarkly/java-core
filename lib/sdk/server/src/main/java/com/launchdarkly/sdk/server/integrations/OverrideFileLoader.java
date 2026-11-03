@@ -11,8 +11,11 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 
+import org.yaml.snakeyaml.reader.UnicodeReader;
+
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
@@ -102,7 +105,8 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
     }
 
     /**
-     * False when the file does not exist, or is empty or white space only.
+     * False when the file does not exist, is empty, holds only white space or a byte order mark, or
+     * holds content that its parser reads as no document, such as YAML with only a comment.
      */
     boolean hasContent() {
       return hasContent;
@@ -247,12 +251,16 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
   @Override
   public LoadResult load(Duration retryDelay) throws FileDataException, EmptiedFileException {
     MessageDigest digest = newDigest();
-    Map<DataKind, Map<String, ItemDescriptor>> data = new HashMap<>();
-    List<FileSummary> files = new ArrayList<>(paths.size());
     List<Path> heldBack = new ArrayList<>();
     // The files that this load got to and did not hold back: read with content, parsed empty, found
-    // missing, or failing to read or parse.
+    // missing, or failing to read or parse. A load reads every configured file, also after a failure,
+    // so every file that is not held back is here.
     List<Path> reached = new ArrayList<>();
+    // The parsed documents of the files that are not held back, in configuration order.
+    List<ReadFile> documents = new ArrayList<>(paths.size());
+    // The first failure to read or parse a file. The other files are still read, so that each file
+    // is classified, and the load fails with this one after them.
+    FileDataException failure = null;
     try {
       for (Path path : paths) {
         byte[] raw;
@@ -261,11 +269,13 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
         } catch (NoSuchFileException e) {
           // Absence is a valid state, not a failure.
           noteNotEmpty(path, reached);
-          files.add(new FileSummary(path, false, false, 0, 0));
+          updateDigest(digest, path, null);
+          documents.add(new ReadFile(path, null, false));
           continue;
         } catch (IOException e) {
           reached.add(path);
-          throw new FileDataException("file " + path + ": unable to read file", e);
+          failure = first(failure, new FileDataException("file " + path + ": unable to read file", e));
+          continue;
         }
         // Content that the parser reads as no document, such as YAML with only a comment, has no
         // entries, and a read can see that much of a file that is being written. Content with only
@@ -277,7 +287,8 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
             document = parse(path, raw);
           } catch (FileDataException e) {
             noteNotEmpty(path, reached);
-            throw e;
+            failure = first(failure, e);
+            continue;
           }
           hasContent = document != FlagFileRep.NO_DOCUMENT;
         }
@@ -294,21 +305,38 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
         }
         // One read feeds both the digest and the parse, so the skip-unchanged digest can never disagree
         // with the content that was applied.
-        if (digest != null) {
-          digest.update(raw);
-          digest.update((byte) 0);
-        }
+        updateDigest(digest, path, raw);
         if (document == null) {
-          document = parse(path, raw);
+          try {
+            document = parse(path, raw);
+          } catch (FileDataException e) {
+            failure = first(failure, e);
+            continue;
+          }
         }
-        int[] added = addEntries(data, path, document);
-        files.add(new FileSummary(path, true, hasContent, added[0], added[1]));
+        documents.add(new ReadFile(path, document, hasContent));
       }
 
+      // A failure fails the load before a hold, and a hold comes before the merge.
+      if (failure != null) {
+        throw failure;
+      }
       if (!heldBack.isEmpty()) {
         throw new EmptiedFileException(heldBack, holdBack(heldBack, retryDelay, nanoClock.getAsLong()));
       }
 
+      // The entries are merged only after every file is read, so that a duplicate key or an entry
+      // that the data model rejects cannot keep a later file from being read.
+      Map<DataKind, Map<String, ItemDescriptor>> data = new HashMap<>();
+      List<FileSummary> files = new ArrayList<>(documents.size());
+      for (ReadFile file : documents) {
+        if (file.document == null) {
+          files.add(new FileSummary(file.path, false, false, 0, 0));
+          continue;
+        }
+        int[] added = addEntries(data, file.path, file.document);
+        files.add(new FileSummary(file.path, true, file.hasContent, added[0], added[1]));
+      }
       ImmutableList.Builder<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> all = ImmutableList.builder();
       for (Map.Entry<DataKind, Map<String, ItemDescriptor>> e : data.entrySet()) {
         all.add(new AbstractMap.SimpleEntry<>(e.getKey(), new KeyedItems<>(ImmutableList.copyOf(e.getValue().entrySet()))));
@@ -320,9 +348,8 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
     } finally {
       if (heldBack.isEmpty()) {
         // A load that holds nothing back, whether it is applied, skipped as unchanged, or fails,
-        // starts the bound over for every file that it got to, including the one that failed: such a
-        // file is no longer held, so its next rewrite is a new one. A file after a failing one, which
-        // the load did not get to, keeps its bound.
+        // starts the bound over for every file that it got to, including one that failed: such a
+        // file is no longer held, so its next rewrite is a new one.
         for (Path path : reached) {
           EmptyFile empty = emptyFiles.get(path);
           if (empty != null) {
@@ -330,6 +357,41 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
           }
         }
       }
+    }
+  }
+
+  /**
+   * A file that a load read and did not hold back.
+   */
+  private static final class ReadFile {
+    final Path path;
+    // The parsed content, or null if the file does not exist.
+    final FlagFileRep document;
+    final boolean hasContent;
+
+    ReadFile(Path path, FlagFileRep document, boolean hasContent) {
+      this.path = path;
+      this.document = document;
+      this.hasContent = hasContent;
+    }
+  }
+
+  private static FileDataException first(FileDataException earlier, FileDataException e) {
+    return earlier != null ? earlier : e;
+  }
+
+  // Adds a file to the skip-unchanged digest: its path, whether it exists, and its content. The format
+  // depends on the path, so the same bytes at another path can be different data.
+  private static void updateDigest(MessageDigest digest, Path path, byte[] raw) {
+    if (digest == null) {
+      return;
+    }
+    digest.update(path.toString().getBytes(StandardCharsets.UTF_8));
+    digest.update((byte) 0);
+    digest.update((byte) (raw == null ? 0 : 1));
+    if (raw != null) {
+      digest.update(raw);
+      digest.update((byte) 0);
     }
   }
 
@@ -346,7 +408,7 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
 
   private static FlagFileRep parse(Path path, byte[] raw) throws FileDataException {
     try {
-      return FlagFileParser.selectForPath(path).parse(new ByteArrayInputStream(raw));
+      return FlagFileParser.parseForPath(path, raw);
     } catch (FileDataException e) {
       throw new FileDataException("file " + path + ": " + e.getMessage(), e.getCause());
     } catch (IOException e) {
@@ -466,16 +528,20 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
     return Math.max(remaining, 0) + delay / 10;
   }
 
-  // A file with only white space, or a byte order mark, has no content.
+  // A file with only white space, after a byte order mark if it has one, has no content. The text is
+  // decoded as the parsers decode it. Content that cannot be decoded is left to the parser to report.
   private static boolean hasContent(byte[] raw) {
-    String text = new String(raw, StandardCharsets.UTF_8);
-    for (int i = 0; i < text.length(); i++) {
-      char c = text.charAt(i);
-      if (!Character.isWhitespace(c) && c != '\uFEFF') {
-        return true;
+    try (Reader text = new UnicodeReader(new ByteArrayInputStream(raw))) {
+      int c;
+      while ((c = text.read()) >= 0) {
+        if (!Character.isWhitespace(c)) {
+          return true;
+        }
       }
+      return false;
+    } catch (IOException e) {
+      return true;
     }
-    return false;
   }
 
   // Adds an entry unless the key was already added. Reports whether it added the entry.

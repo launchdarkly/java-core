@@ -13,6 +13,7 @@ import com.launchdarkly.testhelpers.TempDir;
 
 import org.junit.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -368,8 +369,18 @@ public class OverrideFileLoaderTest {
       for (String name : new String[] { "a.yaml", "a.yml", "a.YAML", "a.Yml" }) {
         assertEquals(name, 1, loader(write(dir, name, YAML_DOC)).load(Duration.ZERO).getFlagCount());
       }
-      // JSON is valid YAML, so a YAML file can hold a JSON document.
+      // A YAML file can hold most JSON documents. The YAML parser reads YAML 1.1, which rejects some
+      // JSON, such as indentation with tabs or the escape \/.
       assertEquals(1, loader(write(dir, "json.yaml", JSON_DOC)).load(Duration.ZERO).getFlagCount());
+      for (String json : new String[] { "{\n\t\"flagValues\": {\"flag\": \"v\"}\n}", "{\"flagValues\":{\"flag\":\"a\\/b\"}}" }) {
+        Path file = write(dir, "strict.yaml", json);
+        try {
+          loader(file).load(Duration.ZERO);
+          fail("expected the YAML parser to reject " + json);
+        } catch (FileDataException e) {
+          assertThat(e.getMessage(), containsString(file + ": unable to parse YAML"));
+        }
+      }
       // Any other file is JSON, whatever its content.
       for (String name : new String[] { "b.json", "b.txt", "b", "b.yaml.bak" }) {
         Path file = write(dir, name, YAML_DOC);
@@ -801,7 +812,7 @@ public class OverrideFileLoaderTest {
   }
 
   @Test
-  public void fileThatStayedEmptyForTheDelayGetsAFreshBound() throws Exception {
+  public void jsonFileThatStaysEmptyIsHeldBackAgainWhenRewrittenLater() throws Exception {
     // A JSON file that stays empty is parsed after the delay and fails. That load holds nothing back,
     // so the file's bound starts over, and when it is later rewritten in place, the new truncation is
     // held back again instead of reported.
@@ -1048,6 +1059,206 @@ public class OverrideFileLoaderTest {
     }
   }
 
+  @Test
+  public void boundOfAFileAfterAFailingFileStartsOverOnceItIsReadAgain() throws Exception {
+    // c.json comes first. While it fails, a.yaml, which was held back, gets its content; the failing
+    // loads still read a.yaml, so its bound starts over, and the in-place rewrite of a.yaml that comes
+    // with the fix of c.json is held back.
+    try (TempDir dir = TempDir.create()) {
+      String other = "{\"flagValues\":{\"other\":\"value\"}}";
+      Path c = write(dir, "c.json", other);
+      Path a = write(dir, "a.yaml", YAML_DOC);
+      TestClock clock = new TestClock();
+      OverrideFileLoader loader = loader(clock, c, a);
+      loadAndAccept(loader);
+
+      InPlaceWrites.truncate(a);
+      assertHeld(loader, a);
+      InPlaceWrites.rewrite(c, "{bad", () -> { });
+      InPlaceWrites.rewrite(a, YAML_DOC, () -> { });
+      for (int i = 0; i < 6; i++) {
+        assertLoadFailsFor(loader, c);
+        clock.advance(1);
+      }
+      InPlaceWrites.rewrite(c, other, () -> { });
+      InPlaceWrites.truncate(a);
+      assertHeld(loader, a);
+    }
+  }
+
+  @Test
+  public void failingLoadReportsTheFirstFailure() throws Exception {
+    try (TempDir dir = TempDir.create()) {
+      Path first = write(dir, "first.json", "{bad");
+      Path second = write(dir, "second.yaml", "flagValues: [\n");
+      try {
+        loader(first, second).load(RETRY);
+        fail("expected exception");
+      } catch (FileDataException e) {
+        assertThat(e.getMessage(), containsString(first + ": cannot parse JSON"));
+      }
+    }
+  }
+
+  @Test
+  public void fileAfterADuplicateKeyIsReadSoItsBoundStartsOver() throws Exception {
+    // The entries are merged only after every file is read, so a duplicate key between a.yaml and
+    // b.yaml does not keep the loads from reading c.yaml, whose bound starts over while they fail.
+    try (TempDir dir = TempDir.create()) {
+      Path a = write(dir, "a.yaml", "flagValues:\n  k: \"a\"\n");
+      String bDoc = "flagValues:\n  j: \"b\"\n";
+      Path b = write(dir, "b.yaml", bDoc);
+      Path c = write(dir, "c.yaml", YAML_DOC);
+      TestClock clock = new TestClock();
+      OverrideFileLoader loader = loader(clock, a, b, c);
+      loadAndAccept(loader);
+
+      InPlaceWrites.truncate(c);
+      assertHeld(loader, c);
+      InPlaceWrites.rewrite(b, "flagValues:\n  j: \"b\"\n  k: \"dup\"\n", () -> { });
+      InPlaceWrites.rewrite(c, YAML_DOC, () -> { });
+      for (int i = 0; i < 8; i++) {
+        clock.advance(1);
+        try {
+          loader.load(RETRY);
+          fail("expected exception");
+        } catch (FileDataException e) {
+          assertThat(e.getMessage(), containsString("key \"k\" was already defined"));
+        }
+      }
+      InPlaceWrites.rewrite(b, bDoc, () -> { });
+      truncateAgain(c);
+      assertHeld(loader, c);
+    }
+  }
+
+  @Test
+  public void fixOfAFileSavedInPlaceWithADuplicateKeyIsHeldBack() throws Exception {
+    // As with a parse error: b.yaml is saved in place with a key that a.yaml defines, then the fix is
+    // saved in place several retry delays later. The fix's gap is held back.
+    try (TempDir dir = TempDir.create()) {
+      Path a = write(dir, "a.yaml", "flagValues:\n  k: \"a\"\n");
+      Path b = write(dir, "b.yaml", "flagValues:\n  j: \"b\"\n");
+      TestClock clock = new TestClock();
+      OverrideFileLoader loader = loader(clock, a, b);
+      loadAndAccept(loader);
+
+      InPlaceWrites.truncate(b);
+      assertHeld(loader, b);
+      InPlaceWrites.rewrite(b, "flagValues:\n  j: \"b\"\n  k: \"dup\"\n", () -> { });
+      for (int i = 0; i < 7; i++) {
+        try {
+          loader.load(RETRY);
+          fail("expected exception");
+        } catch (FileDataException e) {
+          assertThat(e.getMessage(), containsString("key \"k\" was already defined"));
+        }
+        clock.advance(1);
+      }
+      InPlaceWrites.truncate(b);
+      assertHeld(loader, b);
+    }
+  }
+
+  @Test
+  public void slowReadOfTheEmptiedFileItselfDoesNotShortenItsDelay() throws Exception {
+    // The emptied file's own read stalls for most of a retry delay, as on a network file system. Its
+    // delay counts from after its read.
+    try (TempDir dir = TempDir.create()) {
+      Path a = write(dir, "a.yaml", YAML_DOC);
+      TestClock clock = new TestClock();
+      AtomicLong slowRead = new AtomicLong();
+      OverrideFileLoader loader = new OverrideFileLoader(Collections.singletonList(a),
+          FileData.DuplicateKeysHandling.FAIL, clock.nanos::get, path -> {
+            byte[] raw = Files.readAllBytes(path);
+            if (slowRead.getAndSet(0) != 0) {
+              clock.advance(0.9);
+            }
+            return raw;
+          });
+      loadAndAccept(loader);
+
+      InPlaceWrites.truncate(a);
+      slowRead.set(1);
+      assertHeld(loader, a);
+      clock.advance(0.2);
+      assertHeld(loader, a);
+    }
+  }
+
+  @Test
+  public void jsonDocumentThatIsNotAnObjectFailsToParse() throws Exception {
+    try (TempDir dir = TempDir.create()) {
+      for (String doc : new String[] { "null", "[]", "5", "\"x\"" }) {
+        Path file = write(dir, "overrides.json", doc);
+        try {
+          loader(file).load(Duration.ZERO);
+          fail("expected exception for " + doc);
+        } catch (FileDataException e) {
+          assertEquals("file " + file + ": the JSON document is not an object", e.getMessage());
+          assertNull(e.getCause());
+        }
+      }
+    }
+  }
+
+  @Test
+  public void textEncodingIsDetectedFromAByteOrderMarkAndIsUtf8Otherwise() throws Exception {
+    // Applies to both formats. Without a byte order mark the text is UTF-8, whatever the platform's
+    // default encoding.
+    String[] names = { "overrides.json", "overrides.yaml" };
+    java.nio.charset.Charset[] charsets = { StandardCharsets.UTF_8, StandardCharsets.UTF_16LE,
+        StandardCharsets.UTF_16BE };
+    try (TempDir dir = TempDir.create()) {
+      for (String name : names) {
+        String doc = name.endsWith(".json") ? "{\"flagValues\":{\"flag\":\"caf\u00e9\"}}"
+            : "flagValues:\n  flag: \"caf\u00e9\"\n";
+        for (java.nio.charset.Charset charset : charsets) {
+          for (boolean bom : new boolean[] { true, false }) {
+            if (!bom && charset != StandardCharsets.UTF_8) {
+              continue;
+            }
+            Path file = dir.getPath().resolve(name);
+            Files.write(file, ((bom ? "\uFEFF" : "") + doc).getBytes(charset));
+            LoadResult result = loader(file).load(Duration.ZERO);
+            String what = name + " " + charset + (bom ? " with a byte order mark" : "");
+            assertEquals(what, LDValue.buildArray().add("caf\u00e9").build(),
+                json(FEATURES, toMap(result).get(FEATURES).get("flag")).get("variations"));
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  public void utf16FileWithOnlyWhiteSpaceCountsAsEmpty() throws Exception {
+    try (TempDir dir = TempDir.create()) {
+      Path file = write(dir, "overrides.yaml", YAML_DOC);
+      OverrideFileLoader loader = loader(new TestClock(), file);
+      loadAndAccept(loader);
+
+      Files.write(file, "\uFEFF \n".getBytes(StandardCharsets.UTF_16LE));
+      assertHeld(loader, file);
+    }
+  }
+
+  @Test
+  public void contentHashCoversPathsAndPresence() throws Exception {
+    // The format depends on the path, so the same bytes moved from one configured file to another
+    // can be different data.
+    try (TempDir dir = TempDir.create()) {
+      Path yaml = write(dir, "overrides.yaml", "{\"flagValues\": {\"flag\": on}}");
+      Path json = dir.getPath().resolve("overrides.json");
+      OverrideFileLoader loader = loader(yaml, json);
+      LoadResult before = loader.load(Duration.ZERO);
+      Files.move(yaml, json);
+      LoadResult after = loader.load(Duration.ZERO);
+      assertThat(Arrays.equals(before.getContentHash(), after.getContentHash()), is(false));
+      assertEquals(LDValue.of(true), json(FEATURES, toMap(before).get(FEATURES).get("flag")).get("variations").get(0));
+      assertEquals(LDValue.of("on"), json(FEATURES, toMap(after).get(FEATURES).get("flag")).get("variations").get(0));
+    }
+  }
+
   // Loads the files and applies the result, as the reloader does, or reports that the load held a
   // file back or failed.
   private static boolean loadAppliesOrFails(OverrideFileLoader loader) throws Exception {
@@ -1089,9 +1300,9 @@ public class OverrideFileLoaderTest {
   }
 
   @Test
-  public void fileThatAFailingLoadDidNotReachKeepsItsBound() throws Exception {
-    // c.json comes first and fails now and then, so those loads never read a.yaml, which keeps being
-    // written while empty. They do not start a.yaml's bound over.
+  public void fileKeptWrittenWhileEmptyIsAppliedAfterItsBoundWhileAnEarlierFileFails() throws Exception {
+    // c.json comes first and fails now and then, while a.yaml keeps being written while empty. The
+    // failing loads still read a.yaml and hold it back, so they do not start its bound over.
     try (TempDir dir = TempDir.create()) {
       String other = "{\"flagValues\":{\"other\":\"value\"}}";
       Path c = write(dir, "c.json", other);
