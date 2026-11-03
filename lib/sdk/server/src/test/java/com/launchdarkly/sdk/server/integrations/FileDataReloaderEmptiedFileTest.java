@@ -46,7 +46,7 @@ public class FileDataReloaderEmptiedFileTest {
   // file again, also on a loaded machine.
   private static final Duration LONG_RETRY = Duration.ofMillis(1500);
   private static final long WAIT_MILLIS = 10000;
-  private static final String REREAD_LOG = "DEBUG:Reading flag data again after finding an empty file";
+  private static final String REREAD_LOG = "DEBUG:Reading flag data again after a file was found empty";
 
   private final LogCapture logCapture = Logs.capture();
   private final LDLogger logger = LDLogger.withAdapter(logCapture, "");
@@ -167,6 +167,120 @@ public class FileDataReloaderEmptiedFileTest {
   // test, so every load is one the test starts with reloadNow.
   private static final Duration HOUR = Duration.ofHours(1);
 
+  private static final long TENTH = HOUR.toNanos() / 10;
+
+  // Writes the file again, in place, with a later modification time than the previous write. File
+  // system timestamps can be coarse, so it waits until the time differs.
+  private static void writeAgain(Path file, String contents) throws Exception {
+    long before = Files.getLastModifiedTime(file).toMillis();
+    long deadline = System.currentTimeMillis() + 5000;
+    do {
+      Thread.sleep(20);
+      InPlaceWrites.rewrite(file, "x", () -> { });
+      InPlaceWrites.rewrite(file, contents, () -> { });
+    } while (Files.getLastModifiedTime(file).toMillis() == before && System.currentTimeMillis() < deadline);
+  }
+
+  @Test
+  public void holdAsksForTheRetryWhenTheDelayIsOver() throws Exception {
+    try (TempDir dir = TempDir.create()) {
+      Path file = write(dir, "overrides.yaml", yaml("a"));
+      AtomicLong clock = new AtomicLong();
+      FileDataReloader r = reloader(new CountingLoader(clock::get, file), new Recorder(), HOUR);
+      r.reloadNow();
+
+      InPlaceWrites.truncate(file);
+      r.reloadNow();
+      assertEquals(HOUR.toNanos() + TENTH, r.getLastRequestedRetryNanos());
+
+      // A later load asks for the rest of the delay, not a whole one.
+      clock.addAndGet(Duration.ofMinutes(30).toNanos());
+      r.reloadNow();
+      assertEquals(Duration.ofMinutes(30).toNanos() + TENTH, r.getLastRequestedRetryNanos());
+    }
+  }
+
+  @Test
+  public void holdAsksForTheRetryWhenTheBoundIsOver() throws Exception {
+    try (TempDir dir = TempDir.create()) {
+      Path file = write(dir, "overrides.yaml", yaml("a"));
+      AtomicLong clock = new AtomicLong();
+      Recorder recorder = new Recorder();
+      FileDataReloader r = reloader(new CountingLoader(clock::get, file), recorder, HOUR);
+      r.reloadNow();
+
+      InPlaceWrites.truncate(file);
+      r.reloadNow();
+      for (int i = 0; i < 4; i++) {
+        clock.addAndGet(Duration.ofMinutes(60).toNanos());
+        writeAgain(file, i % 2 == 0 ? " " : "  ");
+        r.reloadNow();
+      }
+      clock.addAndGet(Duration.ofMinutes(48).toNanos());
+      writeAgain(file, "   ");
+      r.reloadNow();
+
+      // The file's delay would be over in an hour, but its bound is over in 12 minutes.
+      assertEquals(Collections.singletonList("a"), recorder.applied);
+      assertEquals(Duration.ofMinutes(12).toNanos() + TENTH, r.getLastRequestedRetryNanos());
+    }
+  }
+
+  @Test
+  public void holdOfSeveralFilesAsksForTheRetryWhenTheFirstIsDue() throws Exception {
+    try (TempDir dir = TempDir.create()) {
+      Path a = write(dir, "a.yaml", yaml("a"));
+      Path b = write(dir, "b.yaml", "flagValues:\n  other: \"b\"\n");
+      AtomicLong clock = new AtomicLong();
+      FileDataReloader r = reloader(new CountingLoader(clock::get, a, b), new Recorder(), HOUR);
+      r.reloadNow();
+
+      InPlaceWrites.truncate(a);
+      r.reloadNow();
+      clock.addAndGet(Duration.ofMinutes(20).toNanos());
+      InPlaceWrites.truncate(b);
+      r.reloadNow();
+      assertEquals(Duration.ofMinutes(40).toNanos() + TENTH, r.getLastRequestedRetryNanos());
+    }
+  }
+
+  @Test
+  public void holdStartedByAChangeSignalAsksForTheRetryWhenTheDelayIsOver() throws Exception {
+    try (TempDir dir = TempDir.create()) {
+      Path file = write(dir, "overrides.yaml", yaml("a"));
+      AtomicLong clock = new AtomicLong();
+      CountingLoader loader = new CountingLoader(clock::get, file);
+      FileDataReloader r = reloader(loader, new Recorder(), HOUR);
+      r.reloadNow();
+
+      InPlaceWrites.truncate(file);
+      r.trigger();
+      loader.awaitFinished(2);
+      long deadline = System.currentTimeMillis() + WAIT_MILLIS;
+      while (r.getLastRequestedRetryNanos() != HOUR.toNanos() + TENTH && System.currentTimeMillis() < deadline) {
+        Thread.sleep(5);
+      }
+      assertEquals(HOUR.toNanos() + TENTH, r.getLastRequestedRetryNanos());
+      assertThat(logCapture.getMessageStrings(), hasItem(readAgainLog(file)));
+    }
+  }
+
+  @Test
+  public void failedLoadAsksForTheRetryDelay() throws Exception {
+    try (TempDir dir = TempDir.create()) {
+      Path file = write(dir, "overrides.yaml", yaml("a"));
+      AtomicLong clock = new AtomicLong();
+      Recorder recorder = new Recorder();
+      FileDataReloader r = reloader(new CountingLoader(clock::get, file), recorder, HOUR);
+      r.reloadNow();
+
+      InPlaceWrites.rewrite(file, "flagValues: [", () -> { });
+      r.reloadNow();
+      assertEquals(1, recorder.errors.size());
+      assertEquals(HOUR.toNanos(), r.getLastRequestedRetryNanos());
+    }
+  }
+
   @Test
   public void holdEndsExactlyAfterTheRetryDelay() throws Exception {
     try (TempDir dir = TempDir.create()) {
@@ -185,6 +299,34 @@ public class FileDataReloaderEmptiedFileTest {
       clock.addAndGet(HOUR.toNanos() * 5 / 100);
       r.reloadNow();
       assertEquals(Arrays.asList("a", "none"), recorder.applied);
+      assertTrue(recorder.errors.isEmpty());
+    }
+  }
+
+  @Test
+  public void fileRewrittenWithTheSameContentIsHeldBackAgainLater() throws Exception {
+    // A tool rewrites the file in place now and then with the same content. The load after a rewrite
+    // is skipped as unchanged, and that must start the file's bound over as an application does, or
+    // a rewrite five retry delays later would be applied while the file is empty.
+    try (TempDir dir = TempDir.create()) {
+      Path file = write(dir, "overrides.yaml", yaml("a"));
+      AtomicLong clock = new AtomicLong();
+      CountingLoader loader = new CountingLoader(clock::get, file);
+      Recorder recorder = new Recorder();
+      FileDataReloader r = reloader(loader, recorder, HOUR);
+      r.reloadNow();
+
+      InPlaceWrites.truncate(file);
+      r.reloadNow();
+      InPlaceWrites.rewrite(file, yaml("a"), () -> { });
+      r.reloadNow();
+      assertEquals(3, loader.finished.get());
+      assertEquals(Collections.singletonList("a"), recorder.applied);
+
+      clock.addAndGet(HOUR.toNanos() * 6);
+      InPlaceWrites.truncate(file);
+      r.reloadNow();
+      assertEquals(Collections.singletonList("a"), recorder.applied);
       assertTrue(recorder.errors.isEmpty());
     }
   }

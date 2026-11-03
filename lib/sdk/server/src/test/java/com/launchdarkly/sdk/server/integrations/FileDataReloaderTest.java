@@ -582,7 +582,7 @@ public class FileDataReloaderTest {
     assertTrue(handler.errors.isEmpty());
     List<String> messages = logCapture.getMessageStrings();
     assertThat(messages, hasItem(READ_AGAIN_MESSAGE));
-    assertThat(messages, hasItem("DEBUG:Reading flag data again after finding an empty file"));
+    assertThat(messages, hasItem("DEBUG:Reading flag data again after a file was found empty"));
     assertThat(messages, not(hasItem("DEBUG:Retrying flag data load after earlier failure")));
     for (String message : messages) {
       assertFalse(message, message.startsWith("ERROR:"));
@@ -603,6 +603,7 @@ public class FileDataReloaderTest {
     awaitSize(handler.applied, 2);
     assertEquals(rewritten, handler.applied.get(1));
     assertEquals(3, loader.calls.get());
+    assertEquals(Duration.ofMillis(30).toNanos(), r.getLastRequestedRetryNanos());
   }
 
   @Test
@@ -620,6 +621,7 @@ public class FileDataReloaderTest {
     Thread.sleep(300);
     assertEquals(3, loader.calls.get());
     assertEquals(1, handler.applied.size());
+    assertEquals(Duration.ofHours(1).toNanos(), r.getLastRequestedRetryNanos());
   }
 
   @Test
@@ -678,7 +680,7 @@ public class FileDataReloaderTest {
     assertEquals(4, loader.calls.get());
     assertEquals(1, handler.errors.size());
     List<String> messages = logCapture.getMessageStrings();
-    assertThat(messages, hasItem("DEBUG:Reading flag data again after finding an empty file"));
+    assertThat(messages, hasItem("DEBUG:Reading flag data again after a file was found empty"));
     assertThat(messages, hasItem("DEBUG:Retrying flag data load after earlier failure"));
   }
 

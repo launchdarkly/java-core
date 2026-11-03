@@ -52,18 +52,25 @@ import static com.launchdarkly.sdk.server.DataModel.SEGMENTS;
  * empty is held back, not parsed: {@link #load(Duration)} still reads the other files, so that files
  * emptied together are held back from the same load, and then throws {@link EmptiedFileException}.
  * The data in effect stays, and the reloader reads the files again when the exception says. A file is
- * held back until it has stayed empty, without being written, for one retry delay. Loads stop holding
- * files back once they have held some back for five retry delays in a row, so that files that keep
- * being rewritten cannot hold their changes back for longer. A file that never contributed content,
- * such as a placeholder, and a file whose empty state is in effect are parsed right away. The reloader
- * calls {@link #load(Duration)} and {@link #accepted(LoadResult)} one call at a time, so this state
- * needs no synchronization.
+ * held back until it has stayed empty, without being written, for one retry delay, and for at most
+ * five retry delays from the first load that held it back, so that a file that keeps being rewritten
+ * cannot hold the changes back for longer. The bound is per file and starts over when data is
+ * applied. A file that never contributed content, such as a placeholder, and a file whose empty state
+ * is in effect are parsed right away. The reloader calls {@link #load(Duration)} and
+ * {@link #accepted(LoadResult)} one call at a time, so this state needs no synchronization.
  */
 final class OverrideFileLoader implements FileDataReloader.Loader {
   /**
-   * How many retry delays in a row loads can hold files back for.
+   * How many retry delays a file can be held back for, from the first load that held it back.
    */
   static final int MAX_HOLD_RETRY_DELAYS = 5;
+
+  /**
+   * Reads a file. Tests substitute one that takes time.
+   */
+  interface FileReader {
+    byte[] read(Path path) throws IOException;
+  }
 
   /**
    * Describes one configured file after a load.
@@ -170,18 +177,20 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
   }
 
   /**
-   * A file whose content is in effect and that loads have found empty: since when it has been so
-   * without being written, from the monotonic clock, and its state then. The state is the modification
-   * time and size of the file, read through any symbolic link, and is only compared for equality.
+   * A file whose content is in effect and that loads have found empty since data was last applied.
+   * Times are from the monotonic clock.
    */
   private static final class EmptyFile {
-    long sinceNanos;
+    // Since when the file has been empty without being written, or null after a load read it with
+    // content.
+    Long sinceNanos;
+    // The state of the file then: its modification time and size, read through any symbolic link. It
+    // is only compared for equality.
     FileDataPoller.FileState state;
-
-    EmptyFile(long sinceNanos, FileDataPoller.FileState state) {
-      this.sinceNanos = sinceNanos;
-      this.state = state;
-    }
+    // When a load first held the file back, or null if none has since the file last stayed empty for
+    // the whole retry delay. A read with content and a failed load keep it, so that a file that keeps
+    // being rewritten stays bounded.
+    Long firstHeldNanos;
   }
 
   private final List<Path> paths;
@@ -190,12 +199,9 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
   // Whether each configured file contributed content to the data in effect. Updated only by
   // accepted(LoadResult). A file that is not listed did not.
   private final Map<Path, Boolean> appliedHadContent = new HashMap<>();
-  // The files whose content is in effect and that loads have found empty since. An entry is removed
-  // when a load reads the file with content.
+  private final FileReader reader;
+  // The files whose content is in effect and that loads have found empty since data was last applied.
   private final Map<Path, EmptyFile> emptyFiles = new HashMap<>();
-  // When the current run of loads that hold files back began, from the monotonic clock; null when the
-  // last load did not hold any back.
-  private Long holdingSinceNanos = null;
 
   /**
    * Creates a loader.
@@ -212,9 +218,18 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
    */
   OverrideFileLoader(List<Path> paths, FileData.DuplicateKeysHandling duplicateKeysHandling,
       LongSupplier nanoClock) {
+    this(paths, duplicateKeysHandling, nanoClock, Files::readAllBytes);
+  }
+
+  /**
+   * Creates a loader with a specific monotonic clock and file reader. Visible for tests.
+   */
+  OverrideFileLoader(List<Path> paths, FileData.DuplicateKeysHandling duplicateKeysHandling,
+      LongSupplier nanoClock, FileReader reader) {
     this.paths = new ArrayList<>(paths);
     this.duplicateKeysHandling = duplicateKeysHandling;
     this.nanoClock = nanoClock;
+    this.reader = reader;
   }
 
   /**
@@ -222,8 +237,8 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
    *
    * @param retryDelay the reloader's retry delay, or zero if it does not retry. A file whose content is
    *   in effect and that is found empty is held back until it has stayed empty, without being written,
-   *   for this long, and loads stop holding files back once they have held some back for
-   *   {@link #MAX_HOLD_RETRY_DELAYS} times this in a row. With zero, every file is parsed as it is.
+   *   for this long, and for at most {@link #MAX_HOLD_RETRY_DELAYS} times this from the first load
+   *   that held it back. With zero, every file is parsed as it is.
    * @return the merged result with a summary of each file
    * @throws FileDataException if a file that exists cannot be read or parsed, or the files cannot be
    *   merged, also when another file is held back
@@ -231,74 +246,67 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
    */
   @Override
   public LoadResult load(Duration retryDelay) throws FileDataException, EmptiedFileException {
-    long now = nanoClock.getAsLong();
-    boolean held = false;
-    try {
-      MessageDigest digest = newDigest();
-      Map<DataKind, Map<String, ItemDescriptor>> data = new HashMap<>();
-      List<FileSummary> files = new ArrayList<>(paths.size());
-      List<Path> heldBack = new ArrayList<>();
-      for (Path path : paths) {
-        byte[] raw;
-        try {
-          raw = Files.readAllBytes(path);
-        } catch (NoSuchFileException e) {
-          // Absence is a valid state, not a failure.
-          files.add(new FileSummary(path, false, false, 0, 0));
-          continue;
-        } catch (IOException e) {
-          throw new FileDataException("file " + path + ": unable to read file", e);
-        }
-        // Content that the parser reads as no document, such as YAML with only a comment, has no
-        // entries, and a read can see that much of a file that is being written. Content with only
-        // white space is invalid JSON, so it is parsed only when the file is not held back.
-        FlagFileRep document = null;
-        boolean hasContent = hasContent(raw);
-        if (hasContent) {
-          document = parse(path, raw);
-          hasContent = document != FlagFileRep.NO_DOCUMENT;
-        }
-        if (hasContent) {
-          emptyFiles.remove(path);
-        } else if (shouldHoldBack(path, retryDelay, now)) {
-          // The other files are still read, so that each emptied file starts its delay in this load,
-          // and a failure of another file still fails the load.
-          heldBack.add(path);
-          continue;
-        }
-        // One read feeds both the digest and the parse, so the skip-unchanged digest can never disagree
-        // with the content that was applied.
-        if (digest != null) {
-          digest.update(raw);
-          digest.update((byte) 0);
-        }
-        if (document == null) {
-          document = parse(path, raw);
-        }
-        int[] added = addEntries(data, path, document);
-        files.add(new FileSummary(path, true, hasContent, added[0], added[1]));
+    MessageDigest digest = newDigest();
+    Map<DataKind, Map<String, ItemDescriptor>> data = new HashMap<>();
+    List<FileSummary> files = new ArrayList<>(paths.size());
+    List<Path> heldBack = new ArrayList<>();
+    for (Path path : paths) {
+      byte[] raw;
+      try {
+        raw = reader.read(path);
+      } catch (NoSuchFileException e) {
+        // Absence is a valid state, not a failure.
+        files.add(new FileSummary(path, false, false, 0, 0));
+        continue;
+      } catch (IOException e) {
+        throw new FileDataException("file " + path + ": unable to read file", e);
       }
-
-      if (!heldBack.isEmpty()) {
-        held = true;
-        throw new EmptiedFileException(heldBack, holdBack(heldBack, retryDelay, now));
+      // Content that the parser reads as no document, such as YAML with only a comment, has no
+      // entries, and a read can see that much of a file that is being written. Content with only
+      // white space is invalid JSON, so it is parsed only when the file is not held back.
+      FlagFileRep document = null;
+      boolean hasContent = hasContent(raw);
+      if (hasContent) {
+        document = parse(path, raw);
+        hasContent = document != FlagFileRep.NO_DOCUMENT;
       }
-
-      ImmutableList.Builder<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> all = ImmutableList.builder();
-      for (Map.Entry<DataKind, Map<String, ItemDescriptor>> e : data.entrySet()) {
-        all.add(new AbstractMap.SimpleEntry<>(e.getKey(), new KeyedItems<>(ImmutableList.copyOf(e.getValue().entrySet()))));
+      if (hasContent) {
+        EmptyFile empty = emptyFiles.get(path);
+        if (empty != null) {
+          empty.sinceNanos = null;
+        }
+      } else if (shouldHoldBack(path, retryDelay, nanoClock.getAsLong())) {
+        // The clock is read after this file's own read, so a slow read of another file does not
+        // shorten its delay. The other files are still read, so that each emptied file starts its
+        // delay in this load, and a failure of another file still fails the load.
+        heldBack.add(path);
+        continue;
       }
-      Map<String, ItemDescriptor> flags = data.get(FEATURES);
-      Map<String, ItemDescriptor> segments = data.get(SEGMENTS);
-      return new LoadResult(all.build(), files, flags == null ? 0 : flags.size(),
-          segments == null ? 0 : segments.size(), digest == null ? null : digest.digest());
-    } finally {
-      if (!held) {
-        // A run of loads that hold files back ends with any load that does not, whether it succeeds
-        // or fails.
-        holdingSinceNanos = null;
+      // One read feeds both the digest and the parse, so the skip-unchanged digest can never disagree
+      // with the content that was applied.
+      if (digest != null) {
+        digest.update(raw);
+        digest.update((byte) 0);
       }
+      if (document == null) {
+        document = parse(path, raw);
+      }
+      int[] added = addEntries(data, path, document);
+      files.add(new FileSummary(path, true, hasContent, added[0], added[1]));
     }
+
+    if (!heldBack.isEmpty()) {
+      throw new EmptiedFileException(heldBack, holdBack(heldBack, retryDelay, nanoClock.getAsLong()));
+    }
+
+    ImmutableList.Builder<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> all = ImmutableList.builder();
+    for (Map.Entry<DataKind, Map<String, ItemDescriptor>> e : data.entrySet()) {
+      all.add(new AbstractMap.SimpleEntry<>(e.getKey(), new KeyedItems<>(ImmutableList.copyOf(e.getValue().entrySet()))));
+    }
+    Map<String, ItemDescriptor> flags = data.get(FEATURES);
+    Map<String, ItemDescriptor> segments = data.get(SEGMENTS);
+    return new LoadResult(all.build(), files, flags == null ? 0 : flags.size(),
+        segments == null ? 0 : segments.size(), digest == null ? null : digest.digest());
   }
 
   private static FlagFileRep parse(Path path, byte[] raw) throws FileDataException {
@@ -363,6 +371,8 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
     for (FileSummary file : result.getFiles()) {
       appliedHadContent.put(file.getPath(), file.hasContent());
     }
+    // The data in effect has changed or been confirmed, so every file's delay and bound start over.
+    emptyFiles.clear();
   }
 
   // Decides whether a file that a load found empty is held back. A file whose content is in effect
@@ -370,42 +380,52 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
   // and then writes the new content. Such a file is held back until it has stayed empty, without being
   // written, for the retry delay. A change of its state means that it was written since a load last
   // found it empty, for example rewritten and truncated again between two loads, so the delay starts
-  // over. A file that keeps being written while every load finds it empty, or files that are rewritten
-  // in turn so that every load finds one of them empty, would be held back without end, so loads stop
-  // holding files back once they have held some back for MAX_HOLD_RETRY_DELAYS retry delays in a row.
-  // A file whose content is not in effect, such as a placeholder that has always been empty, or a file
-  // whose empty state was applied, is parsed right away. A zero retry delay, which means that the
-  // reloader does not retry, holds nothing back: nothing would read the file again. Elapsed times are
-  // differences of monotonic clock readings, which do not overflow.
+  // over. A file that keeps being written while loads find it empty would be held back without end, so
+  // each file is held back for at most MAX_HOLD_RETRY_DELAYS retry delays from the first load that held
+  // it back. The bound is the file's own, so one file reaching it does not cut short another file's
+  // rewrite, and it is kept across reads with content and failed loads, so files rewritten in turn and
+  // a failing other file cannot restart it. It starts over when data is applied, or when the file has
+  // stayed empty for the whole delay. A file whose content is not in effect, such as a placeholder that
+  // has always been empty, or a file whose empty state was applied, is parsed right away. A zero retry
+  // delay, which means that the reloader does not retry, holds nothing back: nothing would read the
+  // file again. Elapsed times are differences of monotonic clock readings, which do not overflow.
   private boolean shouldHoldBack(Path path, Duration retryDelay, long now) {
     if (!Boolean.TRUE.equals(appliedHadContent.get(path))) {
       return false;
     }
     FileDataPoller.FileState state = FileDataPoller.observe(path);
-    EmptyFile empty = emptyFiles.get(path);
-    if (empty == null) {
-      emptyFiles.put(path, empty = new EmptyFile(now, state));
-    } else if (!empty.state.equals(state)) {
+    EmptyFile empty = emptyFiles.computeIfAbsent(path, p -> new EmptyFile());
+    if (empty.sinceNanos == null || !state.equals(empty.state)) {
       empty.sinceNanos = now;
       empty.state = state;
     }
     long delay = retryDelay.toNanos();
-    long holdingFor = holdingSinceNanos == null ? 0 : now - holdingSinceNanos;
-    return now - empty.sinceNanos < delay && holdingFor < MAX_HOLD_RETRY_DELAYS * delay;
+    if (now - empty.sinceNanos >= delay) {
+      // The file has stayed empty for the whole delay, so it is applied as it is.
+      empty.firstHeldNanos = null;
+      return false;
+    }
+    if (empty.firstHeldNanos != null && now - empty.firstHeldNanos >= MAX_HOLD_RETRY_DELAYS * delay) {
+      return false;
+    }
+    if (empty.firstHeldNanos == null) {
+      empty.firstHeldNanos = now;
+    }
+    return true;
   }
 
-  // Starts or continues the run of holding loads, and returns how long the reloader waits before it
-  // loads again: until the first of the held files has stayed empty for the retry delay, or until the
-  // run reaches its limit, whichever comes first, plus a tenth of the retry delay, so that a timer that
-  // fires a little early still finds the delay over. A change signal for a write starts a load sooner.
+  // Returns how long the reloader waits before it loads again: until the first of the held files has
+  // stayed empty for the retry delay or reaches its bound, plus a tenth of the retry delay, so that a
+  // timer that fires a little early still finds the time over. A change signal for a write starts a
+  // load sooner.
   private long holdBack(List<Path> heldBack, Duration retryDelay, long now) {
-    if (holdingSinceNanos == null) {
-      holdingSinceNanos = now;
-    }
     long delay = retryDelay.toNanos();
-    long remaining = MAX_HOLD_RETRY_DELAYS * delay - (now - holdingSinceNanos);
+    long remaining = Long.MAX_VALUE;
     for (Path path : heldBack) {
-      remaining = Math.min(remaining, delay - (now - emptyFiles.get(path).sinceNanos));
+      EmptyFile empty = emptyFiles.get(path);
+      long delayLeft = delay - (now - empty.sinceNanos);
+      long boundLeft = MAX_HOLD_RETRY_DELAYS * delay - (now - empty.firstHeldNanos);
+      remaining = Math.min(remaining, Math.min(delayLeft, boundLeft));
     }
     return Math.max(remaining, 0) + delay / 10;
   }

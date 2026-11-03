@@ -102,9 +102,9 @@ public abstract class FileOverrides {
    * document: it fails to load, and the overrides in effect stay. A file whose content is in effect
    * and that is found empty, or with YAML content that holds no document, such as only a comment, may
    * be in the middle of a rewrite. The source then keeps the overrides in effect until the file has
-   * stayed so, without being written, for about a second, or at most about five seconds while files
-   * keep being rewritten. Changes to the other files wait too, because a reload applies all the files
-   * or none. After that, an empty YAML file removes its overrides, while an empty JSON file fails to
+   * stayed so, without being written, for about a second, or for at most about five seconds while the
+   * file keeps being rewritten. Changes to the other files wait too, because a reload applies all the
+   * files or none. After that, an empty YAML file removes its overrides, while an empty JSON file fails to
    * load and the overrides in effect stay. YAML that is cut off between two entries can still parse,
    * so for a YAML file, replacing its entire contents in one operation, such as renaming a fully
    * written temporary file over it, avoids briefly applying only a part of it.

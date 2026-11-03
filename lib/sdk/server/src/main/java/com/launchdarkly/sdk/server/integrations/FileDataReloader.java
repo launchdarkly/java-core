@@ -152,6 +152,9 @@ final class FileDataReloader implements Closeable {
   private ScheduledThreadPoolExecutor worker = null;
   private ScheduledFuture<?> debounceFuture = null;
   private ScheduledFuture<?> retryFuture = null;
+  // The delay of the latest request to arm a retry, in nanoseconds, or -1 before the first. Visible for
+  // tests through getLastRequestedRetryNanos.
+  private volatile long lastRequestedRetryNanos = -1;
 
   private final AtomicBoolean closed = new AtomicBoolean(false);
 
@@ -246,6 +249,16 @@ final class FileDataReloader implements Closeable {
   }
 
   /**
+   * Returns the delay of the latest request to arm a retry, whether or not it armed one. Visible for
+   * tests.
+   *
+   * @return the delay in nanoseconds, or -1 if no retry was requested
+   */
+  long getLastRequestedRetryNanos() {
+    return lastRequestedRetryNanos;
+  }
+
+  /**
    * Reports whether the worker thread has been started. Visible for tests.
    *
    * @return true if a worker exists
@@ -293,6 +306,7 @@ final class FileDataReloader implements Closeable {
   }
 
   private void armRetry(long delayNanos) {
+    lastRequestedRetryNanos = delayNanos;
     synchronized (timerLock) {
       if (closed.get()) {
         return;
@@ -309,7 +323,7 @@ final class FileDataReloader implements Closeable {
   private void runReload(boolean isRetry) {
     try {
       if (isRetry) {
-        logger.debug(readAgainPending ? "Reading flag data again after finding an empty file"
+        logger.debug(readAgainPending ? "Reading flag data again after a file was found empty"
             : "Retrying flag data load after earlier failure");
       } else {
         logger.info("Reloading flag data after detecting a change");
