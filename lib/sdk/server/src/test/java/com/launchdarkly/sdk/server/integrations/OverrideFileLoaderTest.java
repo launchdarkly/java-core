@@ -749,9 +749,9 @@ public class OverrideFileLoaderTest {
   }
 
   @Test
-  public void readWithContentKeepsTheBound() throws Exception {
-    // A load that reads the file with content but applies nothing, here because the test does not
-    // accept the result, keeps the file's bound.
+  public void loadThatHoldsNothingBackStartsTheBoundOver() throws Exception {
+    // A load that reads the file with content and holds nothing back starts the file's bound over,
+    // although nothing is applied here because the test does not accept the result.
     try (TempDir dir = TempDir.create()) {
       Path file = write(dir, "overrides.yaml", YAML_DOC);
       TestClock clock = new TestClock();
@@ -769,7 +769,9 @@ public class OverrideFileLoaderTest {
       assertEquals(1, loader.load(RETRY).getFlagCount());
       truncateAgain(file);
       clock.advance(0.5);
-      assertEquals(0, loader.load(RETRY).getFlagCount());
+      assertHeld(loader, file);
+      clock.advance(0.4);
+      assertHeld(loader, file);
     }
   }
 
@@ -800,8 +802,9 @@ public class OverrideFileLoaderTest {
 
   @Test
   public void fileThatStayedEmptyForTheDelayGetsAFreshBound() throws Exception {
-    // A JSON file that stays empty is parsed after the delay and fails. When it is later rewritten in
-    // place, the new truncation is held back again instead of reported.
+    // A JSON file that stays empty is parsed after the delay and fails. That load holds nothing back,
+    // so the file's bound starts over, and when it is later rewritten in place, the new truncation is
+    // held back again instead of reported.
     try (TempDir dir = TempDir.create()) {
       Path file = write(dir, "overrides.json", JSON_DOC);
       TestClock clock = new TestClock();
@@ -858,6 +861,176 @@ public class OverrideFileLoaderTest {
       LoadResult result = loader.load(RETRY);
       assertEquals(1, result.getFlagCount());
       assertFalse(result.getFiles().get(0).hasContent());
+    }
+  }
+
+  // Loads the files and applies the result, as the reloader does, or reports that the load held a
+  // file back.
+  private static boolean loadApplies(OverrideFileLoader loader) throws Exception {
+    try {
+      loader.accepted(loader.load(RETRY));
+      return true;
+    } catch (EmptiedFileException e) {
+      return false;
+    }
+  }
+
+  @Test
+  public void filesEmptiedInStaggeredTurnsAreAppliedAfterTheBound() throws Exception {
+    // Two files stay empty and are truncated again in turn, so that whenever one of them has stayed
+    // empty for the whole delay, the other is still within its delay and holds the load back. A file
+    // that settles so does not get a fresh bound while the other is held back.
+    try (TempDir dir = TempDir.create()) {
+      Path a = write(dir, "a.yaml", YAML_DOC);
+      Path b = write(dir, "b.yaml", "flagValues:\n  other: \"value\"\n");
+      TestClock clock = new TestClock();
+      OverrideFileLoader loader = loader(clock, a, b);
+      loadAndAccept(loader);
+
+      InPlaceWrites.truncate(a);
+      assertHeld(loader, a);
+      boolean applied = false;
+      for (int i = 1; i <= 14 && !applied; i++) {
+        clock.advance(0.9);
+        if (i == 1) {
+          InPlaceWrites.truncate(b);
+        } else {
+          truncateAgain(i % 2 == 1 ? b : a);
+        }
+        applied = loadApplies(loader);
+        if (!applied) {
+          // The retry that the hold arms, a little after the other file's delay is over.
+          clock.advance(0.2);
+          applied = loadApplies(loader);
+          clock.advance(-0.2);
+        }
+      }
+      assertTrue("the files were held back without end", applied);
+    }
+  }
+
+  @Test
+  public void boundOfAFileHeldBackDuringAFailureStartsOverOnceItIsReadAgain() throws Exception {
+    // While b.json fails to load, a.yaml is rewritten once and its gap is held back. Later, b.json is
+    // fixed while a.yaml is in the middle of another rewrite, which is held back with a bound of its own.
+    try (TempDir dir = TempDir.create()) {
+      Path a = write(dir, "a.yaml", YAML_DOC);
+      String other = "{\"flagValues\":{\"other\":\"value\"}}";
+      Path b = write(dir, "b.json", other);
+      TestClock clock = new TestClock();
+      OverrideFileLoader loader = loader(clock, a, b);
+      loadAndAccept(loader);
+
+      InPlaceWrites.rewrite(b, "{bad", () -> { });
+      InPlaceWrites.truncate(a);
+      assertLoadFailsFor(loader, b);
+      InPlaceWrites.rewrite(a, "flagValues:\n  flag: \"other value\"\n", () -> { });
+      assertLoadFailsFor(loader, b);
+      clock.advance(6);
+      assertLoadFailsFor(loader, b);
+
+      InPlaceWrites.rewrite(b, other, () -> { });
+      InPlaceWrites.truncate(a);
+      assertHeld(loader, a);
+    }
+  }
+
+  @Test
+  public void fileFoundMissingDuringAFailureGetsAFreshBound() throws Exception {
+    // a.yaml is held back, then deleted while b.json fails to load. A load that finds it missing and
+    // holds nothing back starts its bound over, so when it comes back empty much later, while b.json
+    // is fixed, it is held back again.
+    try (TempDir dir = TempDir.create()) {
+      Path a = write(dir, "a.yaml", YAML_DOC);
+      String other = "{\"flagValues\":{\"other\":\"value\"}}";
+      Path b = write(dir, "b.json", other);
+      TestClock clock = new TestClock();
+      OverrideFileLoader loader = loader(clock, a, b);
+      loadAndAccept(loader);
+
+      InPlaceWrites.truncate(a);
+      long emptiedAt = Files.getLastModifiedTime(a).toMillis();
+      assertHeld(loader, a);
+      Files.delete(a);
+      InPlaceWrites.rewrite(b, "{bad", () -> { });
+      assertLoadFailsFor(loader, b);
+      clock.advance(6);
+
+      InPlaceWrites.rewrite(b, other, () -> { });
+      // File system timestamps are coarse; the file must not look as it did when it was found empty.
+      do {
+        Thread.sleep(20);
+        Files.write(a, new byte[0]);
+      } while (Files.getLastModifiedTime(a).toMillis() == emptiedAt);
+      assertHeld(loader, a);
+    }
+  }
+
+  @Test
+  public void fileThatAFailingLoadDidNotReadKeepsItsBound() throws Exception {
+    // c.json comes first and fails now and then, so those loads never read a.yaml, which keeps being
+    // written while empty. They do not start a.yaml's bound over.
+    try (TempDir dir = TempDir.create()) {
+      String other = "{\"flagValues\":{\"other\":\"value\"}}";
+      Path c = write(dir, "c.json", other);
+      Path a = write(dir, "a.yaml", YAML_DOC);
+      TestClock clock = new TestClock();
+      OverrideFileLoader loader = loader(clock, c, a);
+      loadAndAccept(loader);
+
+      InPlaceWrites.truncate(a);
+      assertHeld(loader, a);
+      for (int i = 1; i <= 5; i++) {
+        clock.advance(0.9);
+        writeAgain(a, i % 2 == 0 ? " " : "  ");
+        if (i % 2 == 1) {
+          InPlaceWrites.rewrite(c, "{bad", () -> { });
+          assertLoadFailsFor(loader, c);
+        } else {
+          InPlaceWrites.rewrite(c, other, () -> { });
+          assertHeld(loader, a);
+        }
+      }
+      clock.advance(0.9);
+      writeAgain(a, " ");
+      InPlaceWrites.rewrite(c, other, () -> { });
+      assertEquals(1, loader.load(RETRY).getFlagCount());
+    }
+  }
+
+  @Test
+  public void holdAsksForTheRetryFromTheEndOfTheLoad() throws Exception {
+    // The read of the file after the held one takes longer than what is left of the held file's
+    // delay, so the retry is due right away, after the margin.
+    try (TempDir dir = TempDir.create()) {
+      Path a = write(dir, "a.yaml", YAML_DOC);
+      Path b = write(dir, "b.yaml", "flagValues:\n  other: \"value\"\n");
+      TestClock clock = new TestClock();
+      AtomicLong slowReadOf = new AtomicLong();
+      OverrideFileLoader loader = new OverrideFileLoader(Arrays.asList(a, b), FileData.DuplicateKeysHandling.FAIL,
+          clock.nanos::get, path -> {
+            byte[] raw = Files.readAllBytes(path);
+            if (path.equals(b) && slowReadOf.getAndSet(0) != 0) {
+              clock.advance(0.1);
+            }
+            return raw;
+          });
+      loadAndAccept(loader);
+
+      InPlaceWrites.truncate(a);
+      assertEquals(1.1, assertHeld(loader, a), 1e-9);
+      clock.advance(0.95);
+      slowReadOf.set(1);
+      assertEquals(0.1, assertHeld(loader, a), 1e-9);
+    }
+  }
+
+  private static void assertLoadFailsFor(OverrideFileLoader loader, Path file) throws Exception {
+    try {
+      loader.load(RETRY);
+      fail("expected the load to fail");
+    } catch (FileDataException e) {
+      assertThat(e.getMessage(), containsString(file.toString()));
     }
   }
 
