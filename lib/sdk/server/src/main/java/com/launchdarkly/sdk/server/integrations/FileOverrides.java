@@ -82,15 +82,11 @@ public abstract class FileOverrides {
    * The files use the same document format as the file data source (see {@link FileData}): each
    * file is a JSON or YAML document with optional {@code "flags"}, {@code "flagValues"}, and
    * {@code "segments"} members. A file whose name ends in {@code .yaml} or {@code .yml}, in any case,
-   * is parsed as YAML, and any other file is parsed as JSON. This differs from the file data source,
-   * which parses a file as JSON when it starts with <code>'{'</code> and as YAML otherwise. The YAML
-   * parser reads YAML 1.1, which does not accept every JSON document, for example one indented with
-   * tabs or one with the escape <code>\/</code>, so give a JSON file a name that does not end in
-   * {@code .yaml} or {@code .yml}. The text encoding of a file is detected from a byte order mark,
-   * and is UTF-8 otherwise. A
-   * {@code "flagValues"} entry is expanded into a full flag
-   * definition that is on and serves the given value as its single variation by fallthrough for
-   * every context. Such a flag is not available to client-side SDKs, so
+   * is YAML, and any other file is JSON; the YAML parser does not accept every JSON document, so give
+   * a JSON file a name that does not end in {@code .yaml} or {@code .yml}. A file is read as UTF-8,
+   * or in the encoding that a byte order mark names. A {@code "flagValues"} entry is expanded into a
+   * full flag definition that is on and serves the given value as its single variation by fallthrough
+   * for every context. Such a flag is not available to client-side SDKs, so
    * {@link com.launchdarkly.sdk.server.LDClient#allFlagsState} with
    * {@link com.launchdarkly.sdk.server.FlagsStateOption#CLIENT_SIDE_ONLY} leaves it out, even when
    * the flag it overrides is available to them. To override such a flag, define it in
@@ -99,23 +95,16 @@ public abstract class FileOverrides {
    * the duplicate keys handling decides which file wins for a key that appears more than once.
    * <p>
    * A reload replaces the entire override set, so removing an entry from the files removes the
-   * override. A configured file that does not exist contributes no overrides. Deleting a file
-   * therefore removes its overrides, and deleting every file removes them all. A file that exists
-   * but cannot be read or parsed makes that whole reload fail: the previously loaded overrides
-   * stay in effect, the source logs the failure, retries after a short delay, and recovers on its
-   * own once the file is readable again.
+   * override. A configured file that does not exist contributes no overrides, so deleting every file
+   * removes them all. A file that exists but cannot be read or parsed makes the reload fail: the
+   * overrides in effect stay, the source logs the failure, and it recovers on its own once the file
+   * can be read again.
    * <p>
-   * A file can be rewritten in place. To remove a file's overrides, delete the file or write a
-   * document with no entries, such as <code>{}</code>. A JSON file with no content is not a valid
-   * document: it fails to load, and the overrides in effect stay. A file whose content is in effect
-   * and that is found empty, or with YAML content that holds no document, such as only a comment, may
-   * be in the middle of a rewrite. The source then keeps the overrides in effect until the file has
-   * stayed so, without being written, for about a second, or for at most about five seconds while the
-   * file keeps being rewritten. Changes to the other files wait too, because a reload applies all the
-   * files or none. After that, an empty YAML file removes its overrides, while an empty JSON file fails to
-   * load and the overrides in effect stay. YAML that is cut off between two entries can still parse,
-   * so for a YAML file, replacing its entire contents in one operation, such as renaming a fully
-   * written temporary file over it, avoids briefly applying only a part of it.
+   * Files can be rewritten in place: if the source finds a file empty while it is being rewritten, it
+   * keeps the overrides in effect until the new content is written. To remove a file's overrides,
+   * delete the file or write a document with no entries, such as <code>{}</code>. An empty JSON file
+   * is not a valid document. For a YAML file, replacing its contents in one operation, such as by
+   * renaming a fully written temporary file over it, avoids briefly applying a partly written file.
    * <p>
    * Whenever the set of overrides in effect changes, including at startup, the source logs the
    * overrides in effect and what each configured file supplied, at Info level.

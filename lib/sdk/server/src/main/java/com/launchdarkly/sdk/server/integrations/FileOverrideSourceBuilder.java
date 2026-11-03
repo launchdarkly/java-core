@@ -42,7 +42,8 @@ public final class FileOverrideSourceBuilder implements ComponentConfigurer<Over
    * same key appears in more than one file.
    * <p>
    * A file whose name ends in {@code .yaml} or {@code .yml}, in any case, is parsed as YAML, and any
-   * other file is parsed as JSON.
+   * other file is parsed as JSON. A file is read as UTF-8, or in the encoding that a byte order mark
+   * names.
    * <p>
    * Flag overrides are currently experimental and subject to change.
    *
@@ -63,7 +64,8 @@ public final class FileOverrideSourceBuilder implements ComponentConfigurer<Over
    * same key appears in more than one file.
    * <p>
    * A file whose name ends in {@code .yaml} or {@code .yml}, in any case, is parsed as YAML, and any
-   * other file is parsed as JSON.
+   * other file is parsed as JSON. A file is read as UTF-8, or in the encoding that a byte order mark
+   * names.
    * <p>
    * Flag overrides are currently experimental and subject to change.
    *
