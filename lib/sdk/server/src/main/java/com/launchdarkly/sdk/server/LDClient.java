@@ -77,6 +77,10 @@ public final class LDClient implements LDClientInterface {
   // converted, because converting it would overflow and throw (and would do so after the data system starts).
   private static final Duration MAX_MILLIS_START_WAIT = Duration.ofMillis(Long.MAX_VALUE);
 
+  // On close, how long to let already-submitted shared-executor tasks finish (so a terminal data source status
+  // broadcast is delivered rather than discarded) before forcing termination so close() cannot hang.
+  private static final long SHUTDOWN_DRAIN_MILLIS = 5000;
+
   /**
    * Creates a new client instance that connects to LaunchDarkly with the default configuration.
    * <p>
@@ -507,7 +511,20 @@ public final class LDClient implements LDClientInterface {
     if (this.bigSegmentStoreWrapper != null) {
       this.bigSegmentStoreWrapper.close();
     }
-    this.sharedExecutor.shutdownNow();
+    // Let already-submitted tasks (such as the terminal data source status broadcast emitted above during
+    // dataSystem.close()) run, so status listeners are not left without the final OFF, then force termination if
+    // they do not finish promptly so close() cannot hang on a stuck task.
+    this.sharedExecutor.shutdown();
+    try {
+      if (!this.sharedExecutor.awaitTermination(SHUTDOWN_DRAIN_MILLIS, TimeUnit.MILLISECONDS)) {
+        this.sharedExecutor.shutdownNow();
+      }
+    } catch (InterruptedException e) {
+      this.sharedExecutor.shutdownNow();
+      Thread.currentThread().interrupt();
+    }
+    // NOTE: the awaitTermination above blocks the caller, so any teardown added below this point may be delayed
+    // by up to SHUTDOWN_DRAIN_MILLIS (until the executor drains or the drain times out).
   }
 
   @Override
