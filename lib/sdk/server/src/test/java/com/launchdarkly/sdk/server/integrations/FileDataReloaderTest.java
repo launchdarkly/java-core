@@ -3,14 +3,18 @@ package com.launchdarkly.sdk.server.integrations;
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.logging.LogCapture;
 import com.launchdarkly.logging.Logs;
+import com.launchdarkly.sdk.server.integrations.FileDataReloader.EmptiedFileException;
 import com.launchdarkly.sdk.server.integrations.OverrideFileLoader.LoadResult;
 import com.launchdarkly.sdk.server.integrations.FileDataSourceParsing.FileDataException;
 
 import org.junit.After;
 import org.junit.Test;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -18,7 +22,6 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Supplier;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
@@ -26,6 +29,7 @@ import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.lessThan;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -64,13 +68,23 @@ public class FileDataReloaderTest {
   }
 
   /**
+   * One step of a scripted loader: it returns a result or throws.
+   */
+  private interface Step {
+    LoadResult run() throws FileDataException, EmptiedFileException;
+  }
+
+  /**
    * A scripted loader: each call takes the next step from the queue. A step either returns a result
-   * or throws. When the queue is empty the last step repeats.
+   * or throws. When the queue is empty the last step repeats. It records the argument of each call
+   * and every accepted result.
    */
   private static final class ScriptedLoader implements FileDataReloader.Loader {
     final AtomicInteger calls = new AtomicInteger();
-    final LinkedBlockingQueue<Supplier<LoadResult>> steps = new LinkedBlockingQueue<>();
-    volatile Supplier<LoadResult> last;
+    final List<Duration> retryDelayArguments = Collections.synchronizedList(new ArrayList<>());
+    final List<LoadResult> accepted = Collections.synchronizedList(new ArrayList<>());
+    final LinkedBlockingQueue<Step> steps = new LinkedBlockingQueue<>();
+    volatile Step last;
     volatile CountDownLatch entered;
     volatile CountDownLatch release;
 
@@ -81,7 +95,7 @@ public class FileDataReloaderTest {
 
     ScriptedLoader thenFail(String message) {
       steps.add(() -> {
-        throw new UncheckedFileDataException(failure(message));
+        throw failure(message);
       });
       return this;
     }
@@ -93,12 +107,24 @@ public class FileDataReloaderTest {
       return this;
     }
 
+    ScriptedLoader thenEmptied(Path path) {
+      return thenEmptied(path, SHORT);
+    }
+
+    ScriptedLoader thenEmptied(Path path, Duration retryAfter) {
+      steps.add(() -> {
+        throw new EmptiedFileException(Collections.singletonList(path), retryAfter.toNanos());
+      });
+      return this;
+    }
+
     @Override
-    public LoadResult load() throws FileDataException {
+    public LoadResult load(Duration retryDelay) throws FileDataException, EmptiedFileException {
       // Both latches are read before the entered signal, so a test that clears them after the
       // signal cannot change what this call does.
       CountDownLatch enteredLatch = entered;
       CountDownLatch releaseLatch = release;
+      retryDelayArguments.add(retryDelay);
       calls.incrementAndGet();
       if (enteredLatch != null) {
         enteredLatch.countDown();
@@ -110,26 +136,18 @@ public class FileDataReloaderTest {
           Thread.currentThread().interrupt();
         }
       }
-      Supplier<LoadResult> step = steps.poll();
+      Step step = steps.poll();
       if (step == null) {
         step = last;
       } else {
         last = step;
       }
-      try {
-        return step.get();
-      } catch (UncheckedFileDataException e) {
-        throw e.wrapped;
-      }
+      return step.run();
     }
-  }
 
-  @SuppressWarnings("serial")
-  private static final class UncheckedFileDataException extends RuntimeException {
-    final FileDataException wrapped;
-
-    UncheckedFileDataException(FileDataException wrapped) {
-      this.wrapped = wrapped;
+    @Override
+    public void accepted(LoadResult result) {
+      accepted.add(result);
     }
   }
 
@@ -538,5 +556,148 @@ public class FileDataReloaderTest {
     awaitSize(handler.applied, 1);
     assertThat(logCapture.getMessageStrings(),
         hasItem(startsWith("ERROR:Unexpected error while reloading flag data:")));
+  }
+
+  private static final Path EMPTIED = Paths.get("/overrides/emptied.yaml");
+  private static final String READ_AGAIN_MESSAGE = "DEBUG:File " + EMPTIED
+      + " is empty, possibly while it is being rewritten; reading it again before applying it";
+
+  @Test
+  public void emptiedFileIsReadAgainAfterTheRetryDelayWithoutReportingAFailure() throws Exception {
+    LoadResult first = resultWithHash(1);
+    LoadResult rewritten = resultWithHash(2);
+    ScriptedLoader loader = new ScriptedLoader().then(first).thenEmptied(EMPTIED).then(rewritten);
+    RecordingHandler handler = new RecordingHandler();
+    FileDataReloader r = reloader(loader, handler, Duration.ZERO, SHORT, true);
+    r.reloadNow();
+
+    // The load that finds the file emptied applies nothing. Only the retry, with no further
+    // trigger, loads again.
+    r.trigger();
+    awaitSize(handler.applied, 2);
+
+    assertEquals(first, handler.applied.get(0));
+    assertEquals(rewritten, handler.applied.get(1));
+    assertEquals(3, loader.calls.get());
+    assertTrue(handler.errors.isEmpty());
+    List<String> messages = logCapture.getMessageStrings();
+    assertThat(messages, hasItem(READ_AGAIN_MESSAGE));
+    assertThat(messages, hasItem("DEBUG:Reading flag data again after a file was found empty"));
+    assertThat(messages, not(hasItem("DEBUG:Retrying flag data load after earlier failure")));
+    for (String message : messages) {
+      assertFalse(message, message.startsWith("ERROR:"));
+    }
+  }
+
+  @Test
+  public void holdIsRetriedAfterTheTimeTheLoaderAsksFor() throws Exception {
+    // The loader asks for a retry sooner than the retry delay, which would not come in this test.
+    LoadResult rewritten = resultWithHash(2);
+    ScriptedLoader loader = new ScriptedLoader().then(resultWithHash(1)).thenEmptied(EMPTIED, Duration.ofMillis(30))
+        .then(rewritten);
+    RecordingHandler handler = new RecordingHandler();
+    FileDataReloader r = reloader(loader, handler, Duration.ZERO, Duration.ofHours(1), true);
+    r.reloadNow();
+
+    r.trigger();
+    awaitSize(handler.applied, 2);
+    assertEquals(rewritten, handler.applied.get(1));
+    assertEquals(3, loader.calls.get());
+    assertEquals(Duration.ofMillis(30).toNanos(), r.getLastRequestedRetryNanos());
+  }
+
+  @Test
+  public void failureAfterAHoldIsRetriedAfterTheRetryDelay() throws Exception {
+    // A hold asks for a retry soon. The failure that follows arms the normal retry delay, which does
+    // not come in this test.
+    ScriptedLoader loader = new ScriptedLoader().then(resultWithHash(1)).thenEmptied(EMPTIED, Duration.ofMillis(30))
+        .thenFail("broken").then(resultWithHash(2));
+    RecordingHandler handler = new RecordingHandler();
+    FileDataReloader r = reloader(loader, handler, Duration.ZERO, Duration.ofHours(1), true);
+    r.reloadNow();
+
+    r.trigger();
+    awaitSize(handler.errors, 1);
+    Thread.sleep(300);
+    assertEquals(3, loader.calls.get());
+    assertEquals(1, handler.applied.size());
+    assertEquals(Duration.ofHours(1).toNanos(), r.getLastRequestedRetryNanos());
+  }
+
+  @Test
+  public void loaderIsGivenTheRetryDelayOrZeroWithoutRetries() {
+    ScriptedLoader withRetries = new ScriptedLoader().then(resultWithHash(1));
+    reloader(withRetries, new RecordingHandler(), Duration.ZERO, SHORT, true).reloadNow();
+    assertEquals(Collections.singletonList(SHORT), withRetries.retryDelayArguments);
+
+    // Without retries nothing would read a deferred file again, so the loader must not defer one.
+    ScriptedLoader withoutRetries = new ScriptedLoader().then(resultWithHash(1));
+    reloader(withoutRetries, new RecordingHandler(), Duration.ZERO, Duration.ofMillis(-1), true).reloadNow();
+    assertEquals(Collections.singletonList(Duration.ZERO), withoutRetries.retryDelayArguments);
+  }
+
+  @Test
+  public void loaderIsToldOfEveryResultThatBecomesTheDataInEffect() throws Exception {
+    // An applied result and a result skipped as unchanged are the data in effect. A failure, a
+    // deferral and a result that the consumer rejects are not.
+    LoadResult first = resultWithHash(1);
+    LoadResult unchanged = resultWithHash(1);
+    LoadResult rejected = resultWithHash(2);
+    LoadResult last = resultWithHash(3);
+    ScriptedLoader loader = new ScriptedLoader().then(first).then(unchanged).thenFail("broken")
+        .thenEmptied(EMPTIED).then(rejected).then(last);
+    RecordingHandler handler = new RecordingHandler() {
+      @Override
+      public void apply(LoadResult r) {
+        if (r == rejected) {
+          throw new IllegalStateException("consumer failed");
+        }
+        super.apply(r);
+      }
+    };
+    FileDataReloader r = reloader(loader, handler, Duration.ZERO, Duration.ZERO, true);
+    r.reloadNow();
+    for (int i = 2; i <= 6; i++) {
+      r.trigger();
+      awaitAtLeast(loader.calls, i);
+    }
+    awaitSize(loader.accepted, 3);
+
+    assertEquals(Arrays.asList(first, unchanged, last), loader.accepted);
+    assertEquals(Arrays.asList(first, last), handler.applied);
+  }
+
+  @Test
+  public void failureAfterAReadAgainIsRetriedAsAFailure() throws Exception {
+    ScriptedLoader loader = new ScriptedLoader().then(resultWithHash(1)).thenEmptied(EMPTIED).thenFail("broken")
+        .then(resultWithHash(2));
+    RecordingHandler handler = new RecordingHandler();
+    FileDataReloader r = reloader(loader, handler, Duration.ZERO, SHORT, true);
+    r.reloadNow();
+
+    r.trigger();
+    awaitSize(handler.applied, 2);
+    assertEquals(4, loader.calls.get());
+    assertEquals(1, handler.errors.size());
+    List<String> messages = logCapture.getMessageStrings();
+    assertThat(messages, hasItem("DEBUG:Reading flag data again after a file was found empty"));
+    assertThat(messages, hasItem("DEBUG:Retrying flag data load after earlier failure"));
+  }
+
+  @Test
+  public void readingAnEmptiedFileAgainDoesNotEndARecovery() throws Exception {
+    // After a failure, the next success applies even when its content is unchanged. A read again
+    // in between is not that success.
+    LoadResult result = resultWithHash(1);
+    ScriptedLoader loader = new ScriptedLoader().then(result).thenFail("broken").thenEmptied(EMPTIED).then(result);
+    RecordingHandler handler = new RecordingHandler();
+    FileDataReloader r = reloader(loader, handler, Duration.ZERO, SHORT, true);
+    r.reloadNow();
+
+    r.trigger();
+    awaitSize(handler.applied, 2);
+    assertEquals(4, loader.calls.get());
+    assertEquals(1, handler.errors.size());
+    assertThat(logCapture.getMessageStrings(), hasItem(READ_AGAIN_MESSAGE));
   }
 }
