@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.17.4](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.3...launchdarkly-java-server-sdk-7.17.4) (2026-11-02)
+
+
+### Bug Fixes
+
+* Clamp an over-large start wait time instead of overflowing ([#243](https://github.com/launchdarkly/java-core/issues/243)) ([754ee94](https://github.com/launchdarkly/java-core/commit/754ee94deeb5032c3b19de6b6d69783bcd2aca59))
+
 ## [7.17.3](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.2...launchdarkly-java-server-sdk-7.17.3) (2026-10-14)
 
 
