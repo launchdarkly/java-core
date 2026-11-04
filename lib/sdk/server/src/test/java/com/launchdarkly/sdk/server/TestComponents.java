@@ -149,8 +149,17 @@ public class TestComponents {
         EvaluationReason reason, LDValue defaultValue, String prerequisiteOfFlagKey, boolean requireFullEvent,
         Long debugEventsUntilDate, boolean excludeFromSummaries,
                                       Long samplingRatio) {
+      recordEvaluationEvent(context, flagKey, flagVersion, variation, value, reason, defaultValue, prerequisiteOfFlagKey,
+          requireFullEvent, debugEventsUntilDate, excludeFromSummaries, samplingRatio, false);
+    }
+
+    @Override
+    public void recordEvaluationEvent(LDContext context, String flagKey, int flagVersion, int variation, LDValue value,
+        EvaluationReason reason, LDValue defaultValue, String prerequisiteOfFlagKey, boolean requireFullEvent,
+        Long debugEventsUntilDate, boolean excludeFromSummaries, Long samplingRatio, boolean overrideAffected) {
       events.add(new Event.FeatureRequest(System.currentTimeMillis(), flagKey, context, flagVersion,
-          variation, value, defaultValue, reason, prerequisiteOfFlagKey, requireFullEvent, debugEventsUntilDate, false));
+          variation, value, defaultValue, reason, prerequisiteOfFlagKey, requireFullEvent, debugEventsUntilDate, false,
+          samplingRatio == null ? 1 : samplingRatio, excludeFromSummaries, overrideAffected));
     }
 
     @Override
