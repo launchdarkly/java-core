@@ -16,7 +16,11 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
+import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.*;
@@ -27,6 +31,7 @@ import static com.launchdarkly.sdk.server.FDv2DataSourceConditions.Condition;
 import static com.launchdarkly.sdk.server.FDv2DataSourceConditions.ConditionFactory;
 import static com.launchdarkly.sdk.server.FDv2DataSourceConditions.FallbackCondition;
 import static com.launchdarkly.sdk.server.FDv2DataSourceConditions.RecoveryCondition;
+import static com.launchdarkly.sdk.server.FDv2DataSourceConditions.UnparkCondition;
 
 class FDv2DataSource implements DataSource {
     /**
@@ -154,6 +159,11 @@ class FDv2DataSource implements DataSource {
         this.conditionFactories = new ArrayList<>();
         this.conditionFactories.add(new FallbackCondition.Factory(sharedExecutor, fallbackTimeout));
         this.conditionFactories.add(new RecoveryCondition.Factory(sharedExecutor, recoveryTimeout));
+        // getEarliestUnparkTime synchronizes on the lock of the source manager, so it is safe to call from the thread
+        // that builds the conditions.
+        // TODO: Decide whether to keep this guarantee, or to require that conditions are built only on the data
+        // source thread.
+        this.conditionFactories.add(new UnparkCondition.Factory(sharedExecutor, sourceManager::getEarliestUnparkTime));
         this.parkInitialDelay = parkInitialDelay;
         this.parkMaxDelay = parkMaxDelay;
         this.failoverDelay = failoverDelay;
@@ -368,10 +378,11 @@ class FDv2DataSource implements DataSource {
             // If there isn't a synchronizer to recover to, then don't add and recovery conditions.
             return conditionFactories.stream()
                 .filter((ConditionFactory factory) -> factory.getType() != Condition.ConditionType.RECOVERY)
-                .map(ConditionFactory::build).collect(Collectors.toList());
+                .map(ConditionFactory::build).filter(Objects::nonNull).collect(Collectors.toList());
         }
         // The synchronizer can both fall back and recover.
-        return conditionFactories.stream().map(ConditionFactory::build).collect(Collectors.toList());
+        return conditionFactories.stream()
+            .map(ConditionFactory::build).filter(Objects::nonNull).collect(Collectors.toList());
     }
 
     /**
@@ -438,6 +449,10 @@ class FDv2DataSource implements DataSource {
 
                             try (FDv2SourceResult result = (FDv2SourceResult) res) {
                                 conditions.inform(result);
+
+                                if (result.isResetThresholdMet()) {
+                                    sourceManager.resetCurrentSynchronizerParkCount();
+                                }
 
                                 switch (result.getResultType()) {
                                     case CHANGE_SET:
@@ -767,84 +782,157 @@ class FDv2DataSource implements DataSource {
      * exercise the API surface and assert per-call distinctness.
      */
     static class Conditions implements AutoCloseable {
-        private final List<Condition> conditions;
-        private final CompletableFuture<Object> aggregate;
         private final Object lock = new Object();
+
+        /**
+         * The conditions, with at most one of each type. Accessed only under {@code lock}.
+         */
+        private final Map<Condition.ConditionType, Condition> conditions =
+            new EnumMap<>(Condition.ConditionType.class);
+
+        /**
+         * The types of the conditions that the aggregate has completed with. Accessed only under {@code lock}.
+         */
+        private final Set<Condition.ConditionType> reported = EnumSet.noneOf(Condition.ConditionType.class);
+
+        /**
+         * A future over the futures of all the conditions. It completes with the first condition that is met.
+         * Accessed only under {@code lock}.
+         */
+        private CompletableFuture<Object> aggregate;
 
         /**
          * Tracks futures previously returned by {@link #getFuture()} that have
          * not yet been completed. Held weakly via {@link WeakHashMap} so that
          * fresh futures abandoned by the caller (the typical end-of-iteration
          * case) become GC-collectable. Set to {@code null} once the aggregate
-         * has fired and the entries have been drained. Mutated only under
+         * has fired and the entries have been drained. Accessed only under
          * {@code lock}.
          */
-        private Set<CompletableFuture<Object>> pending =
-            Collections.newSetFromMap(new WeakHashMap<>());
+        private Set<CompletableFuture<Object>> pending;
 
         public Conditions(List<Condition> conditions) {
-            this.conditions = conditions;
-            this.aggregate = conditions.isEmpty()
-                ? new CompletableFuture<>() // Never completes if no conditions
-                : CompletableFuture.anyOf(
-                    conditions.stream().map(Condition::execute).toArray(CompletableFuture[]::new));
-
-            // Single permanent listener. This is the only Completion node ever
-            // attached to aggregate.stack while the aggregate is still pending
-            // -- subsequent pre-completion getFuture() calls do not touch the
-            // aggregate at all.
-            this.aggregate.whenComplete((result, throwable) -> {
-                List<CompletableFuture<Object>> snapshot;
-                synchronized (lock) {
-                    if (pending == null) {
-                        return;
-                    }
-                    // Copy under the lock: the ArrayList holds strong
-                    // references so entries that survived GC to this point
-                    // stay alive until we complete them below.
-                    snapshot = new ArrayList<>(pending);
-                    pending = null;
-                }
-                for (CompletableFuture<Object> cf : snapshot) {
-                    if (throwable != null) {
-                        cf.completeExceptionally(throwable);
-                    } else {
-                        cf.complete(result);
-                    }
-                }
-            });
+            for (Condition condition : conditions) {
+                this.conditions.put(condition.getType(), condition);
+            }
+            arm();
         }
 
         /**
-         * Returns a future that will complete when the underlying aggregate
-         * condition fires. Pre-completion, this is a fresh future per call;
-         * post-completion, this is the aggregate itself (already done).
+         * Builds the aggregate future over the conditions.
+         */
+        private void arm() {
+            synchronized (lock) {
+                CompletableFuture<?>[] unreported = conditions.values().stream()
+                    .filter(c -> !reported.contains(c.getType()))
+                    .map(Condition::execute)
+                    .toArray(CompletableFuture[]::new);
+                CompletableFuture<Object> newAggregate = unreported.length == 0
+                    ? new CompletableFuture<>() // Never completes if no conditions are unreported
+                    : CompletableFuture.anyOf(unreported);
+                aggregate = newAggregate;
+                // Start a new set only if the previous aggregate drained it. Otherwise, the futures in it are still
+                // waiting, and the new aggregate completes them.
+                if (pending == null) {
+                    pending = Collections.newSetFromMap(new WeakHashMap<>());
+                }
+
+                // Single permanent listener. This is the only Completion node ever
+                // attached to aggregate.stack while the aggregate is still pending
+                // -- subsequent pre-completion getFuture() calls do not touch the
+                // aggregate at all.
+                newAggregate.whenComplete((result, throwable) -> {
+                    List<CompletableFuture<Object>> snapshot;
+                    synchronized (lock) {
+                        // A newer aggregate replaced this one, and it completes the pending futures instead.
+                        if (aggregate != newAggregate || pending == null) {
+                            return;
+                        }
+                        if (throwable == null) {
+                            reported.add(((Condition) result).getType());
+                        }
+                        // Copy under the lock: the ArrayList holds strong
+                        // references so entries that survived GC to this point
+                        // stay alive until we complete them below.
+                        snapshot = new ArrayList<>(pending);
+                        pending = null;
+                    }
+                    for (CompletableFuture<Object> cf : snapshot) {
+                        if (throwable != null) {
+                            cf.completeExceptionally(throwable);
+                        } else {
+                            cf.complete(result);
+                        }
+                    }
+                });
+            }
+        }
+
+        /**
+         * Returns a future that completes with a met condition that this method has not reported before.
          */
         public CompletableFuture<Object> getFuture() {
-            if (aggregate.isDone()) {
-                return aggregate;
-            }
-
-            CompletableFuture<Object> fresh = new CompletableFuture<>();
             synchronized (lock) {
                 if (pending == null) {
-                    // Raced with aggregate completion between isDone() and
-                    // the lock acquisition; aggregate is now done.
-                    return aggregate;
+                    // The aggregate has fired.
+                    if (aggregate.isCompletedExceptionally()) {
+                        return aggregate;
+                    }
+                    // Wait for the conditions that have not been reported.
+                    arm();
+                    if (pending == null) {
+                        // Another condition was already met, so the new aggregate has fired too.
+                        return aggregate;
+                    }
                 }
+                CompletableFuture<Object> fresh = new CompletableFuture<>();
                 pending.add(fresh);
+                return fresh;
             }
-            return fresh;
+        }
+
+        /**
+         * True if the condition of the given type has been reported as met.
+         *
+         * @param type the type of condition
+         * @return true if the condition is met
+         */
+        public boolean isMet(Condition.ConditionType type) {
+            synchronized (lock) {
+                return reported.contains(type);
+            }
+        }
+
+        /**
+         * Closes the condition of the given type, if there is one, and puts the replacement in its place.
+         *
+         * @param type the type of condition
+         * @param replacement the new condition, or null to leave no condition of that type
+         */
+        public void replace(Condition.ConditionType type, Condition replacement) {
+            synchronized (lock) {
+                Condition old = conditions.remove(type);
+                if (old != null) {
+                    old.close();
+                }
+                reported.remove(type);
+                if (replacement != null) {
+                    conditions.put(type, replacement);
+                }
+                arm();
+            }
         }
 
         public void inform(FDv2SourceResult result) {
-            conditions.forEach(c -> c.inform(result));
+            synchronized (lock) {
+                conditions.values().forEach(c -> c.inform(result));
+            }
         }
 
         @Override
         public void close() {
-            conditions.forEach(Condition::close);
             synchronized (lock) {
+                conditions.values().forEach(Condition::close);
                 if (pending != null) {
                     pending.clear();
                 }
