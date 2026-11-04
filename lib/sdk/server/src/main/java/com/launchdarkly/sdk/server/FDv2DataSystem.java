@@ -2,6 +2,7 @@ package com.launchdarkly.sdk.server;
 
 import com.google.common.collect.ImmutableList;
 import com.launchdarkly.logging.LDLogger;
+import com.launchdarkly.logging.LogValues;
 import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.datasources.SelectorSource;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
@@ -15,6 +16,7 @@ import com.launchdarkly.sdk.server.subsystems.DataSourceBuildInputs;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
 import com.launchdarkly.sdk.server.subsystems.LoggingConfiguration;
 import com.launchdarkly.sdk.server.subsystems.DataSystemConfiguration;
+import com.launchdarkly.sdk.server.subsystems.OverrideSource;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -34,6 +36,15 @@ final class FDv2DataSystem implements DataSystem, Closeable {
   private final FlagChangeNotifier flagChanged;
   private final DataSourceStatusProvider dataSourceStatusProvider;
   private final DataStoreStatusProvider dataStoreStatusProvider;
+  private final LDLogger logger;
+  // The following are non-null only when an override source is configured. The layer holds the
+  // override entries. The overlay serves them in preference to the store's data at the store read
+  // boundary. The source populates the layer at runtime. None of them take part in
+  // initialization or data source status.
+  private final OverrideLayer overrideLayer;
+  private final OverrideSinkImpl overrideSink;
+  // Null after the source failed to start or was closed.
+  private volatile OverrideSource overrideSource;
   private boolean disposed = false;
 
   private FDv2DataSystem(
@@ -41,14 +52,29 @@ final class FDv2DataSystem implements DataSystem, Closeable {
     DataSource dataSource,
     DataSourceStatusProvider dataSourceStatusProvider,
     DataStoreStatusProvider dataStoreStatusProvider,
-    FlagChangeNotifier flagChanged
+    FlagChangeNotifier flagChanged,
+    EventBroadcasterImpl<FlagChangeListener, FlagChangeEvent> flagChangeBroadcaster,
+    OverrideSource overrideSource,
+    LDLogger logger
   ) {
     this.store = store;
     this.dataSource = dataSource;
     this.dataStoreStatusProvider = dataStoreStatusProvider;
     this.dataSourceStatusProvider = dataSourceStatusProvider;
     this.flagChanged = flagChanged;
-    this.readOnlyStore = new ReadonlyStoreFacade(store);
+    this.logger = logger;
+    ReadOnlyStore baseStore = new ReadonlyStoreFacade(store);
+    this.overrideSource = overrideSource;
+    if (overrideSource == null) {
+      this.overrideLayer = null;
+      this.overrideSink = null;
+      this.readOnlyStore = baseStore;
+    } else {
+      this.overrideLayer = new OverrideLayer();
+      this.overrideSink = new OverrideSinkImpl(overrideLayer, baseStore, flagChangeBroadcaster,
+          logger.subLogger(Loggers.DATA_SOURCE_LOGGER_NAME));
+      this.readOnlyStore = new OverrideOverlayStore(baseStore, overrideLayer);
+    }
   }
 
   private static class FactoryWrapper<TDataSource> implements FDv2DataSource.DataSourceFactory<TDataSource> {
@@ -187,13 +213,33 @@ final class FDv2DataSystem implements DataSystem, Closeable {
 
     FlagChangeNotifier flagChanged = new FlagChangedFacade(dataSourceUpdates);
 
-    return new FDv2DataSystem(
+    // The override source is built like any other component. Invalid configuration fails here, the
+    // same way an invalid data source or data store configuration fails. An offline client starts
+    // no data sources and no override source.
+    OverrideSource overrideSource = null;
+    if (dataSystemConfiguration.getOverrideSource() != null) {
+      if (config.offline) {
+        logger.warn("Offline mode is enabled; the override source is not started and no overrides are served");
+      } else {
+        overrideSource = dataSystemConfiguration.getOverrideSource().build(clientContext);
+      }
+    }
+
+    FDv2DataSystem system = new FDv2DataSystem(
       store,
       dataSource,
       dataSourceStatusProvider,
       dataStoreStatusProvider,
-      flagChanged
+      flagChanged,
+      flagChangeBroadcaster,
+      overrideSource,
+      logger
     );
+    if (system.overrideLayer != null) {
+      // A LaunchDarkly change must also notify the flags whose overrides depend on it.
+      dataSourceUpdates.setExternalDependencies(system.overrideLayer);
+    }
+    return system;
   }
 
   @Override
@@ -203,6 +249,27 @@ final class FDv2DataSystem implements DataSystem, Closeable {
 
   @Override
   public Future<Void> start() {
+    if (overrideSource != null) {
+      // The source starts before the data source, so a source that loads synchronously has its
+      // overrides in place before the client begins evaluating. Its initial load is part of
+      // starting the client. A source that fails to start does not prevent the client from
+      // operating: the failure is logged, the source is closed, and the client runs without
+      // overrides. The SDK's own file-based source does not throw from start; it logs a failed
+      // load and retries it. A custom source could throw, and an application in an incident is
+      // better served by a client that runs without its overrides than by one that does not start.
+      try {
+        overrideSource.start(overrideSink);
+      } catch (RuntimeException e) {
+        logger.error("Unable to start the override source; the client runs without overrides: {}",
+            LogValues.exceptionSummary(e));
+        logger.debug(LogValues.exceptionTrace(e));
+        closeOverrideSource("Unable to close the override source after it failed to start: {}");
+        // The source may have supplied a snapshot before it failed. Clearing the layer removes it,
+        // so the client runs without overrides as logged, and a late snapshot from the closed
+        // source is ignored.
+        overrideSink.closeAndClear();
+      }
+    }
     return dataSource.start();
   }
 
@@ -231,12 +298,37 @@ final class FDv2DataSystem implements DataSystem, Closeable {
     return store.getEnvironmentId();
   }
 
+  // A custom source can throw from close. That is logged and not thrown, so the rest of the client
+  // still shuts down, or still starts after a failed start.
+  private void closeOverrideSource(String failureMessage) {
+    OverrideSource source = overrideSource;
+    overrideSource = null;
+    try {
+      source.close();
+    } catch (IOException | RuntimeException e) {
+      logger.warn(failureMessage, LogValues.exceptionSummary(e));
+      logger.debug(LogValues.exceptionTrace(e));
+    }
+  }
+
+  @Override
+  public OverrideLayer getOverrideLayer() {
+    return overrideLayer;
+  }
+
   @Override
   public void close() throws IOException {
     if (disposed) {
       return;
     }
     try {
+      if (overrideSource != null) {
+        // The sink stops accepting snapshots first, so a snapshot that the source supplies while it
+        // shuts down cannot update the layer or notify listeners through components that are being
+        // closed.
+        overrideSink.close();
+        closeOverrideSource("Unable to close the override source: {}");
+      }
       dataSource.close();
       store.close();
     } finally {

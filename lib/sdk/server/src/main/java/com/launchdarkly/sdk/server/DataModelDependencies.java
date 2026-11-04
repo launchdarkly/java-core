@@ -218,6 +218,14 @@ abstract class DataModelDependencies {
   /**
    * Maintains a bidirectional dependency graph that can be updated whenever an item has changed.
    */
+  /**
+   * Dependency edges that live outside the LaunchDarkly data, such as those of the override
+   * layer's entries. Given an item, adds it and everything that depends on it through those edges.
+   */
+  interface ExternalDependencies {
+    void addAffectedItems(Set<KindAndKey> itemsOut, KindAndKey item);
+  }
+
   static final class DependencyTracker {
     private final Map<KindAndKey, Set<KindAndKey>> dependenciesFrom = new HashMap<>();
     private final Map<KindAndKey, Set<KindAndKey>> dependenciesTo = new HashMap<>();

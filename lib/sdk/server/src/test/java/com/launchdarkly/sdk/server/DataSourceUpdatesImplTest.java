@@ -41,6 +41,7 @@ import java.util.concurrent.TimeUnit;
 
 import static com.launchdarkly.sdk.server.DataModel.FEATURES;
 import static com.launchdarkly.sdk.server.DataModel.SEGMENTS;
+import static com.launchdarkly.sdk.server.ModelBuilders.clauseMatchingSegment;
 import static com.launchdarkly.sdk.server.ModelBuilders.flagBuilder;
 import static com.launchdarkly.sdk.server.ModelBuilders.prerequisite;
 import static com.launchdarkly.sdk.server.ModelBuilders.ruleBuilder;
@@ -1052,5 +1053,34 @@ public class DataSourceUpdatesImplTest {
     // PersistentDataStoreWrapperTest), not here.
     updates.apply(new ChangeSet<>(ChangeSetType.Full, Selector.make(2, "state2"), data, null, true));
     assertNull(legacyStore.getEnvironmentId());
+  }
+
+  @Test
+  public void sendsEventsToOverridesThatDependOnAnUpdatedItem() throws Exception {
+    // The override "overridden" matches the LaunchDarkly segment "segment1". The LaunchDarkly flag
+    // "parent" has "overridden" as a prerequisite, so a change to the segment reaches parent through
+    // the override entry: LaunchDarkly data -> override entry -> LaunchDarkly data.
+    DataStore store = inMemoryDataStore();
+    DataSourceUpdatesImpl storeUpdates = makeInstance(store);
+    OverrideLayer layer = new OverrideLayer();
+    layer.setAll(OverrideLayerTest.flagsOnly(flagBuilder("overridden").version(1).on(true)
+        .rules(ruleBuilder().id("r").variation(0).clauses(clauseMatchingSegment("segment1")).build()).build()));
+    storeUpdates.setExternalDependencies(layer);
+    DataBuilder builder = new DataBuilder()
+        .addAny(FEATURES,
+            flagBuilder("parent").version(1).prerequisites(prerequisite("overridden", 0)).build())
+        .addAny(SEGMENTS,
+            segmentBuilder("segment1").version(1).build());
+    storeUpdates.init(builder.build());
+
+    BlockingQueue<FlagChangeEvent> eventSink = new LinkedBlockingQueue<>();
+    flagChangeBroadcaster.register(eventSink::add);
+
+    storeUpdates.upsert(SEGMENTS, "segment1", new ItemDescriptor(2, segmentBuilder("segment1").version(2).build()));
+    expectEvents(eventSink, "overridden", "parent");
+
+    // An item nothing references notifies no flag.
+    storeUpdates.upsert(SEGMENTS, "other", new ItemDescriptor(1, segmentBuilder("other").version(1).build()));
+    assertNull(eventSink.poll(200, TimeUnit.MILLISECONDS));
   }
 }
