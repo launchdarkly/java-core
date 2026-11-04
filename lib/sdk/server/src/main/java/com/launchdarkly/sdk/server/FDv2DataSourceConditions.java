@@ -10,6 +10,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 
 /**
  * Container class for FDv2 data source conditions and related types.
@@ -101,13 +102,35 @@ class FDv2DataSourceConditions {
      */
     static class FallbackCondition extends TimedCondition {
         static class Factory extends TimedCondition.Factory {
+            private final long initializationTimeoutSeconds;
+            private final BooleanSupplier dataApplied;
+
             public Factory(ScheduledExecutorService sharedExecutor, long timeout) {
+                this(sharedExecutor, timeout, 0, () -> true);
+            }
+
+            /**
+             * @param initializationTimeoutSeconds how long a synchronizer may go without delivering data, while no
+             *                                     data has been applied yet, before falling back
+             * @param dataApplied                  reports whether the data source has applied any data yet
+             */
+            public Factory(
+                ScheduledExecutorService sharedExecutor,
+                long timeout,
+                long initializationTimeoutSeconds,
+                BooleanSupplier dataApplied
+            ) {
                 super(sharedExecutor, timeout);
+                this.initializationTimeoutSeconds = initializationTimeoutSeconds;
+                this.dataApplied = dataApplied;
             }
 
             @Override
             public Condition build() {
-                return new FallbackCondition(sharedExecutor, timeoutSeconds);
+                if (dataApplied.getAsBoolean()) {
+                    return new FallbackCondition(sharedExecutor, timeoutSeconds);
+                }
+                return new FallbackCondition(sharedExecutor, timeoutSeconds, initializationTimeoutSeconds);
             }
 
             @Override
@@ -118,6 +141,23 @@ class FDv2DataSourceConditions {
 
         public FallbackCondition(ScheduledExecutorService sharedExecutor, long timeoutSeconds) {
             super(sharedExecutor, timeoutSeconds);
+        }
+
+        /**
+         * Creates a fallback condition for use before any data has been applied. A synchronizer that never connects
+         * may not report any status for a long time, so the timer starts immediately instead of waiting for an
+         * interruption. Receiving a change set cancels it.
+         */
+        public FallbackCondition(
+            ScheduledExecutorService sharedExecutor,
+            long timeoutSeconds,
+            long initializationTimeoutSeconds
+        ) {
+            super(sharedExecutor, timeoutSeconds);
+            timerFuture = sharedExecutor.schedule(() -> {
+                resultFuture.complete(this);
+                return null;
+            }, initializationTimeoutSeconds, TimeUnit.SECONDS);
         }
 
         @Override

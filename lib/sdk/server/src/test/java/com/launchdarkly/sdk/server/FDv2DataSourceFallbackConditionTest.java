@@ -121,6 +121,47 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     }
 
     @Test
+    public void initializationTimerCompletesResultFutureWithoutStatus() throws Exception {
+        executor = Executors.newScheduledThreadPool(1);
+        FallbackCondition condition = new FallbackCondition(executor, 120, 1);
+
+        CompletableFuture<Condition> resultFuture = condition.execute();
+        assertFalse(resultFuture.isDone());
+
+        assertSame(condition, resultFuture.get(2, TimeUnit.SECONDS));
+    }
+
+    @Test
+    public void changeSetCancelsInitializationTimer() throws Exception {
+        executor = Executors.newScheduledThreadPool(1);
+        FallbackCondition condition = new FallbackCondition(executor, 120, 1);
+
+        CompletableFuture<Condition> resultFuture = condition.execute();
+        condition.inform(FDv2SourceResult.changeSet(makeChangeSet(), false));
+
+        Thread.sleep(1500);
+
+        assertFalse(resultFuture.isDone());
+    }
+
+    @Test
+    public void factoryOnlyUsesInitializationTimerBeforeDataIsApplied() throws Exception {
+        executor = Executors.newScheduledThreadPool(1);
+        java.util.concurrent.atomic.AtomicBoolean dataApplied = new java.util.concurrent.atomic.AtomicBoolean(false);
+        FallbackCondition.Factory factory = new FallbackCondition.Factory(executor, 120, 1, dataApplied::get);
+
+        Condition beforeData = factory.build();
+        dataApplied.set(true);
+        Condition afterData = factory.build();
+
+        assertSame(beforeData, beforeData.execute().get(2, TimeUnit.SECONDS));
+        assertFalse(afterData.execute().isDone());
+
+        beforeData.close();
+        afterData.close();
+    }
+
+    @Test
     public void changeSetWithoutActiveTimerDoesNothing() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
         FallbackCondition condition = new FallbackCondition(executor, 1);
