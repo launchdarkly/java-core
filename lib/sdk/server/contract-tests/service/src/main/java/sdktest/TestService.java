@@ -21,7 +21,7 @@ import sdktest.Representations.CreateInstanceParams;
 import sdktest.Representations.Status;
 
 public class TestService {
-  private static final int PORT = 8000;
+  private static final int DEFAULT_PORT = 8000;
   private static final String[] CAPABILITIES = new String[]{
     "all-flags-client-side-only",
     "all-flags-details-only-for-tracked-flags",
@@ -47,7 +47,8 @@ public class TestService {
     "fdv1-fallback",
     "instance-id",
     "retry-conformance-fdv1-streaming",
-    "retry-conformance-fdv1-polling"
+    "retry-conformance-fdv1-polling",
+    "flag-overrides"
   };
 
   static final Gson gson = new GsonBuilder().serializeNulls().create();
@@ -83,10 +84,15 @@ public class TestService {
         .addRegex("POST", Pattern.compile("/clients/(.*)"), ctx -> service.postClientCommand(diableKeepAlive(ctx)))
         .addRegex("DELETE", Pattern.compile("/clients/(.*)"), ctx -> service.deleteClient(diableKeepAlive(ctx)));
 
-    HttpServer server = HttpServer.start(PORT, router);
+    int port = DEFAULT_PORT;
+    String portEnv = System.getenv("PORT");
+    if (portEnv != null && !portEnv.isEmpty()) {
+      port = Integer.parseInt(portEnv);
+    }
+    HttpServer server = HttpServer.start(port, router);
     server.getRecorder().setEnabled(false); // don't accumulate a request log
 
-    System.out.println("Listening on port " + PORT);
+    System.out.println("Listening on port " + port);
 
     // need to explicitly sleep because HttpServer now starts as a daemon thread
     while (true) {

@@ -34,6 +34,21 @@ public abstract class Representations {
     SdkConfigServiceEndpointParams serviceEndpoints;
     SdkConfigHookParams hooks;
     SdkConfigDataSystemParams dataSystem;
+    SdkConfigOverridesParams overrides;
+  }
+
+  /**
+   * Configuration for the SDK's file-based flag overrides (the "flag-overrides" capability).
+   */
+  public static class SdkConfigOverridesParams {
+    /** Absolute paths of the override files, in precedence order. */
+    String[] filePaths;
+    /** "fail" (the default) or "ignore". */
+    String duplicateKeysHandling;
+    /** "polling" or "watching"; null means the SDK default. */
+    String changeDetection;
+    /** The polling interval in milliseconds; the SDK may raise it to its minimum. */
+    Long pollIntervalMs;
   }
   
   public static class SdkConfigStreamParams {
