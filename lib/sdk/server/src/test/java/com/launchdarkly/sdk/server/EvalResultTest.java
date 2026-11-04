@@ -13,6 +13,7 @@ import static com.launchdarkly.sdk.EvaluationReason.ErrorKind.WRONG_TYPE;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.sameInstance;
 
 @SuppressWarnings("javadoc")
@@ -134,6 +135,52 @@ public class EvalResultTest {
     assertThat(r1.getAnyType(), sameInstance(r.getAnyType()));
   }
   
+  @Test
+  public void overrideAffectedFollowsTheReason() {
+    EvalResult r = EvalResult.of(SOME_VALUE, SOME_VARIATION, SOME_REASON);
+    assertThat(r.isOverrideAffected(), is(false));
+    assertThat(EvalResult.of(SOME_VALUE, SOME_VARIATION, SOME_REASON.withOverrideAffected(true)).isOverrideAffected(),
+        is(true));
+    assertThat(EvalResult.error(EvaluationReason.ErrorKind.MALFORMED_FLAG).isOverrideAffected(), is(false));
+  }
+
+  @Test
+  public void withOverrideAffected() {
+    EvalResult r = EvalResult.of(SOME_VALUE, SOME_VARIATION, SOME_REASON);
+
+    // Unchanged value keeps the same instance, so shared precomputed results stay shared.
+    assertThat(r.withOverrideAffected(false), sameInstance(r));
+
+    EvalResult marked = r.withOverrideAffected(true);
+    assertThat(marked, not(sameInstance(r)));
+    assertThat(marked.isOverrideAffected(), is(true));
+    assertThat(marked.getReason(), equalTo(SOME_REASON.withOverrideAffected(true)));
+    assertThat(marked.getValue(), equalTo(r.getValue()));
+    assertThat(marked.getVariationIndex(), equalTo(r.getVariationIndex()));
+    assertThat(marked.withOverrideAffected(true), sameInstance(marked));
+    assertThat(marked.withOverrideAffected(false), equalTo(r));
+
+    // Every typed view carries the marked reason.
+    assertThat(marked.getAsBoolean().getReason().isOverrideAffected(), is(true));
+    assertThat(marked.getAsInteger().getReason().isOverrideAffected(), is(true));
+    assertThat(marked.getAsDouble().getReason().isOverrideAffected(), is(true));
+    assertThat(marked.getAsString().getReason().isOverrideAffected(), is(true));
+    assertThat(marked.getAnyType().getReason().isOverrideAffected(), is(true));
+
+    // The original is untouched.
+    assertThat(r.isOverrideAffected(), is(false));
+  }
+
+  @Test
+  public void withOverrideAffectedKeepsPrerequisiteRecordsAndForceTracking() {
+    EvalResult r = EvalResult.of(SOME_VALUE, SOME_VARIATION, EvaluationReason.fallthrough(true))
+        .withPrerequisiteEvalRecords(java.util.Collections.singletonList(
+            new PrerequisiteEvalRecord(null, null, EvalResult.of(SOME_VALUE, SOME_VARIATION, SOME_REASON))));
+    EvalResult marked = r.withOverrideAffected(true);
+    assertThat(marked.isForceReasonTracking(), is(true));
+    assertThat(marked.getPrerequisiteEvalRecords(), sameInstance(r.getPrerequisiteEvalRecords()));
+  }
+
   private <T> void testForType(T value, LDValue ldValue, Function<EvalResult, T> getter) {
     assertThat(
         getter.apply(EvalResult.of(EvaluationDetail.fromValue(ldValue, SOME_VARIATION, SOME_REASON))),
