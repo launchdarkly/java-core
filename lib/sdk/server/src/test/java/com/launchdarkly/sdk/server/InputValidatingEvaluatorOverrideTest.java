@@ -167,4 +167,17 @@ public class InputValidatingEvaluatorOverrideTest {
     Map.Entry<String, LDValue> expected = new AbstractMap.SimpleEntry<>("marked", LDValue.of("x"));
     assertEquals(expected.getValue(), state.getFlagValue("marked"));
   }
+
+  @Test
+  public void allFlagsStateMarksTheExceptionOfAnOverrideFlag() {
+    FeatureFlag marked = flagWithPrerequisite("marked").markedAsOverride();
+    FeatureFlag plain = flagWithPrerequisite("plain");
+    FeatureFlagsState state = evaluatorOver(storeFailingOn("prereq", marked, plain))
+        .allFlagsState(BASE_USER, FlagsStateOption.WITH_REASONS);
+
+    assertEquals(ErrorKind.EXCEPTION, state.getFlagReason("marked").getErrorKind());
+    assertTrue(state.getFlagReason("marked").isOverrideAffected());
+    assertEquals(ErrorKind.EXCEPTION, state.getFlagReason("plain").getErrorKind());
+    assertFalse(state.getFlagReason("plain").isOverrideAffected());
+  }
 }
