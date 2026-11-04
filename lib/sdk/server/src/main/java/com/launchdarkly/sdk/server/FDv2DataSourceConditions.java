@@ -7,10 +7,12 @@ import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import java.io.Closeable;
 import java.io.IOException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 /**
  * Container class for FDv2 data source conditions and related types.
@@ -32,6 +34,7 @@ class FDv2DataSourceConditions {
         enum ConditionType {
             FALLBACK,
             RECOVERY,
+            UNPARK,
         }
 
         CompletableFuture<Condition> execute();
@@ -44,6 +47,11 @@ class FDv2DataSourceConditions {
     }
 
     interface ConditionFactory {
+        /**
+         * Builds the condition.
+         *
+         * @return the condition, or null if the condition does not apply
+         */
         Condition build();
 
         Condition.ConditionType getType();
@@ -179,6 +187,56 @@ class FDv2DataSourceConditions {
         @Override
         public ConditionType getType() {
             return ConditionType.RECOVERY;
+        }
+    }
+
+    /**
+     * This condition is met when its delay has passed.
+     */
+    static class UnparkCondition extends TimedCondition {
+        /**
+         * Builds a condition that is met at the earliest unpark time, or no condition if no synchronizer is parked.
+         */
+        static class Factory implements ConditionFactory {
+            private final ScheduledExecutorService sharedExecutor;
+            private final Supplier<Instant> earliestUnparkTime;
+
+            public Factory(ScheduledExecutorService sharedExecutor, Supplier<Instant> earliestUnparkTime) {
+                this.sharedExecutor = sharedExecutor;
+                this.earliestUnparkTime = earliestUnparkTime;
+            }
+
+            @Override
+            public Condition build() {
+                Instant unparkTime = earliestUnparkTime.get();
+                if (unparkTime == null) {
+                    return null;
+                }
+                return new UnparkCondition(sharedExecutor, Duration.between(Instant.now(), unparkTime));
+            }
+
+            @Override
+            public ConditionType getType() {
+                return ConditionType.UNPARK;
+            }
+        }
+
+        public UnparkCondition(ScheduledExecutorService sharedExecutor, Duration delay) {
+            super(sharedExecutor, delay);
+            timerFuture = sharedExecutor.schedule(() -> {
+                resultFuture.complete(this);
+                return null;
+            }, delay.toMillis(), TimeUnit.MILLISECONDS);
+        }
+
+        @Override
+        public void inform(FDv2SourceResult sourceResult) {
+            // Time-based.
+        }
+
+        @Override
+        public ConditionType getType() {
+            return ConditionType.UNPARK;
         }
     }
 }

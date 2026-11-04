@@ -791,6 +791,44 @@ public class FDv2DataSourceTest extends BaseTest {
     }
 
     @Test
+    public void resetThresholdMetReturnsParkDelayToBase() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        AtomicInteger buildCount = new AtomicInteger();
+        BlockingQueue<Long> buildTimes = new LinkedBlockingQueue<>();
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                buildTimes.offer(System.nanoTime());
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                if (buildCount.incrementAndGet() == 3) {
+                    // The third instance reports that it met its reset threshold before it fails.
+                    results.add(FDv2SourceResult.changeSet(makeChangeSet(true), false).withResetThresholdMet());
+                }
+                // Every instance fails with a terminal error.
+                results.add(makeTerminalErrorResult());
+                return new MockQueuedSynchronizer(results);
+            }
+        );
+
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor,
+            Duration.ofSeconds(120), Duration.ofSeconds(300), Duration.ofMillis(100), Duration.ofSeconds(10), Duration.ofMillis(10));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system, and record when the synchronizer is built for the third and fourth times.
+        dataSource.start();
+        buildTimes.poll(5, TimeUnit.SECONDS);
+        buildTimes.poll(5, TimeUnit.SECONDS);
+        Long thirdBuild = buildTimes.poll(5, TimeUnit.SECONDS);
+        Long fourthBuild = buildTimes.poll(5, TimeUnit.SECONDS);
+
+        // After the reset, the park is at most the base delay. Without the reset, it would be at least twice the base.
+        assertNotNull(fourthBuild);
+        long parkMillis = TimeUnit.NANOSECONDS.toMillis(fourthBuild - thirdBuild);
+        assertTrue("park lasted " + parkMillis + "ms", parkMillis < 200);
+    }
+
+    @Test
     public void allSynchronizersParkedRestartsAfterEarliestUnparkTime() throws Exception {
         executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();

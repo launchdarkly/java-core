@@ -75,6 +75,18 @@ class SourceManager implements Closeable {
     }
 
     /**
+     * Stops parking every synchronizer whose unpark time has arrived.
+     * <p>
+     * <b>Note:</b> This is an internal method that must be called while holding activeSourceLock.
+     */
+    private void unparkExpiredSynchronizers() {
+        Instant now = Instant.now();
+        for (SynchronizerFactoryWithState factory : synchronizers) {
+            factory.unparkIfExpired(now);
+        }
+    }
+
+    /**
      * Get the next synchronizer to use. This operates based on tracking the index of the currently active synchronizer,
      * which will loop through all available synchronizers handling interruptions. Then a non-prime synchronizer recovers
      * the source index will be reset, and we start at the beginning.
@@ -89,7 +101,7 @@ class SourceManager implements Closeable {
      */
     private SynchronizerFactoryWithState getNextAvailableSynchronizer() {
         SynchronizerFactoryWithState factory = null;
-        Instant now = Instant.now();
+        unparkExpiredSynchronizers();
 
         int visited = 0;
         while(visited < synchronizers.size()) {
@@ -103,7 +115,7 @@ class SourceManager implements Closeable {
             }
 
             SynchronizerFactoryWithState candidate = synchronizers.get(synchronizerIndex);
-            if (candidate.isEligible(now)) {
+            if (candidate.isEligible()) {
                 factory = candidate;
                 break;
             }
@@ -186,6 +198,12 @@ class SourceManager implements Closeable {
         }
     }
 
+    public void resetCurrentSynchronizerParkCount() {
+        synchronized (activeSourceLock) {
+            currentSynchronizerFactory.resetParkCount();
+        }
+    }
+
     public void parkCurrentSynchronizer(Instant unparkTime) {
         synchronized (activeSourceLock) {
             currentSynchronizerFactory.park(unparkTime);
@@ -195,7 +213,7 @@ class SourceManager implements Closeable {
     /**
      * The earliest unpark time of the available synchronizers.
      *
-     * @return the earliest unpark time, or null if no available synchronizer was ever parked
+     * @return the earliest unpark time, or null if no available synchronizer is parked
      */
     public Instant getEarliestUnparkTime() {
         synchronized (activeSourceLock) {

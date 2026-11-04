@@ -13,6 +13,7 @@ import org.junit.Test;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -23,7 +24,9 @@ import java.util.concurrent.TimeUnit;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.sameInstance;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -136,7 +139,7 @@ public class FDv2DataSourceConditionsAggregateTest {
     @Test
     public void getFutureFailsExceptionallyWhenAggregateFailsExceptionally()
             throws Exception {
-        ManualCondition manualCondition = new ManualCondition();
+        ManualCondition manualCondition = new ManualCondition(ConditionType.FALLBACK);
         try (FDv2DataSource.Conditions conditions =
                  new FDv2DataSource.Conditions(Collections.singletonList(manualCondition))) {
             // Future requested BEFORE the exceptional completion.
@@ -156,22 +159,103 @@ public class FDv2DataSourceConditionsAggregateTest {
     }
 
     /**
-     * getFuture() called after the aggregate has already fired returns an
-     * already-completed future synchronously (the fast path).
+     * After getFuture() reports a met condition, the next getFuture() waits for another condition.
      */
     @Test
-    public void getFutureAfterAggregateFiresReturnsCompletedFuture() throws Exception {
-        // RecoveryCondition arms its timer in the constructor and fires after
-        // the configured timeout. With timeout=0 it fires near-immediately.
-        Condition recovery = new RecoveryCondition(executor, Duration.ofSeconds(0));
+    public void getFutureAfterConditionIsReportedWaitsForAnotherCondition() throws Exception {
+        ManualCondition fallback = new ManualCondition(ConditionType.FALLBACK);
+        ManualCondition recovery = new ManualCondition(ConditionType.RECOVERY);
         try (FDv2DataSource.Conditions conditions =
-                 new FDv2DataSource.Conditions(Collections.singletonList(recovery))) {
-            // Drain a future to confirm the aggregate has fired.
-            conditions.getFuture().get(2, TimeUnit.SECONDS);
+                 new FDv2DataSource.Conditions(Arrays.asList(fallback, recovery))) {
+            // Meet the fallback condition.
+            CompletableFuture<Object> first = conditions.getFuture();
+            fallback.future.complete(fallback);
 
-            CompletableFuture<Object> postFire = conditions.getFuture();
-            assertTrue("post-fire getFuture() should be already complete", postFire.isDone());
-            assertNotNull(postFire.get(0, TimeUnit.SECONDS));
+            // The first future reports the fallback condition, and the next future waits.
+            assertSame(fallback, first.get(2, TimeUnit.SECONDS));
+            CompletableFuture<Object> second = conditions.getFuture();
+            assertFalse(second.isDone());
+
+            // Meet the recovery condition.
+            recovery.future.complete(recovery);
+
+            // The second future reports the recovery condition.
+            assertSame(recovery, second.get(2, TimeUnit.SECONDS));
+        }
+    }
+
+    /**
+     * isMet() is true only for a condition that the aggregate has reported.
+     */
+    @Test
+    public void isMetIsTrueOnlyForAReportedCondition() throws Exception {
+        ManualCondition fallback = new ManualCondition(ConditionType.FALLBACK);
+        try (FDv2DataSource.Conditions conditions =
+                 new FDv2DataSource.Conditions(Collections.singletonList(fallback))) {
+            // Before the condition is met, it is not reported.
+            assertFalse(conditions.isMet(ConditionType.FALLBACK));
+
+            // Meet the condition, and wait for the aggregate to report it.
+            CompletableFuture<Object> future = conditions.getFuture();
+            fallback.future.complete(fallback);
+            future.get(2, TimeUnit.SECONDS);
+
+            // The condition is reported, and a type with no condition is not.
+            assertTrue(conditions.isMet(ConditionType.FALLBACK));
+            assertFalse(conditions.isMet(ConditionType.RECOVERY));
+        }
+    }
+
+    /**
+     * replace() closes the old condition, and the next future waits for the replacement.
+     */
+    @Test
+    public void replaceWaitsForTheReplacementCondition() throws Exception {
+        ManualCondition oldFallback = new ManualCondition(ConditionType.FALLBACK);
+        ManualCondition newFallback = new ManualCondition(ConditionType.FALLBACK);
+        try (FDv2DataSource.Conditions conditions =
+                 new FDv2DataSource.Conditions(Collections.singletonList(oldFallback))) {
+            // Meet the old condition, and wait for the aggregate to report it.
+            CompletableFuture<Object> first = conditions.getFuture();
+            oldFallback.future.complete(oldFallback);
+            first.get(2, TimeUnit.SECONDS);
+
+            // Replace the old condition.
+            conditions.replace(ConditionType.FALLBACK, newFallback);
+
+            // The old condition is closed, the type is no longer met, and the next future waits.
+            assertTrue(oldFallback.closed);
+            assertFalse(conditions.isMet(ConditionType.FALLBACK));
+            CompletableFuture<Object> second = conditions.getFuture();
+            assertFalse(second.isDone());
+
+            // Meet the replacement.
+            newFallback.future.complete(newFallback);
+
+            // The next future reports the replacement.
+            assertSame(newFallback, second.get(2, TimeUnit.SECONDS));
+        }
+    }
+
+    /**
+     * replace() with null closes the old condition and leaves no condition of that type.
+     */
+    @Test
+    public void replaceWithNullLeavesNoCondition() throws Exception {
+        ManualCondition fallback = new ManualCondition(ConditionType.FALLBACK);
+        try (FDv2DataSource.Conditions conditions =
+                 new FDv2DataSource.Conditions(Collections.singletonList(fallback))) {
+            // Meet the condition, and wait for the aggregate to report it.
+            CompletableFuture<Object> first = conditions.getFuture();
+            fallback.future.complete(fallback);
+            first.get(2, TimeUnit.SECONDS);
+
+            // Replace the condition with nothing.
+            conditions.replace(ConditionType.FALLBACK, null);
+
+            // The condition is closed, and the next future waits.
+            assertTrue(fallback.closed);
+            assertFalse(conditions.getFuture().isDone());
         }
     }
 
@@ -215,6 +299,12 @@ public class FDv2DataSourceConditionsAggregateTest {
     private static final class ManualCondition
             implements Condition {
         final CompletableFuture<Condition> future = new CompletableFuture<>();
+        private final ConditionType type;
+        volatile boolean closed = false;
+
+        ManualCondition(ConditionType type) {
+            this.type = type;
+        }
 
         @Override
         public CompletableFuture<Condition> execute() {
@@ -229,11 +319,12 @@ public class FDv2DataSourceConditionsAggregateTest {
         @Override
         public void close() {
             // No timer to cancel.
+            closed = true;
         }
 
         @Override
         public ConditionType getType() {
-            return ConditionType.FALLBACK;
+            return type;
         }
     }
 }
