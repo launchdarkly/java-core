@@ -312,8 +312,9 @@ public class FDv2DataSourceConditionsAggregateTest {
         }
 
         @Override
-        public void inform(FDv2SourceResult sourceResult) {
+        public boolean inform(FDv2SourceResult sourceResult) {
             // Manually controlled; no auto-trigger from inform.
+            return false;
         }
 
         @Override

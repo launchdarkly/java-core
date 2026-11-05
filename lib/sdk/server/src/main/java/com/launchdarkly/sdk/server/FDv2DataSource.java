@@ -61,7 +61,8 @@ class FDv2DataSource implements DataSource {
 
     private final SourceManager sourceManager;
 
-    private final List<ConditionFactory> conditionFactories;
+    private final Map<Condition.ConditionType, ConditionFactory> conditionFactories =
+        new EnumMap<>(Condition.ConditionType.class);
 
     private final Duration parkInitialDelay;
 
@@ -156,14 +157,12 @@ class FDv2DataSource implements DataSource {
         this.dataSourceUpdates = dataSourceUpdates;
         this.threadPriority = threadPriority;
         this.logger = logger;
-        this.conditionFactories = new ArrayList<>();
-        this.conditionFactories.add(new FallbackCondition.Factory(sharedExecutor, fallbackTimeout));
-        this.conditionFactories.add(new RecoveryCondition.Factory(sharedExecutor, recoveryTimeout));
-        // getEarliestUnparkTime synchronizes on the lock of the source manager, so it is safe to call from the thread
-        // that builds the conditions.
-        // TODO: Decide whether to keep this guarantee, or to require that conditions are built only on the data
-        // source thread.
-        this.conditionFactories.add(new UnparkCondition.Factory(sharedExecutor, sourceManager::getEarliestUnparkTime));
+        this.conditionFactories.put(
+            Condition.ConditionType.FALLBACK, new FallbackCondition.Factory(sharedExecutor, fallbackTimeout));
+        this.conditionFactories.put(
+            Condition.ConditionType.RECOVERY, new RecoveryCondition.Factory(sharedExecutor, recoveryTimeout));
+        this.conditionFactories.put(
+            Condition.ConditionType.UNPARK, new UnparkCondition.Factory(sharedExecutor, sourceManager::getEarliestUnparkTime));
         this.parkInitialDelay = parkInitialDelay;
         this.parkMaxDelay = parkMaxDelay;
         this.failoverDelay = failoverDelay;
@@ -376,13 +375,24 @@ class FDv2DataSource implements DataSource {
         }
         if (isPrimeSynchronizer) {
             // If there isn't a synchronizer to recover to, then don't add and recovery conditions.
-            return conditionFactories.stream()
+            return conditionFactories.values().stream()
                 .filter((ConditionFactory factory) -> factory.getType() != Condition.ConditionType.RECOVERY)
                 .map(ConditionFactory::build).filter(Objects::nonNull).collect(Collectors.toList());
         }
         // The synchronizer can both fall back and recover.
-        return conditionFactories.stream()
+        return conditionFactories.values().stream()
             .map(ConditionFactory::build).filter(Objects::nonNull).collect(Collectors.toList());
+    }
+
+    /**
+     * Builds the condition of the given type.
+     *
+     * @param type the type of condition
+     * @return the condition, or null if it does not apply
+     */
+    private Condition buildCondition(Condition.ConditionType type) {
+        ConditionFactory factory = conditionFactories.get(type);
+        return factory == null ? null : factory.build();
     }
 
     /**
@@ -410,37 +420,66 @@ class FDv2DataSource implements DataSource {
                     boolean running = true;
 
                     try (Conditions conditions = new Conditions(getConditions())) {
+                        // A condition doesn't necessarily stop the current synchronizer, so keep track of its pending result.
+                        CompletableFuture<FDv2SourceResult> nextResultFuture = null;
                         while (running) {
-                            CompletableFuture<FDv2SourceResult> nextResultFuture = synchronizer.next();
+                            if (nextResultFuture == null) {
+                                nextResultFuture = synchronizer.next();
+                            }
 
-                            // The conditionsFuture will complete if any condition is met. Meeting any condition means we will
-                            // switch to a different synchronizer.
+                            // The conditions future completes when a condition is met.
                             Object res = CompletableFuture.anyOf(conditions.getFuture(), nextResultFuture).get();
 
                             if (res instanceof Condition) {
-                                Condition c = (Condition) res;
-                                switch (c.getType()) {
-                                    case FALLBACK:
-                                        logger.info(
-                                            "Fallback condition met, falling back from synchronizer '{}'.",
-                                            synchronizer.name()
-                                        );
-                                        break;
-                                    case RECOVERY:
-                                        // For recovery, we will start at the first available synchronizer.
-                                        // So we reset the source index, and finding the source will start at the beginning.
-                                        sourceManager.resetSourceIndex();
-                                        logger.info(
-                                            "Recovery condition met, moving from synchronizer '{}' to primary synchronizer.",
-                                            synchronizer.name()
-                                        );
-                                        break;
+                                Condition.ConditionType metType = ((Condition) res).getType();
+                                // Clear expired unpark times before checking which synchronizers are available.
+                                sourceManager.unparkExpiredSynchronizers();
+                                if (metType == Condition.ConditionType.UNPARK) {
+                                    // Replace the unpark condition with one for the next unpark.
+                                    conditions.replace(
+                                        Condition.ConditionType.UNPARK,
+                                        buildCondition(Condition.ConditionType.UNPARK));
                                 }
-                                // A running synchronizer will only have fallback and recovery conditions that it can act on.
-                                // So, if there are no synchronizers to recover to or fallback to, then we will not have
-                                // those conditions.
-                                break;
+
+                                // An unpark does not switch synchronizers by itself, but other conditions might already
+                                // be met. Check all of them before deciding whether to switch. Recovery takes precedence.
+                                if (conditions.isMet(Condition.ConditionType.RECOVERY)
+                                    && sourceManager.hasMorePreferredAvailableSynchronizer()) {
+                                    // For recovery, we will start at the first available synchronizer.
+                                    // So we reset the source index, and finding the source will start at the beginning.
+                                    sourceManager.resetSourceIndex();
+                                    logger.info(
+                                        "Recovery condition met, moving from synchronizer '{}' to primary synchronizer.",
+                                        synchronizer.name()
+                                    );
+                                    break;
+                                }
+                                if (conditions.isMet(Condition.ConditionType.FALLBACK)
+                                    && sourceManager.hasOtherAvailableSynchronizer()) {
+                                    logger.info(
+                                        "Fallback condition met, falling back from synchronizer '{}'.",
+                                        synchronizer.name()
+                                    );
+                                    break;
+                                }
+
+                                // Keep running this synchronizer.
+                                if (metType == Condition.ConditionType.FALLBACK) {
+                                    logger.info(
+                                        "Fallback condition met, but no other synchronizer is available; continuing with synchronizer '{}'.",
+                                        synchronizer.name()
+                                    );
+                                } else if (metType == Condition.ConditionType.RECOVERY) {
+                                    logger.info(
+                                        "Recovery condition met, but no more-preferred synchronizer is available; continuing with synchronizer '{}'.",
+                                        synchronizer.name()
+                                    );
+                                }
+                                continue;
                             }
+
+                            // The pending result has arrived.
+                            nextResultFuture = null;
 
                             if (!(res instanceof FDv2SourceResult)) {
                                 logger.error("Unexpected result type from synchronizer: {}", res.getClass().getName());
@@ -448,7 +487,10 @@ class FDv2DataSource implements DataSource {
                             }
 
                             try (FDv2SourceResult result = (FDv2SourceResult) res) {
-                                conditions.inform(result);
+                                Set<Condition.ConditionType> typesToReplace = conditions.inform(result);
+                                for (Condition.ConditionType type : typesToReplace) {
+                                    conditions.replace(type, buildCondition(type));
+                                }
 
                                 if (result.isResetThresholdMet()) {
                                     sourceManager.resetCurrentSynchronizerParkCount();
@@ -923,9 +965,21 @@ class FDv2DataSource implements DataSource {
             }
         }
 
-        public void inform(FDv2SourceResult result) {
+        /**
+         * Informs the conditions of a result from the synchronizer.
+         *
+         * @param result the result
+         * @return the types of the conditions that should be replaced with new ones
+         */
+        public Set<Condition.ConditionType> inform(FDv2SourceResult result) {
             synchronized (lock) {
-                conditions.values().forEach(c -> c.inform(result));
+                Set<Condition.ConditionType> typesToReplace = EnumSet.noneOf(Condition.ConditionType.class);
+                for (Condition condition : conditions.values()) {
+                    if (condition.inform(result)) {
+                        typesToReplace.add(condition.getType());
+                    }
+                }
+                return typesToReplace;
             }
         }
 

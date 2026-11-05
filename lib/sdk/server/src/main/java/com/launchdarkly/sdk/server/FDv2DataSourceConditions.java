@@ -39,7 +39,13 @@ class FDv2DataSourceConditions {
 
         CompletableFuture<Condition> execute();
 
-        void inform(FDv2SourceResult sourceResult);
+        /**
+         * Informs the condition of a result from the synchronizer.
+         *
+         * @param sourceResult the result
+         * @return true if the condition should be replaced with a new one
+         */
+        boolean inform(FDv2SourceResult sourceResult);
 
         void close();
 
@@ -130,12 +136,10 @@ class FDv2DataSourceConditions {
         }
 
         @Override
-        public void inform(FDv2SourceResult sourceResult) {
+        public boolean inform(FDv2SourceResult sourceResult) {
             if (sourceResult.getResultType() == SourceResultType.CHANGE_SET) {
-                if (timerFuture != null) {
-                    timerFuture.cancel(false);
-                    timerFuture = null;
-                }
+                // The synchronizer is healthy. If the timer has started, the condition must start over.
+                return timerFuture != null;
             }
             if (sourceResult.getResultType() == SourceResultType.STATUS && sourceResult.getStatus().getState() == SourceSignal.INTERRUPTED) {
                 if (timerFuture == null) {
@@ -145,6 +149,7 @@ class FDv2DataSourceConditions {
                     }, timeout.toMillis(), TimeUnit.MILLISECONDS);
                 }
             }
+            return false;
         }
 
         @Override
@@ -180,8 +185,9 @@ class FDv2DataSourceConditions {
         }
 
         @Override
-        public void inform(FDv2SourceResult sourceResult) {
-            // Time-based recovery.
+        public boolean inform(FDv2SourceResult sourceResult) {
+            // Recovery is time-based, so a result never requires a new condition.
+            return false;
         }
 
         @Override
@@ -230,8 +236,9 @@ class FDv2DataSourceConditions {
         }
 
         @Override
-        public void inform(FDv2SourceResult sourceResult) {
-            // Time-based.
+        public boolean inform(FDv2SourceResult sourceResult) {
+            // An unpark is time-based, so a result never requires a new condition.
+            return false;
         }
 
         @Override

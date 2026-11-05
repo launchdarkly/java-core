@@ -77,14 +77,15 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
         assertFalse(resultFuture.isDone());
 
         // Inform with INTERRUPTED status
-        condition.inform(
+        boolean replace = condition.inform(
             FDv2SourceResult.interrupted(
                 new DataSourceStatusProvider.ErrorInfo(DataSourceStatusProvider.ErrorKind.NETWORK_ERROR, 500, null, Instant.now()),
                 false
             )
         );
 
-        // Future should still not be done immediately
+        // The condition does not ask to be replaced, and the future should still not be done immediately
+        assertFalse(replace);
         assertFalse(resultFuture.isDone());
 
         // Wait for timeout to fire
@@ -96,11 +97,9 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     }
 
     @Test
-    public void changeSetCancelsActiveTimer() throws Exception {
+    public void changeSetWithActiveTimerRequestsReplacement() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
         FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(1));
-
-        CompletableFuture<Condition> resultFuture = condition.execute();
 
         // Start timer with INTERRUPTED
         condition.inform(
@@ -110,19 +109,16 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
             )
         );
 
-        // Cancel timer with CHANGE_SET
+        // Inform with CHANGE_SET while the timer is running
         ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = makeChangeSet();
-        condition.inform(FDv2SourceResult.changeSet(changeSet, false));
+        boolean replace = condition.inform(FDv2SourceResult.changeSet(changeSet, false));
 
-        // Wait longer than the timeout period
-        Thread.sleep(1500);
-
-        // Future should still not be complete (timer was cancelled)
-        assertFalse(resultFuture.isDone());
+        // The condition asks to be replaced
+        assertTrue(replace);
     }
 
     @Test
-    public void changeSetWithoutActiveTimerDoesNothing() throws Exception {
+    public void changeSetWithoutActiveTimerDoesNotRequestReplacement() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
         FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(1));
 
@@ -130,12 +126,10 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
 
         // Inform with CHANGE_SET without starting a timer first
         ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = makeChangeSet();
-        condition.inform(FDv2SourceResult.changeSet(changeSet, false));
+        boolean replace = condition.inform(FDv2SourceResult.changeSet(changeSet, false));
 
-        // Wait to ensure nothing happens
-        Thread.sleep(100);
-
-        // Future should still not be complete
+        // The condition does not ask to be replaced, and is not met
+        assertFalse(replace);
         assertFalse(resultFuture.isDone());
     }
 
@@ -272,41 +266,7 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
     }
 
     @Test
-    public void timerCanBeStartedAfterBeingCancelled() throws Exception {
-        executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(1));
-
-        CompletableFuture<Condition> resultFuture = condition.execute();
-
-        // Start timer
-        condition.inform(
-            FDv2SourceResult.interrupted(
-                new DataSourceStatusProvider.ErrorInfo(DataSourceStatusProvider.ErrorKind.NETWORK_ERROR, 500, null, Instant.now()),
-                false
-            )
-        );
-
-        // Cancel timer with CHANGE_SET
-        ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = makeChangeSet();
-        condition.inform(FDv2SourceResult.changeSet(changeSet, false));
-
-        // Start timer again
-        condition.inform(
-            FDv2SourceResult.interrupted(
-                new DataSourceStatusProvider.ErrorInfo(DataSourceStatusProvider.ErrorKind.NETWORK_ERROR, 500, null, Instant.now()),
-                false
-            )
-        );
-
-        // Wait for second timer to fire
-        Condition result = resultFuture.get(2, TimeUnit.SECONDS);
-
-        assertTrue(resultFuture.isDone());
-        assertSame(condition, result);
-    }
-
-    @Test
-    public void changeSetAfterTimerFiresDoesNotAffectCompletedFuture() throws Exception {
+    public void changeSetAfterTimerFiresRequestsReplacement() throws Exception {
         executor = Executors.newScheduledThreadPool(1);
         FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(1));
 
@@ -327,9 +287,10 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
 
         // Inform with CHANGE_SET after timer has fired
         ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = makeChangeSet();
-        condition.inform(FDv2SourceResult.changeSet(changeSet, false));
+        boolean replace = condition.inform(FDv2SourceResult.changeSet(changeSet, false));
 
-        // Future should remain complete
+        // The condition asks to be replaced, and its future remains complete
+        assertTrue(replace);
         assertTrue(resultFuture.isDone());
     }
 
@@ -365,63 +326,6 @@ public class FDv2DataSourceFallbackConditionTest extends BaseTest {
         CompletableFuture<Condition> second = condition.execute();
 
         assertSame(first, second);
-    }
-
-    @Test
-    public void changeSetDuringTimerExecutionCancelsTimer() throws Exception {
-        executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(1));
-
-        CompletableFuture<Condition> resultFuture = condition.execute();
-
-        // Start timer
-        condition.inform(
-            FDv2SourceResult.interrupted(
-                new DataSourceStatusProvider.ErrorInfo(DataSourceStatusProvider.ErrorKind.NETWORK_ERROR, 500, null, Instant.now()),
-                false
-            )
-        );
-
-        // Wait partway through timeout period
-        Thread.sleep(500);
-
-        // Cancel with CHANGE_SET
-        ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = makeChangeSet();
-        condition.inform(FDv2SourceResult.changeSet(changeSet, false));
-
-        // Wait past the original timeout
-        Thread.sleep(1000);
-
-        // Future should still not be complete
-        assertFalse(resultFuture.isDone());
-    }
-
-    @Test
-    public void multipleChangeSetCallsWithActiveTimerAreHandled() throws Exception {
-        executor = Executors.newScheduledThreadPool(1);
-        FallbackCondition condition = new FallbackCondition(executor, Duration.ofSeconds(1));
-
-        CompletableFuture<Condition> resultFuture = condition.execute();
-
-        // Start timer
-        condition.inform(
-            FDv2SourceResult.interrupted(
-                new DataSourceStatusProvider.ErrorInfo(DataSourceStatusProvider.ErrorKind.NETWORK_ERROR, 500, null, Instant.now()),
-                false
-            )
-        );
-
-        // Cancel with multiple CHANGE_SETs
-        ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = makeChangeSet();
-        condition.inform(FDv2SourceResult.changeSet(changeSet, false));
-        condition.inform(FDv2SourceResult.changeSet(changeSet, false));
-        condition.inform(FDv2SourceResult.changeSet(changeSet, false));
-
-        // Wait longer than timeout
-        Thread.sleep(1500);
-
-        // Future should still not be complete
-        assertFalse(resultFuture.isDone());
     }
 
     @Test

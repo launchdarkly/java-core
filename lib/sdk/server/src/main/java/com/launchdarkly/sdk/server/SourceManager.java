@@ -76,13 +76,13 @@ class SourceManager implements Closeable {
 
     /**
      * Stops parking every synchronizer whose unpark time has arrived.
-     * <p>
-     * <b>Note:</b> This is an internal method that must be called while holding activeSourceLock.
      */
-    private void unparkExpiredSynchronizers() {
-        Instant now = Instant.now();
-        for (SynchronizerFactoryWithState factory : synchronizers) {
-            factory.unparkIfExpired(now);
+    public void unparkExpiredSynchronizers() {
+        synchronized (activeSourceLock) {
+            Instant now = Instant.now();
+            for (SynchronizerFactoryWithState factory : synchronizers) {
+                factory.unparkIfExpired(now);
+            }
         }
     }
 
@@ -266,6 +266,41 @@ class SourceManager implements Closeable {
 
             activeSource = initializer;
             return initializer;
+        }
+    }
+
+    /**
+     * True if a synchronizer other than the current one is available.
+     *
+     * @return true if another synchronizer is available
+     */
+    public boolean hasOtherAvailableSynchronizer() {
+        synchronized (activeSourceLock) {
+            for (SynchronizerFactoryWithState factory : synchronizers) {
+                if (factory != currentSynchronizerFactory && factory.isEligible()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    /**
+     * True if a synchronizer earlier in the list than the current one is available.
+     *
+     * @return true if a more-preferred synchronizer is available
+     */
+    public boolean hasMorePreferredAvailableSynchronizer() {
+        synchronized (activeSourceLock) {
+            for (SynchronizerFactoryWithState factory : synchronizers) {
+                if (factory == currentSynchronizerFactory) {
+                    return false;
+                }
+                if (factory.isEligible()) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 
