@@ -3172,6 +3172,51 @@ public class FDv2DataSourceTest extends BaseTest {
     }
 
     @Test
+    public void fdv1FallbackSynchronizerIsParkedAndRestartedDuringDirectedFallback() throws Exception {
+        executor = Executors.newScheduledThreadPool(2);
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        AtomicInteger fdv1BuildCount = new AtomicInteger();
+
+        // The FDv2 synchronizer reports an interruption that carries the FDv1 fallback directive.
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(FDv2SourceResult.interrupted(
+                    new DataSourceStatusProvider.ErrorInfo(
+                        DataSourceStatusProvider.ErrorKind.NETWORK_ERROR, 500, null, Instant.now()),
+                    true));
+                return new MockQueuedSynchronizer(results);
+            }
+        );
+
+        // The first instance of the FDv1 fallback synchronizer fails, and the second instance delivers data.
+        FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
+            BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+            results.add(fdv1BuildCount.incrementAndGet() == 1
+                ? makeTerminalErrorResult()
+                : FDv2SourceResult.changeSet(makeChangeSet(true), false));
+            return new MockQueuedSynchronizer(results);
+        };
+
+        // The FDv1 fallback synchronizer is parked for 50-100ms.
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, fdv1Fallback, sink, Thread.NORM_PRIORITY, logger, executor,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMillis(100),
+            /* parkMaxDelay= */ Duration.ofSeconds(1),
+            /* failoverDelay= */ Duration.ofMillis(10));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system.
+        dataSource.start();
+
+        // The FDv1 fallback synchronizer is built again after its unpark time, and its data is applied.
+        sink.awaitApplyCount(1, 2, TimeUnit.SECONDS);
+        assertEquals(1, sink.getApplyCount());
+        assertEquals(2, fdv1BuildCount.get());
+    }
+
+    @Test
     public void fdv1FallbackNotCalledWithoutFlag() throws Exception {
         executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
