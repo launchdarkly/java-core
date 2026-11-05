@@ -430,7 +430,7 @@ public final class TestData implements ComponentConfigurer<DataSource> {
     public FlagBuilder valueForAll(LDValue value) {
       variations.clear();
       variations.add(value);
-      return variationForAll(0);
+      return variationForAll(0).offVariation(0);
     }
     
     /**

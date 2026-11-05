@@ -205,6 +205,18 @@ public class TestDataTest {
   }
 
   @Test
+  public void valueForAllSetsOffVariationToTheValue() throws Exception {
+    verifyFlag(
+        f -> f.valueForAll(LDValue.of("x")),
+        fb -> fb.on(true).variations("x").offVariation(0).fallthroughVariation(0)
+        );
+    verifyFlag(
+        f -> f.valueForAll(LDValue.of("x")).on(false),
+        fb -> fb.on(false).variations("x").offVariation(0).fallthroughVariation(0)
+        );
+  }
+
+  @Test
   public void usingBooleanConfigMethodsForcesFlagToBeBoolean() throws Exception {
     Function<ModelBuilders.FlagBuilder, ModelBuilders.FlagBuilder> expectedBooleanFlag = fb ->
       fb.on(true).variations(true, false).offVariation(1).fallthroughVariation(0);
