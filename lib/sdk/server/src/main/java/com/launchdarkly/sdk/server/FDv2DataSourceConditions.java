@@ -35,6 +35,7 @@ class FDv2DataSourceConditions {
             FALLBACK,
             RECOVERY,
             UNPARK,
+            FDV1_FALLBACK_END,
         }
 
         CompletableFuture<Condition> execute();
@@ -199,36 +200,41 @@ class FDv2DataSourceConditions {
     /**
      * This condition is met when its delay has passed.
      */
-    static class UnparkCondition extends TimedCondition {
+    static class DeadlineCondition extends TimedCondition {
         /**
-         * Builds a condition that is met at the earliest unpark time, or no condition if no synchronizer is parked.
+         * Builds a condition that is met at the deadline, or no condition if there is no deadline.
          */
         static class Factory implements ConditionFactory {
             private final ScheduledExecutorService sharedExecutor;
-            private final Supplier<Instant> earliestUnparkTime;
+            private final ConditionType type;
+            private final Supplier<Instant> deadline;
 
-            public Factory(ScheduledExecutorService sharedExecutor, Supplier<Instant> earliestUnparkTime) {
+            public Factory(ScheduledExecutorService sharedExecutor, ConditionType type, Supplier<Instant> deadline) {
                 this.sharedExecutor = sharedExecutor;
-                this.earliestUnparkTime = earliestUnparkTime;
+                this.type = type;
+                this.deadline = deadline;
             }
 
             @Override
             public Condition build() {
-                Instant unparkTime = earliestUnparkTime.get();
-                if (unparkTime == null) {
+                Instant time = deadline.get();
+                if (time == null) {
                     return null;
                 }
-                return new UnparkCondition(sharedExecutor, Duration.between(Instant.now(), unparkTime));
+                return new DeadlineCondition(sharedExecutor, type, Duration.between(Instant.now(), time));
             }
 
             @Override
             public ConditionType getType() {
-                return ConditionType.UNPARK;
+                return type;
             }
         }
 
-        public UnparkCondition(ScheduledExecutorService sharedExecutor, Duration delay) {
+        private final ConditionType type;
+
+        public DeadlineCondition(ScheduledExecutorService sharedExecutor, ConditionType type, Duration delay) {
             super(sharedExecutor, delay);
+            this.type = type;
             timerFuture = sharedExecutor.schedule(() -> {
                 resultFuture.complete(this);
                 return null;
@@ -237,13 +243,13 @@ class FDv2DataSourceConditions {
 
         @Override
         public boolean inform(FDv2SourceResult sourceResult) {
-            // An unpark is time-based, so a result never requires a new condition.
+            // A deadline is time-based, so a result never requires a new condition.
             return false;
         }
 
         @Override
         public ConditionType getType() {
-            return ConditionType.UNPARK;
+            return type;
         }
     }
 }
