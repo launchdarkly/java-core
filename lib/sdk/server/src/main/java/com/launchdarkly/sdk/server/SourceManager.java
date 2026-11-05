@@ -37,6 +37,12 @@ class SourceManager implements Closeable {
      */
     private SynchronizerFactoryWithState currentSynchronizerFactory;
 
+    /**
+     * The time at which the fallback to FDv1 ends, or null if the SDK is not falling back to FDv1. Accessed only
+     * under activeSourceLock.
+     */
+    private Instant fdv1FallbackEndTime;
+
     public SourceManager(List<SynchronizerFactoryWithState> synchronizers, List<FDv2DataSource.DataSourceFactory<Initializer>> initializers) {
         this.synchronizers = synchronizers;
         this.initializers = initializers;
@@ -61,15 +67,29 @@ class SourceManager implements Closeable {
         return false;
     }
 
-    /**
-     * Block all synchronizers aside from the fdv1 fallback and unblock the fdv1 fallback.
-     */
-    public void fdv1Fallback() {
+    public boolean hasFDv2Synchronizers() {
         for (SynchronizerFactoryWithState factory : synchronizers) {
-            if(factory.isFDv1Fallback()) {
-                factory.unblock();
-            } else {
-                factory.block();
+            if (!factory.isFDv1Fallback()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Block all synchronizers aside from the fdv1 fallback and unblock the fdv1 fallback, until the given time.
+     *
+     * @param endTime the time at which the fallback to FDv1 ends
+     */
+    public void startFDv1Fallback(Instant endTime) {
+        synchronized (activeSourceLock) {
+            fdv1FallbackEndTime = endTime;
+            for (SynchronizerFactoryWithState factory : synchronizers) {
+                if (factory.isFDv1Fallback()) {
+                    factory.unblock();
+                } else {
+                    factory.block();
+                }
             }
         }
     }
@@ -83,6 +103,41 @@ class SourceManager implements Closeable {
             for (SynchronizerFactoryWithState factory : synchronizers) {
                 factory.unparkIfExpired(now);
             }
+        }
+    }
+
+    /**
+     * The time at which the fallback to FDv1 ends.
+     *
+     * @return the end time, or null if the SDK is not falling back to FDv1
+     */
+    public Instant getFDv1FallbackEndTime() {
+        synchronized (activeSourceLock) {
+            return fdv1FallbackEndTime;
+        }
+    }
+
+    /**
+     * Ends the fallback to FDv1 if its end time has arrived. This unblocks the FDv2 synchronizers, blocks the fdv1
+     * fallback, and starts the search for the next synchronizer from the most-preferred one.
+     *
+     * @return true if the fallback ended
+     */
+    public boolean endFDv1FallbackIfExpired() {
+        synchronized (activeSourceLock) {
+            if (fdv1FallbackEndTime == null || Instant.now().isBefore(fdv1FallbackEndTime)) {
+                return false;
+            }
+            fdv1FallbackEndTime = null;
+            for (SynchronizerFactoryWithState factory : synchronizers) {
+                if (factory.isFDv1Fallback()) {
+                    factory.block();
+                } else {
+                    factory.unblock();
+                }
+            }
+            synchronizerIndex = -1;
+            return true;
         }
     }
 
@@ -340,6 +395,18 @@ class SourceManager implements Closeable {
         }
     }
 
+
+    /**
+     * Closes the active source, if there is one.
+     */
+    public void closeActiveSource() {
+        synchronized (activeSourceLock) {
+            if (activeSource != null) {
+                safeClose(activeSource);
+                activeSource = null;
+            }
+        }
+    }
 
     /**
      * Close the state manager and shut down any active source.
