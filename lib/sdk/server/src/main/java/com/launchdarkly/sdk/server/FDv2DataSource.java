@@ -4,10 +4,6 @@ import com.google.common.collect.ImmutableList;
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.logging.LogValues;
 import com.launchdarkly.sdk.fdv2.SourceSignal;
-import com.launchdarkly.sdk.server.FDv2DataSourceConditions.Condition;
-import com.launchdarkly.sdk.server.FDv2DataSourceConditions.ConditionFactory;
-import com.launchdarkly.sdk.server.FDv2DataSourceConditions.FallbackCondition;
-import com.launchdarkly.sdk.server.FDv2DataSourceConditions.RecoveryCondition;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
 import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
@@ -18,24 +14,11 @@ import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSinkV2;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Date;
-import java.util.EnumMap;
-import java.util.EnumSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.WeakHashMap;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
-
-import static com.launchdarkly.sdk.server.FDv2DataSourceConditions.Condition;
-import static com.launchdarkly.sdk.server.FDv2DataSourceConditions.ConditionFactory;
-import static com.launchdarkly.sdk.server.FDv2DataSourceConditions.FallbackCondition;
-import static com.launchdarkly.sdk.server.FDv2DataSourceConditions.RecoveryCondition;
-import static com.launchdarkly.sdk.server.FDv2DataSourceConditions.DeadlineCondition;
 
 class FDv2DataSource implements DataSource {
     /**
@@ -70,15 +53,11 @@ class FDv2DataSource implements DataSource {
 
     private final SourceManager sourceManager;
 
-    private final Map<Condition.ConditionType, ConditionFactory> conditionFactories = new EnumMap<>(
-            Condition.ConditionType.class);
-
+    private final Duration fallbackTimeout;
+    private final Duration recoveryTimeout;
     private final Duration parkInitialDelay;
-
     private final Duration parkMaxDelay;
-
     private final Duration failoverDelay;
-
     private final Duration defaultFDv1FallbackTTL;
 
     private final DataSourceUpdateSinkV2 dataSourceUpdates;
@@ -170,18 +149,8 @@ class FDv2DataSource implements DataSource {
         this.dataSourceUpdates = dataSourceUpdates;
         this.threadPriority = threadPriority;
         this.logger = logger;
-        this.conditionFactories.put(
-                Condition.ConditionType.FALLBACK, new FallbackCondition.Factory(sharedExecutor, fallbackTimeout));
-        this.conditionFactories.put(
-                Condition.ConditionType.RECOVERY, new RecoveryCondition.Factory(sharedExecutor, recoveryTimeout));
-        this.conditionFactories.put(
-                Condition.ConditionType.UNPARK,
-                new DeadlineCondition.Factory(
-                        sharedExecutor, Condition.ConditionType.UNPARK, sourceManager::getEarliestUnparkTime));
-        this.conditionFactories.put(
-                Condition.ConditionType.FDV1_FALLBACK_END,
-                new DeadlineCondition.Factory(
-                        sharedExecutor, Condition.ConditionType.FDV1_FALLBACK_END, sourceManager::getFDv1FallbackEndTime));
+        this.fallbackTimeout = fallbackTimeout;
+        this.recoveryTimeout = recoveryTimeout;
         this.parkInitialDelay = parkInitialDelay;
         this.parkMaxDelay = parkMaxDelay;
         this.failoverDelay = failoverDelay;
@@ -360,43 +329,6 @@ class FDv2DataSource implements DataSource {
     }
 
     /**
-     * Determine conditions for the current synchronizer. Synchronizers require different conditions depending on if
-     * they are the 'prime' synchronizer or if there are other available synchronizers to use.
-     *
-     * @return a list of conditions to apply to the synchronizer
-     */
-    private List<Condition> getConditions() {
-        int availableSynchronizers = sourceManager.getAvailableSynchronizerCount();
-        boolean isPrimeSynchronizer = sourceManager.isPrimeSynchronizer();
-
-        if (availableSynchronizers == 1) {
-            // With only 1 synchronizer, we cannot fall back or recover. Only the end of the FDv1 fallback applies.
-            Condition fallbackEnd = buildCondition(Condition.ConditionType.FDV1_FALLBACK_END);
-            return fallbackEnd == null ? Collections.emptyList() : Collections.singletonList(fallbackEnd);
-        }
-        if (isPrimeSynchronizer) {
-            // If there isn't a synchronizer to recover to, then don't add and recovery conditions.
-            return conditionFactories.values().stream()
-                    .filter((ConditionFactory factory) -> factory.getType() != Condition.ConditionType.RECOVERY)
-                    .map(ConditionFactory::build).filter(Objects::nonNull).collect(Collectors.toList());
-        }
-        // The synchronizer can both fall back and recover.
-        return conditionFactories.values().stream()
-                .map(ConditionFactory::build).filter(Objects::nonNull).collect(Collectors.toList());
-    }
-
-    /**
-     * Builds the condition of the given type.
-     *
-     * @param type the type of condition
-     * @return the condition, or null if it does not apply
-     */
-    private Condition buildCondition(Condition.ConditionType type) {
-        ConditionFactory factory = conditionFactories.get(type);
-        return factory == null ? null : factory.build();
-    }
-
-    /**
      * Runs the configured synchronizers, falling back / recovering as conditions allow,
      * until the data source is closed or a synchronizer reports that it shut down.
      */
@@ -413,85 +345,31 @@ class FDv2DataSource implements DataSource {
                 boolean parked = false;
                 try {
                     boolean running = true;
+                    // Fallback and recovery apply only when another synchronizer can take over.
+                    boolean canFallBack = sourceManager.getAvailableSynchronizerCount() > 1;
+                    boolean canRecover = canFallBack && !sourceManager.isPrimeSynchronizer();
+                    Instant recoveryTime = canRecover ? Instant.now().plus(recoveryTimeout) : null;
+                    Instant fallbackTime = null;
+                    // True once the loop has seen the deadline pass.
+                    boolean recoveryMet = false;
+                    boolean fallbackMet = false;
+                    // The result the loop is waiting for, or null if it has not asked the synchronizer for one.
+                    CompletableFuture<FDv2SourceResult> nextResultFuture = null;
+                    while (running) {
+                        if (nextResultFuture == null) {
+                            nextResultFuture = synchronizer.next();
+                        }
 
-                    try (Conditions conditions = new Conditions(getConditions())) {
-                        // A condition doesn't necessarily stop the current synchronizer, so keep track of its pending result.
-                        CompletableFuture<FDv2SourceResult> nextResultFuture = null;
-                        while (running) {
-                            if (nextResultFuture == null) {
-                                nextResultFuture = synchronizer.next();
-                            }
-
-                            // The conditions future completes when a condition is met.
-                            Object res = CompletableFuture.anyOf(conditions.getFuture(), nextResultFuture).get();
-
-                            if (res instanceof Condition) {
-                                Condition.ConditionType metType = ((Condition) res).getType();
-                                // Clear expired unpark times before checking which synchronizers are available.
-                                sourceManager.unparkExpiredSynchronizers();
-                                if (metType == Condition.ConditionType.UNPARK) {
-                                    // Replace the unpark condition with one for the next unpark.
-                                    conditions.replace(
-                                            Condition.ConditionType.UNPARK,
-                                            buildCondition(Condition.ConditionType.UNPARK));
-                                }
-                                if (metType == Condition.ConditionType.FDV1_FALLBACK_END) {
-                                    if (sourceManager.endFDv1FallbackIfExpired()) {
-                                        logger.info("Fallback TTL elapsed, restarting FDv2 data sources.");
-                                        break;
-                                    }
-                                    // The timer fired before the end time. This shouldn't normally happen. Wait for the remaining time.
-                                    conditions.replace(
-                                            Condition.ConditionType.FDV1_FALLBACK_END,
-                                            buildCondition(Condition.ConditionType.FDV1_FALLBACK_END));
-                                }
-
-                                // An unpark does not switch synchronizers by itself, but other conditions might already
-                                // be met. Check all of them before deciding whether to switch. Recovery takes precedence.
-                                if (conditions.isMet(Condition.ConditionType.RECOVERY)
-                                        && sourceManager.hasMorePreferredAvailableSynchronizer()) {
-                                    // For recovery, we will start at the first available synchronizer.
-                                    // So we reset the source index, and finding the source will start at the beginning.
-                                    sourceManager.resetSourceIndex();
-                                    logger.info(
-                                            "Recovery condition met, moving from synchronizer '{}' to primary synchronizer.",
-                                            synchronizer.name());
-                                    break;
-                                }
-                                if (conditions.isMet(Condition.ConditionType.FALLBACK)
-                                        && sourceManager.hasOtherAvailableSynchronizer()) {
-                                    logger.info(
-                                            "Fallback condition met, falling back from synchronizer '{}'.",
-                                            synchronizer.name());
-                                    break;
-                                }
-
-                                // Keep running this synchronizer.
-                                if (metType == Condition.ConditionType.FALLBACK) {
-                                    logger.info(
-                                            "Fallback condition met, but no other synchronizer is available; continuing with synchronizer '{}'.",
-                                            synchronizer.name());
-                                } else if (metType == Condition.ConditionType.RECOVERY) {
-                                    logger.info(
-                                            "Recovery condition met, but no more-preferred synchronizer is available; continuing with synchronizer '{}'.",
-                                            synchronizer.name());
-                                }
-                                continue;
-                            }
-
-                            // The pending result has arrived.
-                            nextResultFuture = null;
-
-                            if (!(res instanceof FDv2SourceResult)) {
-                                logger.error("Unexpected result type from synchronizer: {}", res.getClass().getName());
-                                continue;
-                            }
-
-                            try (FDv2SourceResult result = (FDv2SourceResult) res) {
-                                Set<Condition.ConditionType> typesToReplace = conditions.inform(result);
-                                for (Condition.ConditionType type : typesToReplace) {
-                                    conditions.replace(type, buildCondition(type));
-                                }
+                        // Wait for the next result, or for the next deadline that the loop has not seen pass.
+                        Instant wakeTime = earliest(
+                                recoveryMet ? null : recoveryTime,
+                                fallbackMet ? null : fallbackTime,
+                                sourceManager.getEarliestUnparkTime(),
+                                sourceManager.getFDv1FallbackEndTime());
+                        if (awaitUntil(nextResultFuture, wakeTime)) {
+                            try (FDv2SourceResult result = nextResultFuture.get()) {
+                                // The pending result has arrived.
+                                nextResultFuture = null;
 
                                 if (result.isResetThresholdMet()) {
                                     sourceManager.resetCurrentSynchronizerParkCount();
@@ -501,6 +379,9 @@ class FDv2DataSource implements DataSource {
                                     case CHANGE_SET:
                                         // A data update breaks the "in a row" streak for status deduplication.
                                         resetSynchronizerStatusDedupe();
+                                        // The synchronizer is healthy, so it no longer needs to fall back.
+                                        fallbackTime = null;
+                                        fallbackMet = false;
                                         dataSourceUpdates.apply(result.getChangeSet());
                                         dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
                                         // This could have been completed by any data source. But if it has not been completed before
@@ -514,7 +395,10 @@ class FDv2DataSource implements DataSource {
                                                 maybeLogSynchronizerStatusChange(
                                                         synchronizer.name(),
                                                         status.getState());
-                                                // Handled by conditions.
+                                                // The fallback timeout runs from the first interruption.
+                                                if (canFallBack && fallbackTime == null) {
+                                                    fallbackTime = Instant.now().plus(fallbackTimeout);
+                                                }
                                                 dataSourceUpdates.updateStatus(
                                                         DataSourceStatusProvider.State.INTERRUPTED,
                                                         status.getErrorInfo());
@@ -558,9 +442,6 @@ class FDv2DataSource implements DataSource {
                                         // A directive during the FDv1 fallback replaces its TTL, and FDv1 keeps running.
                                         Duration fallbackTTL = jittered(defaultFDv1FallbackTTL);
                                         sourceManager.startFDv1Fallback(Instant.now().plus(fallbackTTL));
-                                        conditions.replace(
-                                                Condition.ConditionType.FDV1_FALLBACK_END,
-                                                buildCondition(Condition.ConditionType.FDV1_FALLBACK_END));
                                         logger.info("FDv2 retry scheduled in {}s.", fallbackTTL.getSeconds());
                                     } else {
                                         // A directive to fall back to FDv1 ends the run of an FDv2 synchronizer.
@@ -573,6 +454,50 @@ class FDv2DataSource implements DataSource {
                                     }
                                 }
                             }
+                        }
+                        if (!running) {
+                            break;
+                        }
+
+                        // Check every deadline against the current time.
+                        Instant now = Instant.now();
+                        sourceManager.unparkExpiredSynchronizers();
+                        if (sourceManager.endFDv1FallbackIfExpired()) {
+                            logger.info("Fallback TTL elapsed, restarting FDv2 data sources.");
+                            break;
+                        }
+                        boolean recoveryJustMet = !recoveryMet && recoveryTime != null && !now.isBefore(recoveryTime);
+                        boolean fallbackJustMet = !fallbackMet && fallbackTime != null && !now.isBefore(fallbackTime);
+                        recoveryMet = recoveryMet || recoveryJustMet;
+                        fallbackMet = fallbackMet || fallbackJustMet;
+
+                        // Recovery takes precedence over fallback.
+                        if (recoveryMet && sourceManager.hasMorePreferredAvailableSynchronizer()) {
+                            // For recovery, we will start at the first available synchronizer.
+                            // So we reset the source index, and finding the source will start at the beginning.
+                            sourceManager.resetSourceIndex();
+                            logger.info(
+                                    "Recovery condition met, moving from synchronizer '{}' to primary synchronizer.",
+                                    synchronizer.name());
+                            break;
+                        }
+                        if (fallbackMet && sourceManager.hasOtherAvailableSynchronizer()) {
+                            logger.info(
+                                    "Fallback condition met, falling back from synchronizer '{}'.",
+                                    synchronizer.name());
+                            break;
+                        }
+
+                        // Keep running this synchronizer.
+                        if (fallbackJustMet) {
+                            logger.info(
+                                    "Fallback condition met, but no other synchronizer is available; continuing with synchronizer '{}'.",
+                                    synchronizer.name());
+                        }
+                        if (recoveryJustMet) {
+                            logger.info(
+                                    "Recovery condition met, but no more-preferred synchronizer is available; continuing with synchronizer '{}'.",
+                                    synchronizer.name());
                         }
                     }
                 } catch (ExecutionException | InterruptedException | RuntimeException e) {
@@ -634,6 +559,46 @@ class FDv2DataSource implements DataSource {
         } catch (ExecutionException e) {
             return false;
         }
+    }
+
+    /**
+     * Waits for the future to complete, or until the given time.
+     *
+     * @param future the future to wait for
+     * @param time the time to stop waiting, or null to wait until the future completes
+     * @return true if the future completed
+     * @throws InterruptedException if the thread is interrupted while waiting
+     */
+    private static boolean awaitUntil(CompletableFuture<?> future, Instant time) throws InterruptedException {
+        try {
+            if (time == null) {
+                future.get();
+            } else {
+                future.get(Math.max(0, Duration.between(Instant.now(), time).toNanos()), TimeUnit.NANOSECONDS);
+            }
+            return true;
+        } catch (TimeoutException e) {
+            return false;
+        } catch (ExecutionException e) {
+            // The future completed with an error, which the caller gets from the future.
+            return true;
+        }
+    }
+
+    /**
+     * Gets the earliest of the given times.
+     *
+     * @param times the times, any of which may be null
+     * @return the earliest time, or null if every time is null
+     */
+    private static Instant earliest(Instant... times) {
+        Instant earliest = null;
+        for (Instant time : times) {
+            if (time != null && (earliest == null || time.isBefore(earliest))) {
+                earliest = time;
+            }
+        }
+        return earliest;
     }
 
     /**
@@ -818,205 +783,6 @@ class FDv2DataSource implements DataSource {
                             0,
                             message,
                             new Date().toInstant()));
-        }
-    }
-
-    /**
-     * Helper class to manage the lifecycle of conditions with automatic cleanup.
-     *
-     * <p>Before the aggregate completes, {@link #getFuture()} returns a
-     * <em>fresh</em> {@link CompletableFuture} per call. This matters because
-     * the run loop calls {@code CompletableFuture.anyOf(getFuture(),
-     * synchronizerNext)} on every iteration: if {@code getFuture()} returned
-     * the shared underlying aggregate while it was still pending, each
-     * {@code anyOf} call would permanently attach an {@code OrRelay}
-     * {@code Completion} to its {@code stack}. On a healthy primary
-     * synchronizer that streams ChangeSets without ever arming the fallback
-     * timer, the aggregate never completes, so those Completion nodes would
-     * accumulate monotonically for the synchronizer's full tenure -- a real
-     * memory leak proportional to event rate.
-     *
-     * <p>After the aggregate completes, {@link #getFuture()} returns the
-     * aggregate directly: any continuation registered on an already-completed
-     * CompletableFuture fires synchronously at registration time and is
-     * removed from the stack immediately by {@code cleanStack}, so the same
-     * accumulation cannot happen.
-     *
-     * <p>Fresh pre-completion futures are tracked in a {@link WeakHashMap}-backed
-     * set, so a fresh future whose only strong references were in the caller's
-     * loop iteration becomes garbage-collectable -- and automatically removed
-     * from {@code pending} -- once that iteration ends.
-     *
-     * <p>Package-private (rather than private) so that direct unit tests can
-     * exercise the API surface and assert per-call distinctness.
-     */
-    static class Conditions implements AutoCloseable {
-        private final Object lock = new Object();
-
-        /**
-         * The conditions, with at most one of each type. Accessed only under {@code lock}.
-         */
-        private final Map<Condition.ConditionType, Condition> conditions = new EnumMap<>(Condition.ConditionType.class);
-
-        /**
-         * The types of the conditions that the aggregate has completed with. Accessed only under {@code lock}.
-         */
-        private final Set<Condition.ConditionType> reported = EnumSet.noneOf(Condition.ConditionType.class);
-
-        /**
-         * A future over the futures of all the conditions. It completes with the first condition that is met.
-         * Accessed only under {@code lock}.
-         */
-        private CompletableFuture<Object> aggregate;
-
-        /**
-         * Tracks futures previously returned by {@link #getFuture()} that have
-         * not yet been completed. Held weakly via {@link WeakHashMap} so that
-         * fresh futures abandoned by the caller (the typical end-of-iteration
-         * case) become GC-collectable. Set to {@code null} once the aggregate
-         * has fired and the entries have been drained. Accessed only under
-         * {@code lock}.
-         */
-        private Set<CompletableFuture<Object>> pending;
-
-        public Conditions(List<Condition> conditions) {
-            for (Condition condition : conditions) {
-                this.conditions.put(condition.getType(), condition);
-            }
-            arm();
-        }
-
-        /**
-         * Builds the aggregate future over the conditions.
-         */
-        private void arm() {
-            synchronized (lock) {
-                CompletableFuture<?>[] unreported = conditions.values().stream()
-                        .filter(c -> !reported.contains(c.getType()))
-                        .map(Condition::execute)
-                        .toArray(CompletableFuture[]::new);
-                CompletableFuture<Object> newAggregate = unreported.length == 0
-                        ? new CompletableFuture<>() // Never completes if no conditions are unreported
-                        : CompletableFuture.anyOf(unreported);
-                aggregate = newAggregate;
-                // Start a new set only if the previous aggregate drained it. Otherwise, the futures in it are still
-                // waiting, and the new aggregate completes them.
-                if (pending == null) {
-                    pending = Collections.newSetFromMap(new WeakHashMap<>());
-                }
-
-                // Single permanent listener. This is the only Completion node ever
-                // attached to aggregate.stack while the aggregate is still pending
-                // -- subsequent pre-completion getFuture() calls do not touch the
-                // aggregate at all.
-                newAggregate.whenComplete((result, throwable) -> {
-                    List<CompletableFuture<Object>> snapshot;
-                    synchronized (lock) {
-                        // A newer aggregate replaced this one, and it completes the pending futures instead.
-                        if (aggregate != newAggregate || pending == null) {
-                            return;
-                        }
-                        if (throwable == null) {
-                            reported.add(((Condition) result).getType());
-                        }
-                        // Copy under the lock: the ArrayList holds strong
-                        // references so entries that survived GC to this point
-                        // stay alive until we complete them below.
-                        snapshot = new ArrayList<>(pending);
-                        pending = null;
-                    }
-                    for (CompletableFuture<Object> cf : snapshot) {
-                        if (throwable != null) {
-                            cf.completeExceptionally(throwable);
-                        } else {
-                            cf.complete(result);
-                        }
-                    }
-                });
-            }
-        }
-
-        /**
-         * Returns a future that completes with a met condition that this method has not reported before.
-         */
-        public CompletableFuture<Object> getFuture() {
-            synchronized (lock) {
-                if (pending == null) {
-                    // The aggregate has fired.
-                    if (aggregate.isCompletedExceptionally()) {
-                        return aggregate;
-                    }
-                    // Wait for the conditions that have not been reported.
-                    arm();
-                    if (pending == null) {
-                        // Another condition was already met, so the new aggregate has fired too.
-                        return aggregate;
-                    }
-                }
-                CompletableFuture<Object> fresh = new CompletableFuture<>();
-                pending.add(fresh);
-                return fresh;
-            }
-        }
-
-        /**
-         * True if the condition of the given type has been reported as met.
-         *
-         * @param type the type of condition
-         * @return true if the condition is met
-         */
-        public boolean isMet(Condition.ConditionType type) {
-            synchronized (lock) {
-                return reported.contains(type);
-            }
-        }
-
-        /**
-         * Closes the condition of the given type, if there is one, and puts the replacement in its place.
-         *
-         * @param type the type of condition
-         * @param replacement the new condition, or null to leave no condition of that type
-         */
-        public void replace(Condition.ConditionType type, Condition replacement) {
-            synchronized (lock) {
-                Condition old = conditions.remove(type);
-                if (old != null) {
-                    old.close();
-                }
-                reported.remove(type);
-                if (replacement != null) {
-                    conditions.put(type, replacement);
-                }
-                arm();
-            }
-        }
-
-        /**
-         * Informs the conditions of a result from the synchronizer.
-         *
-         * @param result the result
-         * @return the types of the conditions that should be replaced with new ones
-         */
-        public Set<Condition.ConditionType> inform(FDv2SourceResult result) {
-            synchronized (lock) {
-                Set<Condition.ConditionType> typesToReplace = EnumSet.noneOf(Condition.ConditionType.class);
-                for (Condition condition : conditions.values()) {
-                    if (condition.inform(result)) {
-                        typesToReplace.add(condition.getType());
-                    }
-                }
-                return typesToReplace;
-            }
-        }
-
-        @Override
-        public void close() {
-            synchronized (lock) {
-                conditions.values().forEach(Condition::close);
-                if (pending != null) {
-                    pending.clear();
-                }
-            }
         }
     }
 }
