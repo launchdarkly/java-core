@@ -72,6 +72,15 @@ public class TestDataWithClientTest {
   }
 
   @Test
+  public void valueForAllReturnsValueWhenTargetingIsOff() throws Exception {
+    td.update(td.flag("flag").valueForAll(LDValue.of("x")).on(false));
+
+    try (LDClient client = new LDClient(SDK_KEY, config)) {
+      assertThat(client.stringVariation("flag", LDContext.create("user"), "default"), equalTo("x"));
+    }
+  }
+
+  @Test
   public void usesTargets() throws Exception {
     td.update(td.flag("flag").fallthroughVariation(false).variationForUser("user1", true));
 
