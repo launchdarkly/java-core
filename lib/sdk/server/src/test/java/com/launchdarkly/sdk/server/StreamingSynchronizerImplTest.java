@@ -1027,6 +1027,47 @@ public class StreamingSynchronizerImplTest extends BaseTest {
     }
 
     @Test
+    public void fdv1FallbackTTLIsReadFromSuccessResponse() throws Exception {
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+
+        // The stream directs a fallback to FDv1 for 300 seconds.
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.header("x-ld-fd-fallback", "true"),
+                Handlers.header("x-ld-fd-fallback-ttl", "300"),
+                Handlers.SSE.start(),
+                Handlers.SSE.event(serverIntent),
+                Handlers.SSE.event(payloadTransferred),
+                Handlers.SSE.leaveOpen()))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    mockSelectorSource(),
+                    executor,
+                    null,
+                    Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RESET_THRESHOLD,
+                    Thread.NORM_PRIORITY,
+                    null
+            );
+
+            // Start the stream.
+            FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
+
+            // The result carries the fallback TTL.
+            assertEquals(true, result.isFdv1Fallback());
+            assertEquals(Duration.ofSeconds(300), result.getFdv1FallbackTTL());
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
     public void fdv1FallbackFlagSetToFalseWhenHeaderNotPresent() throws Exception {
         String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
         String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
@@ -1095,6 +1136,41 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             assertEquals(SourceResultType.STATUS, result.getResultType());
             assertEquals(SourceSignal.INTERRUPTED, result.getStatus().getState());
             assertEquals(true, result.isFdv1Fallback());
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void fdv1FallbackTTLIsReadFromErrorResponse() throws Exception {
+        // The error response directs a fallback to FDv1 for 300 seconds.
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.status(503),
+                Handlers.header("x-ld-fd-fallback", "true"),
+                Handlers.header("x-ld-fd-fallback-ttl", "300")))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    mockSelectorSource(),
+                    executor,
+                    null,
+                    Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RESET_THRESHOLD,
+                    Thread.NORM_PRIORITY,
+                    null
+            );
+
+            // Start the stream.
+            FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
+
+            // The result carries the fallback TTL.
+            assertEquals(true, result.isFdv1Fallback());
+            assertEquals(Duration.ofSeconds(300), result.getFdv1FallbackTTL());
 
             synchronizer.close();
         }

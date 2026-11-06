@@ -12,6 +12,7 @@ import com.launchdarkly.sdk.json.SerializationException;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -464,6 +465,66 @@ public class PollingInitializerImplTest extends BaseTest {
         assertNotNull(result);
         assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
         assertEquals(true, result.isFdv1Fallback());
+    }
+
+    @Test
+    public void fdv1FallbackTTLIsReadFromHeader() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+
+        // The response directs a fallback to FDv1 for 300 seconds.
+        okhttp3.Headers headers = new okhttp3.Headers.Builder()
+            .add("x-ld-fd-fallback", "true")
+            .add("x-ld-fd-fallback-ttl", "300")
+            .build();
+        FDv2Requestor.FDv2PayloadResponse response = FDv2Requestor.FDv2PayloadResponse.success(
+            com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(
+                "{\"events\": [{\"event\": \"server-intent\", \"data\": {\"payloads\": [{\"id\": \"payload-1\", \"target\": 100, \"intentCode\": \"xfer-full\", \"reason\": \"payload-missing\"}]}}, {\"event\": \"payload-transferred\", \"data\": {\"state\": \"(p:payload-1:100)\", \"version\": 100}}]}"
+            ),
+            headers,
+            200
+        );
+        when(requestor.Poll(any(Selector.class)))
+            .thenReturn(CompletableFuture.completedFuture(response));
+
+        PollingInitializerImpl initializer = new PollingInitializerImpl(requestor, testLogger, selectorSource);
+
+        // Run the initializer.
+        FDv2SourceResult result = initializer.run().get(5, TimeUnit.SECONDS);
+
+        // The result carries the fallback TTL.
+        assertEquals(true, result.isFdv1Fallback());
+        assertEquals(Duration.ofSeconds(300), result.getFdv1FallbackTTL());
+    }
+
+    @Test
+    public void malformedFdv1FallbackTTLIsIgnored() throws Exception {
+        FDv2Requestor requestor = mockRequestor();
+        SelectorSource selectorSource = mockSelectorSource();
+
+        // The response directs a fallback to FDv1 with a TTL that is not a number.
+        okhttp3.Headers headers = new okhttp3.Headers.Builder()
+            .add("x-ld-fd-fallback", "true")
+            .add("x-ld-fd-fallback-ttl", "soon")
+            .build();
+        FDv2Requestor.FDv2PayloadResponse response = FDv2Requestor.FDv2PayloadResponse.success(
+            com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(
+                "{\"events\": [{\"event\": \"server-intent\", \"data\": {\"payloads\": [{\"id\": \"payload-1\", \"target\": 100, \"intentCode\": \"xfer-full\", \"reason\": \"payload-missing\"}]}}, {\"event\": \"payload-transferred\", \"data\": {\"state\": \"(p:payload-1:100)\", \"version\": 100}}]}"
+            ),
+            headers,
+            200
+        );
+        when(requestor.Poll(any(Selector.class)))
+            .thenReturn(CompletableFuture.completedFuture(response));
+
+        PollingInitializerImpl initializer = new PollingInitializerImpl(requestor, testLogger, selectorSource);
+
+        // Run the initializer.
+        FDv2SourceResult result = initializer.run().get(5, TimeUnit.SECONDS);
+
+        // The result directs a fallback, but has no fallback TTL.
+        assertEquals(true, result.isFdv1Fallback());
+        assertNull(result.getFdv1FallbackTTL());
     }
 
     @Test

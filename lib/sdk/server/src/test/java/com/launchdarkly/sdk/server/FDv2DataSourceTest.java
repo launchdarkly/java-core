@@ -3506,6 +3506,94 @@ public class FDv2DataSourceTest extends BaseTest {
         assertTrue(fdv1Closed.get());
     }
 
+    // The data system uses a fallback TTL from the server instead of the default TTL.
+    @Test
+    public void fdv1FallbackUsesServerTTL() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        AtomicInteger fdv2BuildCount = new AtomicInteger();
+
+        // The first instance sends a payload with the directive and a server TTL of 100ms. The second sends a payload.
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(fdv2BuildCount.incrementAndGet() == 1
+                    ? FDv2SourceResult.changeSet(makeChangeSet(true), true, Duration.ofMillis(100))
+                    : FDv2SourceResult.changeSet(makeChangeSet(true), false));
+                return new MockQueuedSynchronizer(results);
+            }
+        );
+
+        // The FDv1 fallback synchronizer sends a payload.
+        FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
+            BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+            results.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+            return new MockQueuedSynchronizer(results);
+        };
+
+        // The default fallback TTL lasts much longer than the test.
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, fdv1Fallback, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system.
+        dataSource.start();
+
+        // After the server TTL, the data system has restarted the FDv2 synchronizer and applied its data.
+        sink.awaitApplyCount(3, 2, TimeUnit.SECONDS);
+        assertEquals(3, sink.getApplyCount());
+        assertEquals(2, fdv2BuildCount.get());
+    }
+
+    // The data system uses the default fallback TTL when the server TTL is zero or longer than one hour.
+    @Test
+    public void fdv1FallbackIgnoresServerTTLOutOfRange() throws Exception {
+        for (Duration serverTTL : Arrays.asList(Duration.ZERO, Duration.ofHours(2))) {
+            MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+            AtomicInteger fdv2BuildCount = new AtomicInteger();
+
+            // The first instance sends a payload with the directive and the server TTL. The second sends a payload.
+            ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+                () -> {
+                    BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                    results.add(fdv2BuildCount.incrementAndGet() == 1
+                        ? FDv2SourceResult.changeSet(makeChangeSet(true), true, serverTTL)
+                        : FDv2SourceResult.changeSet(makeChangeSet(true), false));
+                    return new MockQueuedSynchronizer(results);
+                }
+            );
+
+            // The FDv1 fallback synchronizer sends a payload.
+            FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+                return new MockQueuedSynchronizer(results);
+            };
+
+            // The default fallback TTL ends after 50-100ms.
+            FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, fdv1Fallback, sink, Thread.NORM_PRIORITY, logger,
+                /* fallbackTimeout= */ Duration.ofSeconds(120),
+                /* recoveryTimeout= */ Duration.ofSeconds(300),
+                /* parkInitialDelay= */ Duration.ofMinutes(5),
+                /* parkMaxDelay= */ Duration.ofHours(1),
+                /* failoverDelay= */ Duration.ofSeconds(1),
+                /* defaultFDv1FallbackTTL= */ Duration.ofMillis(100));
+            resourcesToClose.add(dataSource);
+
+            // Start the data system.
+            dataSource.start();
+
+            // After the default TTL, the data system has restarted the FDv2 synchronizer and applied its data.
+            sink.awaitApplyCount(3, 2, TimeUnit.SECONDS);
+            assertEquals("server TTL " + serverTTL, 3, sink.getApplyCount());
+            assertEquals("server TTL " + serverTTL, 2, fdv2BuildCount.get());
+        }
+    }
+
     // When the fallback TTL ends before the FDv1 synchronizer's unpark time, the FDv2 synchronizers restart at the TTL.
     @Test
     public void fdv1FallbackEndsWhileFDv1SynchronizerIsParked() throws Exception {

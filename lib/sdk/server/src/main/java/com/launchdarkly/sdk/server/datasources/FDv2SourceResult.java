@@ -10,6 +10,7 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 
 import java.io.Closeable;
+import java.time.Duration;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -72,6 +73,7 @@ public class FDv2SourceResult implements Closeable {
     private final Status status;
     private final SourceResultType resultType;
     private final boolean fdv1Fallback;
+    private final Duration fdv1FallbackTTL;
     private final boolean resetThresholdMet;
     private final Function<Void, Void> completionCallback;
 
@@ -79,6 +81,7 @@ public class FDv2SourceResult implements Closeable {
         ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet,
         Status status, SourceResultType resultType,
         boolean fdv1Fallback,
+        Duration fdv1FallbackTTL,
         boolean resetThresholdMet,
         Function<Void, Void> completionCallback
     ) {
@@ -86,12 +89,24 @@ public class FDv2SourceResult implements Closeable {
         this.status = status;
         this.resultType = resultType;
         this.fdv1Fallback = fdv1Fallback;
+        this.fdv1FallbackTTL = fdv1FallbackTTL;
         this.resetThresholdMet = resetThresholdMet;
         this.completionCallback = completionCallback;
     }
 
     public static FDv2SourceResult interrupted(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback) {
-        return interrupted(errorInfo, fdv1Fallback, null);
+        return interrupted(errorInfo, fdv1Fallback, (Duration) null);
+    }
+
+    public static FDv2SourceResult interrupted(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback, Duration fdv1FallbackTTL) {
+        return new FDv2SourceResult(
+            /* changeSet= */ null,
+            Status.interrupted(errorInfo),
+            SourceResultType.STATUS,
+            fdv1Fallback,
+            fdv1FallbackTTL,
+            /* resetThresholdMet= */ false,
+            /* completionCallback= */ null);
     }
 
     public static FDv2SourceResult interrupted(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
@@ -100,6 +115,7 @@ public class FDv2SourceResult implements Closeable {
             Status.interrupted(errorInfo),
             SourceResultType.STATUS,
             fdv1Fallback,
+            /* fdv1FallbackTTL= */ null,
             /* resetThresholdMet= */ false,
             completionCallback);
     }
@@ -114,12 +130,24 @@ public class FDv2SourceResult implements Closeable {
             Status.shutdown(),
             SourceResultType.STATUS,
             /* fdv1Fallback= */ false,
+            /* fdv1FallbackTTL= */ null,
             /* resetThresholdMet= */ false,
             completionCallback);
     }
 
     public static FDv2SourceResult terminalError(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback) {
-        return terminalError(errorInfo, fdv1Fallback, null);
+        return terminalError(errorInfo, fdv1Fallback, (Duration) null);
+    }
+
+    public static FDv2SourceResult terminalError(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback, Duration fdv1FallbackTTL) {
+        return new FDv2SourceResult(
+            /* changeSet= */ null,
+            Status.terminalError(errorInfo),
+            SourceResultType.STATUS,
+            fdv1Fallback,
+            fdv1FallbackTTL,
+            /* resetThresholdMet= */ false,
+            /* completionCallback= */ null);
     }
 
     public static FDv2SourceResult terminalError(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
@@ -128,12 +156,24 @@ public class FDv2SourceResult implements Closeable {
             Status.terminalError(errorInfo),
             SourceResultType.STATUS,
             fdv1Fallback,
+            /* fdv1FallbackTTL= */ null,
             /* resetThresholdMet= */ false,
             completionCallback);
     }
 
     public static FDv2SourceResult changeSet(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet, boolean fdv1Fallback) {
-        return changeSet(changeSet, fdv1Fallback, null);
+        return changeSet(changeSet, fdv1Fallback, (Duration) null);
+    }
+
+    public static FDv2SourceResult changeSet(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet, boolean fdv1Fallback, Duration fdv1FallbackTTL) {
+        return new FDv2SourceResult(
+            changeSet,
+            /* status= */ null,
+            SourceResultType.CHANGE_SET,
+            fdv1Fallback,
+            fdv1FallbackTTL,
+            /* resetThresholdMet= */ false,
+            /* completionCallback= */ null);
     }
 
     public static FDv2SourceResult changeSet(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
@@ -142,12 +182,24 @@ public class FDv2SourceResult implements Closeable {
             /* status= */ null,
             SourceResultType.CHANGE_SET,
             fdv1Fallback,
+            /* fdv1FallbackTTL= */ null,
             /* resetThresholdMet= */ false,
             completionCallback);
     }
 
     public static FDv2SourceResult goodbye(String reason, boolean fdv1Fallback) {
-        return goodbye(reason, fdv1Fallback, null);
+        return goodbye(reason, fdv1Fallback, (Duration) null);
+    }
+
+    public static FDv2SourceResult goodbye(String reason, boolean fdv1Fallback, Duration fdv1FallbackTTL) {
+        return new FDv2SourceResult(
+            /* changeSet= */ null,
+            Status.goodbye(reason),
+            SourceResultType.STATUS,
+            fdv1Fallback,
+            fdv1FallbackTTL,
+            /* resetThresholdMet= */ false,
+            /* completionCallback= */ null);
     }
 
     public static FDv2SourceResult goodbye(String reason, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
@@ -156,6 +208,7 @@ public class FDv2SourceResult implements Closeable {
             Status.goodbye(reason),
             SourceResultType.STATUS,
             fdv1Fallback,
+            /* fdv1FallbackTTL= */ null,
             /* resetThresholdMet= */ false,
             completionCallback);
     }
@@ -174,6 +227,15 @@ public class FDv2SourceResult implements Closeable {
 
     public boolean isFdv1Fallback() {
         return fdv1Fallback;
+    }
+
+    /**
+     * The fallback TTL that the server sent with the FDv1 fallback directive, as the server sent it.
+     *
+     * @return the fallback TTL, or null if the server did not send one
+     */
+    public Duration getFdv1FallbackTTL() {
+        return fdv1FallbackTTL;
     }
 
     /**
@@ -196,6 +258,7 @@ public class FDv2SourceResult implements Closeable {
             status,
             resultType,
             fdv1Fallback,
+            fdv1FallbackTTL,
             /* resetThresholdMet= */ true,
             completionCallback);
     }
@@ -222,6 +285,7 @@ public class FDv2SourceResult implements Closeable {
             status,
             resultType,
             fdv1Fallback,
+            fdv1FallbackTTL,
             resetThresholdMet,
             combinedCallback);
     }
