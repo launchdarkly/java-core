@@ -3434,9 +3434,8 @@ public class FDv2DataSourceTest extends BaseTest {
         dataSource.start().get(2, TimeUnit.SECONDS);
 
         // The data system reports INTERRUPTED, and restarts the first synchronizer after the TTL.
-        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(4, 2, TimeUnit.SECONDS);
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(3, 2, TimeUnit.SECONDS);
         assertEquals(Arrays.asList(
-            DataSourceStatusProvider.State.VALID,
             DataSourceStatusProvider.State.VALID,
             DataSourceStatusProvider.State.INTERRUPTED,
             DataSourceStatusProvider.State.VALID), statuses);
@@ -3537,7 +3536,7 @@ public class FDv2DataSourceTest extends BaseTest {
         AtomicInteger fdv2BuildCount = new AtomicInteger();
         AtomicInteger fdv1BuildCount = new AtomicInteger();
 
-        // The first instance reports an interruption with the directive. The second sends a payload.
+        // The first instance reports an interruption with the directive. The second sends a payload with the directive.
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             () -> {
                 BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
@@ -3547,7 +3546,7 @@ public class FDv2DataSourceTest extends BaseTest {
                             DataSourceStatusProvider.ErrorKind.NETWORK_ERROR, 500, null, Instant.now()),
                         true));
                 } else {
-                    results.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+                    results.add(FDv2SourceResult.changeSet(makeChangeSet(true), true));
                 }
                 return new MockQueuedSynchronizer(results);
             }
@@ -3585,6 +3584,14 @@ public class FDv2DataSourceTest extends BaseTest {
         sink.awaitApplyCount(1, 2, TimeUnit.SECONDS);
         assertEquals(1, sink.getApplyCount());
         assertEquals(2, fdv2BuildCount.get());
+
+        // Each directive falls back to the FDv1 synchronizer, which is still parked, so nothing runs until the TTL.
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(4, 2, TimeUnit.SECONDS);
+        assertEquals(Arrays.asList(
+            DataSourceStatusProvider.State.INTERRUPTED,
+            DataSourceStatusProvider.State.INTERRUPTED,
+            DataSourceStatusProvider.State.VALID,
+            DataSourceStatusProvider.State.INTERRUPTED), statuses);
         assertEquals(1, fdv1BuildCount.get());
     }
 
@@ -4284,9 +4291,12 @@ public class FDv2DataSourceTest extends BaseTest {
 
         @Override
         public void updateStatus(DataSourceStatusProvider.State newState, DataSourceStatusProvider.ErrorInfo errorInfo) {
-            lastState.set(newState);
+            // Like DataSourceUpdatesImpl, broadcast only a new state or a new error.
+            DataSourceStatusProvider.State oldState = lastState.getAndSet(newState);
             lastError.set(errorInfo);
-            statusUpdates.offer(newState);
+            if (newState != oldState || errorInfo != null) {
+                statusUpdates.offer(newState);
+            }
         }
 
         @Override
