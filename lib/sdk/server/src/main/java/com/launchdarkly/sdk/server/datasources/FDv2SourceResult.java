@@ -10,6 +10,7 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 
 import java.io.Closeable;
+import java.time.Duration;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -72,6 +73,7 @@ public class FDv2SourceResult implements Closeable {
     private final Status status;
     private final SourceResultType resultType;
     private final boolean fdv1Fallback;
+    private final Duration fdv1FallbackTtl;
     private final Function<Void, Void> completionCallback;
 
     private FDv2SourceResult(
@@ -80,10 +82,21 @@ public class FDv2SourceResult implements Closeable {
         boolean fdv1Fallback,
         Function<Void, Void> completionCallback
     ) {
+        this(changeSet, status, resultType, fdv1Fallback, null, completionCallback);
+    }
+
+    private FDv2SourceResult(
+        ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet,
+        Status status, SourceResultType resultType,
+        boolean fdv1Fallback,
+        Duration fdv1FallbackTtl,
+        Function<Void, Void> completionCallback
+    ) {
         this.changeSet = changeSet;
         this.status = status;
         this.resultType = resultType;
         this.fdv1Fallback = fdv1Fallback;
+        this.fdv1FallbackTtl = fdv1FallbackTtl;
         this.completionCallback = completionCallback;
     }
 
@@ -98,6 +111,16 @@ public class FDv2SourceResult implements Closeable {
             SourceResultType.STATUS,
             fdv1Fallback,
             completionCallback);
+    }
+
+    /**
+     * @param errorInfo the error
+     * @param fdv1FallbackTtl the TTL of the FDv1 fallback directive carried by the result, or null if there is none
+     * @return the result
+     */
+    public static FDv2SourceResult interrupted(DataSourceStatusProvider.ErrorInfo errorInfo, Duration fdv1FallbackTtl) {
+        return new FDv2SourceResult(null, Status.interrupted(errorInfo), SourceResultType.STATUS,
+            fdv1FallbackTtl != null, fdv1FallbackTtl, null);
     }
 
     public static FDv2SourceResult shutdown() {
@@ -124,6 +147,16 @@ public class FDv2SourceResult implements Closeable {
             completionCallback);
     }
 
+    /**
+     * @param errorInfo the error
+     * @param fdv1FallbackTtl the TTL of the FDv1 fallback directive carried by the result, or null if there is none
+     * @return the result
+     */
+    public static FDv2SourceResult terminalError(DataSourceStatusProvider.ErrorInfo errorInfo, Duration fdv1FallbackTtl) {
+        return new FDv2SourceResult(null, Status.terminalError(errorInfo), SourceResultType.STATUS,
+            fdv1FallbackTtl != null, fdv1FallbackTtl, null);
+    }
+
     public static FDv2SourceResult changeSet(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet, boolean fdv1Fallback) {
         return changeSet(changeSet, fdv1Fallback, null);
     }
@@ -137,6 +170,16 @@ public class FDv2SourceResult implements Closeable {
             completionCallback);
     }
 
+    /**
+     * @param changeSet the change set
+     * @param fdv1FallbackTtl the TTL of the FDv1 fallback directive carried by the result, or null if there is none
+     * @return the result
+     */
+    public static FDv2SourceResult changeSet(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet, Duration fdv1FallbackTtl) {
+        return new FDv2SourceResult(changeSet, null, SourceResultType.CHANGE_SET,
+            fdv1FallbackTtl != null, fdv1FallbackTtl, null);
+    }
+
     public static FDv2SourceResult goodbye(String reason, boolean fdv1Fallback) {
         return goodbye(reason, fdv1Fallback, null);
     }
@@ -148,6 +191,16 @@ public class FDv2SourceResult implements Closeable {
             SourceResultType.STATUS,
             fdv1Fallback,
             completionCallback);
+    }
+
+    /**
+     * @param reason the reason for the goodbye
+     * @param fdv1FallbackTtl the TTL of the FDv1 fallback directive carried by the result, or null if there is none
+     * @return the result
+     */
+    public static FDv2SourceResult goodbye(String reason, Duration fdv1FallbackTtl) {
+        return new FDv2SourceResult(null, Status.goodbye(reason), SourceResultType.STATUS,
+            fdv1FallbackTtl != null, fdv1FallbackTtl, null);
     }
 
     public SourceResultType getResultType() {
@@ -167,6 +220,15 @@ public class FDv2SourceResult implements Closeable {
     }
 
     /**
+     * Returns the TTL of the FDv1 fallback directive carried by this result.
+     *
+     * @return the TTL, or null if there is no directive or the directive did not specify a TTL
+     */
+    public Duration getFdv1FallbackTtl() {
+        return fdv1FallbackTtl;
+    }
+
+    /**
      * Creates a new result wrapping this one with an additional completion callback.
      * <p>
      * The new completion callback will be invoked when the result is closed, followed by
@@ -183,7 +245,7 @@ public class FDv2SourceResult implements Closeable {
             }
             return null;
         };
-        return new FDv2SourceResult(changeSet, status, resultType, fdv1Fallback, combinedCallback);
+        return new FDv2SourceResult(changeSet, status, resultType, fdv1Fallback, fdv1FallbackTtl, combinedCallback);
     }
 
     @Override

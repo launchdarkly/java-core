@@ -6,6 +6,7 @@ import com.launchdarkly.eventsource.EventSource;
 import com.launchdarkly.eventsource.FaultEvent;
 import com.launchdarkly.eventsource.HttpConnectStrategy;
 import com.launchdarkly.eventsource.MessageEvent;
+import com.launchdarkly.eventsource.ResponseHeaders;
 import com.launchdarkly.eventsource.RetryDelayStrategy;
 import com.launchdarkly.eventsource.StreamClosedByCallerException;
 import com.launchdarkly.eventsource.StreamEvent;
@@ -320,7 +321,8 @@ class StreamingSynchronizerImpl implements Synchronizer {
             case GOODBYE:
                 String reason = ((FDv2ProtocolHandler.FDv2ActionGoodbye) action).getReason();
                 logger.info("Goodbye was received from the LaunchDarkly connection with reason: '{}'.", reason);
-                result = FDv2SourceResult.goodbye(reason, getFallback(event));
+                Duration goodbyeFallback = FDv1FallbackDirective.fromGoodbye(fdv2Event);
+                result = FDv2SourceResult.goodbye(reason, goodbyeFallback != null ? goodbyeFallback : getFallback(event));
                 // We drop this current connection and attempt to restart the stream.
                 restartStream(false);  // Not a failure - deliberate server-initiated restart
                 break;
@@ -447,23 +449,25 @@ class StreamingSynchronizerImpl implements Synchronizer {
         }
     }
 
-    private static boolean getFallback(Exception ex) {
+    private static Duration getFallback(Exception ex) {
         if(ex instanceof StreamHttpErrorException) {
-            String headerValue = ((StreamHttpErrorException) ex).getHeaders()
-              .value(HeaderConstants.FDV1_FALLBACK.getHeaderName());
-            return headerValue != null && headerValue.equalsIgnoreCase("true");
+            return getFallback(((StreamHttpErrorException) ex).getHeaders());
         }
-        return false;
+        return null;
     }
 
-    private static boolean getFallback(StreamEvent event) {
-        String headerName = HeaderConstants.FDV1_FALLBACK.getHeaderName();
-        String headerValue = null;
+    private static Duration getFallback(StreamEvent event) {
         if(event instanceof FaultEvent) {
-            headerValue = ((FaultEvent) event).getHeaders().value(headerName);
+            return getFallback(((FaultEvent) event).getHeaders());
         } else if (event instanceof MessageEvent) {
-            headerValue = ((MessageEvent) event).getHeaders().value(headerName);
+            return getFallback(((MessageEvent) event).getHeaders());
         }
-        return headerValue != null && headerValue.equalsIgnoreCase("true");
+        return null;
+    }
+
+    private static Duration getFallback(ResponseHeaders headers) {
+        return FDv1FallbackDirective.fromHeaders(
+            headers.value(HeaderConstants.FDV1_FALLBACK.getHeaderName()),
+            headers.value(HeaderConstants.FDV1_FALLBACK_TTL.getHeaderName()));
     }
 }
