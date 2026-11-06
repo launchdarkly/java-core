@@ -353,6 +353,86 @@ public class DefaultEventProcessorOutputTest extends BaseEventTest {
 
   @SuppressWarnings("unchecked")
   @Test
+  public void overrideAffectedEvaluationProducesNoFeatureEventAndNoDebugEvent() throws Exception {
+    // The flag requests both an individual feature event and a debug event. An override affected
+    // the evaluation, so neither is produced. The evaluation still produces an index event and a
+    // summary counter, and the counter carries the override-affected marker.
+    MockEventSender es = new MockEventSender();
+    long futureTime = System.currentTimeMillis() + 1000000;
+    Event.FeatureRequest fe = featureEvent(user, FLAG_KEY).flagVersion(FLAG_VERSION).variation(1)
+        .value(LDValue.of("value")).defaultValue(LDValue.of("default"))
+        .trackEvents(true).debugEventsUntilDate(futureTime).overrideAffected(true).build();
+
+    EventContextDeduplicator contextDeduplicator = contextDeduplicatorThatAlwaysSaysKeysAreNew();
+
+    try (DefaultEventProcessor ep = makeEventProcessor(baseConfig(es).contextDeduplicator(contextDeduplicator))) {
+      ep.sendEvent(fe);
+    }
+
+    assertThat(es.getEventsFromLastRequest(), contains(
+        isIndexEvent(fe, userJson),
+        allOf(
+            isSummaryEvent(),
+            hasSummaryFlag(FLAG_KEY, LDValue.of("default"),
+                contains(isOverrideAffectedSummaryEventCounter(FLAG_VERSION, 1, LDValue.of("value"), 1)))
+        )
+    ));
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void overrideAffectedPrerequisiteEvaluationProducesNoFeatureEvent() throws Exception {
+    MockEventSender es = new MockEventSender();
+    Event.FeatureRequest fe = featureEvent(user, FLAG_KEY).prereqOf("parent")
+        .trackEvents(true).overrideAffected(true).build();
+
+    try (DefaultEventProcessor ep = makeEventProcessor(baseConfig(es))) {
+      ep.sendEvent(fe);
+    }
+
+    assertThat(es.getEventsFromLastRequest(), contains(
+        isSummaryEvent()
+    ));
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void overrideAffectedAndUnaffectedEvaluationsOfSameFlagGetSeparateCounters() throws Exception {
+    MockEventSender es = new MockEventSender();
+    LDValue value = LDValue.of("value"), defaultValue = LDValue.of("default");
+    Event.FeatureRequest plain = featureEvent(user, FLAG_KEY).flagVersion(FLAG_VERSION).variation(1)
+        .value(value).defaultValue(defaultValue).build();
+    Event.FeatureRequest marked = featureEvent(user, FLAG_KEY).flagVersion(FLAG_VERSION).variation(1)
+        .value(value).defaultValue(defaultValue).overrideAffected(true).build();
+
+    try (DefaultEventProcessor ep = makeEventProcessor(baseConfig(es))) {
+      ep.sendEvent(plain);
+      ep.sendEvent(marked);
+      ep.sendEvent(marked);
+    }
+
+    assertThat(es.getEventsFromLastRequest(), contains(
+        allOf(
+            isSummaryEvent(),
+            hasSummaryFlag(FLAG_KEY, defaultValue,
+                Matchers.containsInAnyOrder(
+                    isSummaryEventCounter(FLAG_VERSION, 1, value, 1),
+                    isOverrideAffectedSummaryEventCounter(FLAG_VERSION, 1, value, 2)
+                ))
+        )
+    ));
+  }
+
+  @Test
+  public void debugEventKeepsOverrideAffectedMarker() {
+    Event.FeatureRequest fe = featureEvent(user, FLAG_KEY).overrideAffected(true).build();
+    Assert.assertTrue(fe.toDebugEvent().isOverrideAffected());
+    Assert.assertTrue(fe.toDebugEvent().isDebug());
+    Assert.assertFalse(featureEvent(user, FLAG_KEY).build().isOverrideAffected());
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
   public void nonTrackedEventsAreSummarized() throws Exception {
     MockEventSender es = new MockEventSender();
     String flagkey1 = "flagkey1", flagkey2 = "flagkey2";

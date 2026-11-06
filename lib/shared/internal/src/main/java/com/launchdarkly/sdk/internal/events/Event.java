@@ -155,6 +155,7 @@ public class Event {
     private final boolean debug;
     private final long samplingRatio;
     private final boolean excludeFromSummaries;
+    private final boolean overrideAffected;
 
     /**
      * Constructs a feature request event.
@@ -171,12 +172,14 @@ public class Event {
      * @param trackEvents          true if full event tracking is turned on for this flag
      * @param debugEventsUntilDate if non-null, the time until which event debugging should be enabled
      * @param debug                true if this is a debugging event
-     * @param excludeFromSummaries true to exclude the event from summaries
      * @param samplingRatio        the sampling ratio for the event
+     * @param excludeFromSummaries true to exclude the event from summaries
+     * @param overrideAffected     true if an override affected the evaluation; see {@link #isOverrideAffected()}
      */
     public FeatureRequest(long timestamp, String key, LDContext context, int version, int variation, LDValue value,
                           LDValue defaultVal, EvaluationReason reason, String prereqOf, boolean trackEvents,
-                          Long debugEventsUntilDate, boolean debug, long samplingRatio, boolean excludeFromSummaries) {
+                          Long debugEventsUntilDate, boolean debug, long samplingRatio, boolean excludeFromSummaries,
+                          boolean overrideAffected) {
       super(timestamp, context);
       this.key = key;
       this.version = version;
@@ -190,6 +193,32 @@ public class Event {
       this.debug = debug;
       this.excludeFromSummaries = excludeFromSummaries;
       this.samplingRatio = samplingRatio;
+      this.overrideAffected = overrideAffected;
+    }
+
+    /**
+     * Constructs a feature request event that no override affected.
+     *
+     * @param timestamp            the timestamp in milliseconds
+     * @param key                  the flag key
+     * @param context              the context associated with the event
+     * @param version              the flag version, or -1 if the flag was not found
+     * @param variation            the result variation, or -1 if there was an error
+     * @param value                the result value
+     * @param defaultVal           the default value passed by the application
+     * @param reason               the evaluation reason, if it is to be included in the event
+     * @param prereqOf             if this flag was evaluated as a prerequisite, this is the key of the flag that referenced it
+     * @param trackEvents          true if full event tracking is turned on for this flag
+     * @param debugEventsUntilDate if non-null, the time until which event debugging should be enabled
+     * @param debug                true if this is a debugging event
+     * @param samplingRatio        the sampling ratio for the event
+     * @param excludeFromSummaries true to exclude the event from summaries
+     */
+    public FeatureRequest(long timestamp, String key, LDContext context, int version, int variation, LDValue value,
+                          LDValue defaultVal, EvaluationReason reason, String prereqOf, boolean trackEvents,
+                          Long debugEventsUntilDate, boolean debug, long samplingRatio, boolean excludeFromSummaries) {
+      this(timestamp, key, context, version, variation, value, defaultVal, reason, prereqOf, trackEvents,
+          debugEventsUntilDate, debug, samplingRatio, excludeFromSummaries, false);
     }
 
     /**
@@ -311,6 +340,23 @@ public class Event {
       return excludeFromSummaries;
     }
 
+    /**
+     * True if an override affected this evaluation. The override can be direct or transitive. It is
+     * direct when the evaluated flag came from the SDK's override store. It is transitive when a
+     * prerequisite flag at any depth, or a segment read during the evaluation, came from that store.
+     * <p>
+     * The event processor keys on this value alone. It produces no individual feature event and no
+     * debug event for such an evaluation, and it counts the evaluation in a separate summary counter
+     * that carries the override-affected marker.
+     * <p>
+     * Flag overrides are currently experimental and subject to change.
+     *
+     * @return true if an override affected the evaluation
+     */
+    public boolean isOverrideAffected() {
+      return overrideAffected;
+    }
+
     @Override
     public long getSamplingRatio() {
       return samplingRatio;
@@ -324,7 +370,7 @@ public class Event {
     public FeatureRequest toDebugEvent() {
       return new FeatureRequest(getCreationDate(), getKey(), getContext(), getVersion(),
           getVariation(), getValue(), getDefaultVal(), getReason(), getPrereqOf(),
-          false, null, true, samplingRatio, excludeFromSummaries);
+          false, null, true, samplingRatio, excludeFromSummaries, overrideAffected);
     }
   }
 

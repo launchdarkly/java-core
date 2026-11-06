@@ -544,8 +544,10 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
         if(!fe.isExcludeFromSummaries()) {
           outbox.addToSummary(fe);
         }
-        addFullEvent = fe.isTrackEvents();
-        if (shouldDebugEvent(fe)) {
+        // An override-affected evaluation appears only in the summary counters. It produces no
+        // individual feature event and no debug event, whatever the flag's configuration requests.
+        addFullEvent = fe.isTrackEvents() && !fe.isOverrideAffected();
+        if (!fe.isOverrideAffected() && shouldDebugEvent(fe)) {
           debugEvent = fe.toDebugEvent();
         }
       } else {
@@ -702,7 +704,8 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
           e.getVariation(),
           e.getValue(),
           e.getDefaultVal(),
-          e.getContext()
+          e.getContext(),
+          e.isOverrideAffected()
       );
     }
 

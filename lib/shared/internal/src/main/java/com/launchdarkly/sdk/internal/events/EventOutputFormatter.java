@@ -280,28 +280,11 @@ public final class EventOutputFormatter {
       jw.name("counters");
       jw.beginArray();
 
-      for (int i = 0; i < flagInfo.versionsAndVariations.size(); i++) {
-        int version = flagInfo.versionsAndVariations.keyAt(i);
-        SimpleIntKeyedMap<CounterValue> variations = flagInfo.versionsAndVariations.valueAt(i);
-        for (int j = 0; j < variations.size(); j++) {
-          int variation = variations.keyAt(j);
-          CounterValue counter = variations.valueAt(j);
-
-          jw.beginObject();
-
-          if (variation >= 0) {
-            jw.name("variation").value(variation);
-          }
-          if (version >= 0) {
-            jw.name("version").value(version);
-          } else {
-            jw.name("unknown").value(true);
-          }
-          writeLDValue("value", counter.flagValue, jw);
-          jw.name("count").value(counter.count);
-
-          jw.endObject();
-        }
+      writeCounters(jw, flagInfo.versionsAndVariations, false);
+      SimpleIntKeyedMap<SimpleIntKeyedMap<CounterValue>> overrideAffectedCounters =
+          flagInfo.overrideAffectedVersionsAndVariationsIfAny();
+      if (overrideAffectedCounters != null) {
+        writeCounters(jw, overrideAffectedCounters, true);
       }
 
       jw.endArray(); // end of "counters" array
@@ -310,6 +293,37 @@ public final class EventOutputFormatter {
 
     jw.endObject(); // end of "features"
     jw.endObject(); // end of summary event object
+  }
+
+  private void writeCounters(JsonWriter jw, SimpleIntKeyedMap<SimpleIntKeyedMap<CounterValue>> versionsAndVariations,
+      boolean overrideAffected) throws IOException {
+    for (int i = 0; i < versionsAndVariations.size(); i++) {
+      int version = versionsAndVariations.keyAt(i);
+      SimpleIntKeyedMap<CounterValue> variations = versionsAndVariations.valueAt(i);
+      for (int j = 0; j < variations.size(); j++) {
+        int variation = variations.keyAt(j);
+        CounterValue counter = variations.valueAt(j);
+
+        jw.beginObject();
+
+        if (variation >= 0) {
+          jw.name("variation").value(variation);
+        }
+        if (version >= 0) {
+          jw.name("version").value(version);
+        } else {
+          jw.name("unknown").value(true);
+        }
+        // The override-affected marker is present only when true, like the unknown marker.
+        if (overrideAffected) {
+          jw.name("overrideAffected").value(true);
+        }
+        writeLDValue("value", counter.flagValue, jw);
+        jw.name("count").value(counter.count);
+
+        jw.endObject();
+      }
+    }
   }
 
   private void writeKindAndCreationDate(JsonWriter jw, String kind, long creationDate) throws IOException {

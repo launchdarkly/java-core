@@ -95,6 +95,56 @@ public class EventSummarizerTest extends BaseTest {
         .build()));
   }
   
+  @Test
+  public void overrideAffectedEvaluationsAreCountedSeparately() {
+    EventSummarizer es = new EventSummarizer();
+    String flagKey = "key1";
+    int flagVersion = 11;
+    LDValue value1 = LDValue.of("value1"), default1 = LDValue.of("default1");
+    long timestamp = 1000;
+
+    // Same flag, version, variation, and value. Only the marker differs.
+    es.summarizeEvent(timestamp, flagKey, flagVersion, 1, value1, default1, context, false);
+    es.summarizeEvent(timestamp, flagKey, flagVersion, 1, value1, default1, context, true);
+    es.summarizeEvent(timestamp, flagKey, flagVersion, 1, value1, default1, context, true);
+
+    EventSummarizer.EventSummary data = es.getSummaryAndReset();
+
+    assertThat(data.counters, equalTo(ImmutableMap.<String, FlagInfo>builder()
+        .put(flagKey, new FlagInfo(default1,
+            new SimpleIntKeyedMap<SimpleIntKeyedMap<CounterValue>>()
+              .put(flagVersion, new SimpleIntKeyedMap<CounterValue>()
+                    .put(1, new CounterValue(1, value1))
+                    ),
+            new SimpleIntKeyedMap<SimpleIntKeyedMap<CounterValue>>()
+              .put(flagVersion, new SimpleIntKeyedMap<CounterValue>()
+                    .put(1, new CounterValue(2, value1))
+                    ),
+            ImmutableSet.of("user")))
+        .build()));
+  }
+
+  @Test
+  public void flagWithoutOverrideAffectedEvaluationsHasNoOverrideAffectedCounters() {
+    EventSummarizer es = new EventSummarizer();
+    es.summarizeEvent(1000, "key1", 11, 1, LDValue.of("v"), LDValue.of("d"), context);
+    EventSummarizer.EventSummary data = es.getSummaryAndReset();
+    assertNull(data.counters.get("key1").overrideAffectedVersionsAndVariationsIfAny());
+  }
+
+  @Test
+  public void flagInfoEqualityIncludesOverrideAffectedCounters() {
+    SimpleIntKeyedMap<SimpleIntKeyedMap<CounterValue>> plain = new SimpleIntKeyedMap<SimpleIntKeyedMap<CounterValue>>()
+        .put(1, new SimpleIntKeyedMap<CounterValue>().put(0, new CounterValue(1, LDValue.of("a"))));
+    SimpleIntKeyedMap<SimpleIntKeyedMap<CounterValue>> marked = new SimpleIntKeyedMap<SimpleIntKeyedMap<CounterValue>>()
+        .put(1, new SimpleIntKeyedMap<CounterValue>().put(0, new CounterValue(1, LDValue.of("a"))));
+    FlagInfo withMarked = new FlagInfo(LDValue.of("d"), plain, marked, ImmutableSet.of("user"));
+    FlagInfo withoutMarked = new FlagInfo(LDValue.of("d"), plain, ImmutableSet.of("user"));
+    assertNotEquals(withMarked, withoutMarked);
+    assertEquals(withMarked, new FlagInfo(LDValue.of("d"), plain, marked, ImmutableSet.of("user")));
+    assertThat(withMarked.toString(), org.hamcrest.Matchers.containsString("overrideAffectedCounters"));
+  }
+
   // The following implementations are used only in debug/test code, but may as well test them
   
   @Test

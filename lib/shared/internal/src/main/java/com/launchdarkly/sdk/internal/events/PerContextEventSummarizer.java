@@ -36,6 +36,7 @@ public final class PerContextEventSummarizer implements EventSummarizerInterface
    * @param value        the result value
    * @param defaultValue the application default value
    * @param context      the evaluation context
+   * @param overrideAffected true if an override affected the evaluation
    */
   @Override
   public void summarizeEvent(
@@ -45,13 +46,15 @@ public final class PerContextEventSummarizer implements EventSummarizerInterface
     int variation,
     LDValue value,
     LDValue defaultValue,
-    LDContext context
+    LDContext context,
+    boolean overrideAffected
   ) {
     // Get or create summarizer for this context
     EventSummarizer summarizer = summarizersByContext.computeIfAbsent(context, EventSummarizer::new);
 
     // Delegate to the per-context summarizer
-    summarizer.summarizeEvent(timestamp, flagKey, flagVersion, variation, value, defaultValue, context);
+    summarizer.summarizeEvent(timestamp, flagKey, flagVersion, variation, value, defaultValue, context,
+        overrideAffected);
   }
 
   /**
