@@ -398,4 +398,47 @@ public class DataSourceSynchronizerAdapterTest extends BaseTest {
 
         adapter.close();
     }
+
+    /** Test that two VALID statuses in a row meet the reset threshold, and a failure restarts the count. */
+    @Test
+    public void resetThresholdIsMetAfterTwoValidStatusesInARow() throws Exception {
+        AtomicReference<DataSourceUpdateSink> capturedSink = new AtomicReference<>();
+
+        DataSourceSynchronizerAdapter adapter = new DataSourceSynchronizerAdapter(sink -> {
+            capturedSink.set(sink);
+            return new MockDataSource(null, null);
+        });
+        resourcesToClose.add(adapter);
+
+        // Report a successful poll, a failed poll, and two more successful polls, as the FDv1 polling data source does.
+        CompletableFuture<FDv2SourceResult> firstFuture = adapter.next();
+        DataSourceUpdateSink sink = capturedSink.get();
+        sink.init(new FullDataSet<>(DataBuilder.forStandardTypes().build().getData(), true, null));
+        sink.updateStatus(DataSourceStatusProvider.State.VALID, null);
+        sink.updateStatus(DataSourceStatusProvider.State.INTERRUPTED,
+                DataSourceStatusProvider.ErrorInfo.fromHttpError(503));
+        sink.init(new FullDataSet<>(DataBuilder.forStandardTypes().build().getData(), true, null));
+        sink.updateStatus(DataSourceStatusProvider.State.VALID, null);
+        sink.init(new FullDataSet<>(DataBuilder.forStandardTypes().build().getData(), true, null));
+        sink.updateStatus(DataSourceStatusProvider.State.VALID, null);
+        List<FDv2SourceResult> results = new ArrayList<>();
+        results.add(firstFuture.get(2, TimeUnit.SECONDS));
+        for (int i = 0; i < 4; i++) {
+            results.add(adapter.next().get(2, TimeUnit.SECONDS));
+        }
+
+        // Only the last poll meets the reset threshold, and it reports the reset after its data.
+        assertEquals(SourceResultType.CHANGE_SET, results.get(0).getResultType());
+        assertFalse(results.get(0).isResetThresholdMet());
+        assertEquals(SourceSignal.INTERRUPTED, results.get(1).getStatus().getState());
+        assertFalse(results.get(1).isResetThresholdMet());
+        assertEquals(SourceResultType.CHANGE_SET, results.get(2).getResultType());
+        assertFalse(results.get(2).isResetThresholdMet());
+        assertEquals(SourceResultType.CHANGE_SET, results.get(3).getResultType());
+        assertFalse(results.get(3).isResetThresholdMet());
+        assertEquals(ChangeSetType.None, results.get(4).getChangeSet().getType());
+        assertTrue(results.get(4).isResetThresholdMet());
+
+        adapter.close();
+    }
 }

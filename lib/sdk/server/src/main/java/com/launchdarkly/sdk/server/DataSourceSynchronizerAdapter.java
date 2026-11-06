@@ -132,9 +132,14 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
      * This sink doesn't delegate to any other sink - it exists solely to convert FDv1 updates to FDv2 results.
      */
     private static class ConvertingUpdateSink implements DataSourceUpdateSink {
+        // The number of VALID statuses in a row that meet the reset threshold, the same as for a polling synchronizer.
+        private static final int RESET_THRESHOLD_SUCCESSFUL_RESULTS = 2;
+
         private final IterableAsyncQueue<FDv2SourceResult> resultQueue;
         // Only a full data set carries an environment ID; it is retained for subsequent partial updates.
         private volatile String environmentId = null;
+        // The number of VALID statuses the data source has reported since its last failure.
+        private int consecutiveSuccessfulResults = 0;
 
         public ConvertingUpdateSink(IterableAsyncQueue<FDv2SourceResult> resultQueue) {
             this.resultQueue = resultQueue;
@@ -191,6 +196,7 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
             // Convert state changes to FDv2SourceResult status events
             switch (newState) {
                 case INTERRUPTED:
+                    consecutiveSuccessfulResults = 0;
                     if (newError != null
                         && newError.getKind() == DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE
                         && HttpErrors.classifyHttpFailure(newError.getStatusCode()) == FailureClass.UNEXPECTED) {
@@ -200,13 +206,27 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
                     }
                     break;
                 case OFF:
+                    consecutiveSuccessfulResults = 0;
                     if (newError != null) {
                         resultQueue.put(FDv2SourceResult.terminalError(newError, false));
                     }
                     break;
                 case VALID:
+                    consecutiveSuccessfulResults++;
+                    if (consecutiveSuccessfulResults == RESET_THRESHOLD_SUCCESSFUL_RESULTS) {
+                        // Any data that came with this status is already queued, so report the reset with no changes.
+                        ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> noChanges =
+                                new ChangeSet<>(
+                                        ChangeSetType.None,
+                                        Selector.EMPTY,
+                                        Collections.emptyList(),
+                                        environmentId,
+                                        /* shouldPersist= */ true);
+                        resultQueue.put(FDv2SourceResult.changeSet(noChanges, false).withResetThresholdMet());
+                    }
+                    break;
                 case INITIALIZING:
-                    // These states don't map to FDv2SourceResult status events
+                    // This state doesn't map to an FDv2SourceResult status event
                     break;
             }
         }
