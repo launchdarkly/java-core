@@ -142,9 +142,10 @@ public final class EvaluationReason implements JsonSerializable {
   private final ErrorKind errorKind;
   private final Exception exception;
   private final BigSegmentsStatus bigSegmentsStatus;
+  private final boolean overrideAffected;
   
   private EvaluationReason(Kind kind, int ruleIndex, String ruleId, String prerequisiteKey, boolean inExperiment,
-      ErrorKind errorKind, Exception exception, BigSegmentsStatus bigSegmentsStatus) {
+      ErrorKind errorKind, Exception exception, BigSegmentsStatus bigSegmentsStatus, boolean overrideAffected) {
     this.kind = kind;
     this.ruleIndex = ruleIndex;
     this.ruleId = ruleId;
@@ -153,18 +154,19 @@ public final class EvaluationReason implements JsonSerializable {
     this.errorKind = errorKind;
     this.exception = exception;
     this.bigSegmentsStatus = bigSegmentsStatus;
+    this.overrideAffected = overrideAffected;
   }
   
   private EvaluationReason(Kind kind) {
-    this(kind, -1, null, null, NOT_IN_EXPERIMENT, null, null, null);
+    this(kind, -1, null, null, NOT_IN_EXPERIMENT, null, null, null, false);
   }
   
   private EvaluationReason(Kind kind, boolean inExperiment) {
-    this(kind, -1, null, null, inExperiment, null, null, null);
+    this(kind, -1, null, null, inExperiment, null, null, null, false);
   }
   
   private EvaluationReason(ErrorKind errorKind, Exception exception) {
-    this(Kind.ERROR, -1, null, null, NOT_IN_EXPERIMENT, errorKind, exception, null);
+    this(Kind.ERROR, -1, null, null, NOT_IN_EXPERIMENT, errorKind, exception, null, false);
   }
   
   /**
@@ -267,7 +269,41 @@ public final class EvaluationReason implements JsonSerializable {
    */
   public EvaluationReason withBigSegmentsStatus(BigSegmentsStatus bigSegmentsStatus) {
     return new EvaluationReason(kind, ruleIndex, ruleId, prerequisiteKey, inExperiment, errorKind,
-        exception, bigSegmentsStatus);
+        exception, bigSegmentsStatus, overrideAffected);
+  }
+
+  /**
+   * Whether an override affected this evaluation, directly or transitively. Returns true if the
+   * evaluated flag came from the SDK's override store. Also returns true if a prerequisite flag at
+   * any depth, or a segment read during the evaluation, came from that store. Otherwise it returns
+   * false.
+   * <p>
+   * In the JSON representation, the {@code overrideAffected} property appears only when this
+   * value is true.
+   * <p>
+   * Flag overrides are currently experimental and subject to change.
+   *
+   * @return whether an override affected the evaluation
+   */
+  public boolean isOverrideAffected() {
+    return overrideAffected;
+  }
+
+  /**
+   * Returns a copy of this {@link EvaluationReason} with a specific value for
+   * {@link #isOverrideAffected()}. The copy keeps all other properties of the original reason.
+   * <p>
+   * Flag overrides are currently experimental and subject to change.
+   *
+   * @param overrideAffected the new property value
+   * @return a reason object with the given value, which is this same instance if the value is unchanged
+   */
+  public EvaluationReason withOverrideAffected(boolean overrideAffected) {
+    if (this.overrideAffected == overrideAffected) {
+      return this;
+    }
+    return new EvaluationReason(kind, ruleIndex, ruleId, prerequisiteKey, inExperiment, errorKind,
+        exception, bigSegmentsStatus, overrideAffected);
   }
 
   /**
@@ -305,7 +341,8 @@ public final class EvaluationReason implements JsonSerializable {
         inExperiment == o.inExperiment &&
         Objects.equals(errorKind, o.errorKind) &&
         Objects.equals(exception, o.exception) &&
-        Objects.equals(bigSegmentsStatus, o.bigSegmentsStatus);
+        Objects.equals(bigSegmentsStatus, o.bigSegmentsStatus) &&
+        overrideAffected == o.overrideAffected;
     }
     return false;
   }
@@ -313,7 +350,7 @@ public final class EvaluationReason implements JsonSerializable {
   @Override
   public int hashCode() {
     return Objects.hash(kind, ruleIndex, ruleId, prerequisiteKey, inExperiment, errorKind,
-        exception, bigSegmentsStatus);
+        exception, bigSegmentsStatus, overrideAffected);
   }
   
   /**
@@ -377,7 +414,7 @@ public final class EvaluationReason implements JsonSerializable {
    * @return a reason object
    */
   public static EvaluationReason ruleMatch(int ruleIndex, String ruleId, boolean inExperiment) {
-    return new EvaluationReason(Kind.RULE_MATCH, ruleIndex, ruleId, null, inExperiment, null, null, null);
+    return new EvaluationReason(Kind.RULE_MATCH, ruleIndex, ruleId, null, inExperiment, null, null, null, false);
   }
   
   /**
@@ -387,7 +424,7 @@ public final class EvaluationReason implements JsonSerializable {
    * @return a reason object
    */
   public static EvaluationReason prerequisiteFailed(String prerequisiteKey) {
-    return new EvaluationReason(Kind.PREREQUISITE_FAILED, -1, null, prerequisiteKey, NOT_IN_EXPERIMENT, null, null, null);
+    return new EvaluationReason(Kind.PREREQUISITE_FAILED, -1, null, prerequisiteKey, NOT_IN_EXPERIMENT, null, null, null, false);
   }
   
   /**

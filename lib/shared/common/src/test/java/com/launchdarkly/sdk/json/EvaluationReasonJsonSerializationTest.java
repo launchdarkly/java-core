@@ -60,6 +60,26 @@ public class EvaluationReasonJsonSerializationTest extends BaseTest {
   }
 
   @Test
+  public void overrideAffectedIsSerializedOnlyWhenTrue() throws Exception {
+    verifySerializeAndDeserialize(EvaluationReason.off().withOverrideAffected(true),
+        "{\"kind\":\"OFF\",\"overrideAffected\":true}");
+    verifySerializeAndDeserialize(EvaluationReason.fallthrough(true).withOverrideAffected(true),
+        "{\"kind\":\"FALLTHROUGH\",\"inExperiment\":true,\"overrideAffected\":true}");
+    verifySerializeAndDeserialize(EvaluationReason.ruleMatch(1, "id").withOverrideAffected(true),
+        "{\"kind\":\"RULE_MATCH\",\"ruleIndex\":1,\"ruleId\":\"id\",\"overrideAffected\":true}");
+    verifySerializeAndDeserialize(EvaluationReason.prerequisiteFailed("key").withOverrideAffected(true),
+        "{\"kind\":\"PREREQUISITE_FAILED\",\"prerequisiteKey\":\"key\",\"overrideAffected\":true}");
+    verifySerializeAndDeserialize(EvaluationReason.error(EvaluationReason.ErrorKind.MALFORMED_FLAG).withOverrideAffected(true),
+        "{\"kind\":\"ERROR\",\"errorKind\":\"MALFORMED_FLAG\",\"overrideAffected\":true}");
+    verifySerializeAndDeserialize(EvaluationReason.fallthrough().withBigSegmentsStatus(HEALTHY).withOverrideAffected(true),
+        "{\"kind\":\"FALLTHROUGH\",\"bigSegmentsStatus\":\"HEALTHY\",\"overrideAffected\":true}");
+
+    // A false value is never written, and an explicit false parses the same as an absent property.
+    verifySerialize(EvaluationReason.off().withOverrideAffected(false), "{\"kind\":\"OFF\"}");
+    verifyDeserialize(EvaluationReason.off(), "{\"kind\":\"OFF\",\"overrideAffected\":false}");
+  }
+
+  @Test
   public void errorSerializationWithException() throws Exception {
     // We do *not* want the JSON representation to include the exception, because that is used in events, and
     // the LD event service won't know what to do with that field (which will also contain a big stacktrace).

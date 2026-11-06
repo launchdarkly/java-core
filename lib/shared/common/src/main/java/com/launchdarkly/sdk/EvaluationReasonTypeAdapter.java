@@ -25,6 +25,7 @@ final class EvaluationReasonTypeAdapter extends TypeAdapter<EvaluationReason> {
     boolean inExperiment = false;
     EvaluationReason.ErrorKind errorKind = null;
     EvaluationReason.BigSegmentsStatus bigSegmentsStatus = null;
+    boolean overrideAffected = false;
     
     reader.beginObject();
     while (reader.peek() != JsonToken.END_OBJECT) {
@@ -50,6 +51,9 @@ final class EvaluationReasonTypeAdapter extends TypeAdapter<EvaluationReason> {
         break;
       case "bigSegmentsStatus":
         bigSegmentsStatus = readEnum(EvaluationReason.BigSegmentsStatus.class, reader);
+        break;
+      case "overrideAffected":
+        overrideAffected = reader.nextBoolean();
         break;
       default:
         reader.skipValue(); // ignore any unexpected property
@@ -85,9 +89,9 @@ final class EvaluationReasonTypeAdapter extends TypeAdapter<EvaluationReason> {
       return null;
     }
     if (bigSegmentsStatus != null) {
-      return reason.withBigSegmentsStatus(bigSegmentsStatus);
+      reason = reason.withBigSegmentsStatus(bigSegmentsStatus);
     }
-    return reason;
+    return reason.withOverrideAffected(overrideAffected);
   }
 
   @Override
@@ -133,6 +137,12 @@ final class EvaluationReasonTypeAdapter extends TypeAdapter<EvaluationReason> {
     if (reason.getBigSegmentsStatus() != null) {
       writer.name("bigSegmentsStatus");
       writer.value(reason.getBigSegmentsStatus().name());
+    }
+
+    // The override marker is written only when it is true, like inExperiment.
+    if (reason.isOverrideAffected()) {
+      writer.name("overrideAffected");
+      writer.value(true);
     }
     
     writer.endObject();
