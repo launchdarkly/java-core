@@ -373,7 +373,7 @@ public class DataSourceSynchronizerAdapterTest extends BaseTest {
 
         DataSourceSynchronizerAdapter adapter = new DataSourceSynchronizerAdapter(sink -> {
             capturedSink.set(sink);
-            return new MockDataSource(new CountDownLatch(1), null);
+            return new MockDataSource(null, null);
         });
         resourcesToClose.add(adapter);
 
