@@ -1,6 +1,7 @@
 package com.launchdarkly.sdk.server;
 
 import com.launchdarkly.logging.LDLogger;
+import com.launchdarkly.sdk.internal.http.FailureClass;
 import com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event;
 import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ProtocolHandler;
 import com.launchdarkly.sdk.fdv2.Selector;
@@ -65,7 +66,10 @@ class PollingBase {
                             e.toString(),
                             new Date().toInstant()
                     );
-                    return oneShot ? FDv2SourceResult.terminalError(info, fdv1Fallback) : FDv2SourceResult.interrupted(info, fdv1Fallback);
+                    boolean recoverable = classifyTransportFailure(e) == FailureClass.NORMAL;
+                    return oneShot || !recoverable
+                        ? FDv2SourceResult.terminalError(info, fdv1Fallback)
+                        : FDv2SourceResult.interrupted(info, fdv1Fallback);
                 } else if (ex instanceof SerializationException) {
                     SerializationException e = (SerializationException) ex;
                     logger.error("Polling request received malformed data: {}", e.toString());
@@ -101,7 +105,7 @@ class PollingBase {
             }
             if(!pollingResponse.isSuccess()) {
                     int statusCode = pollingResponse.getStatusCode();
-                    boolean recoverable = statusCode <= 0 || isHttpErrorRecoverable(statusCode);
+                    boolean recoverable = classifyHttpFailure(statusCode) == FailureClass.NORMAL;
                     DataSourceStatusProvider.ErrorInfo errorInfo = DataSourceStatusProvider.ErrorInfo.fromHttpError(statusCode);
                     logger.error("Polling request failed with HTTP error: {}", statusCode);
                     // For a one-shot request all errors are terminal.

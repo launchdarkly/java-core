@@ -25,8 +25,10 @@ import java.util.Map;
 import org.junit.After;
 import org.junit.Test;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -38,15 +40,13 @@ import static org.junit.Assert.*;
 @SuppressWarnings("javadoc")
 public class FDv2DataSourceTest extends BaseTest {
 
-    private ScheduledExecutorService executor;
+    private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(2);
     private final LDLogger logger = LDLogger.withAdapter(Logs.none(), "");
     private final List<AutoCloseable> resourcesToClose = new ArrayList<>();
 
     @After
     public void tearDown() {
-        if (executor != null && !executor.isShutdown()) {
-            executor.shutdownNow();
-        }
+        executor.shutdownNow();
         for (AutoCloseable resource : resourcesToClose) {
             try {
                 resource.close();
@@ -98,7 +98,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void firstInitializerFailsSecondInitializerSucceedsWithSelector() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> firstInitializerFuture = new CompletableFuture<>();
@@ -115,7 +114,13 @@ public class FDv2DataSourceTest extends BaseTest {
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -136,7 +141,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void firstInitializerFailsSecondInitializerSucceedsWithoutSelector() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> firstInitializerFuture = new CompletableFuture<>();
@@ -163,7 +167,13 @@ public class FDv2DataSourceTest extends BaseTest {
             }
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -191,7 +201,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void firstInitializerSucceedsWithSelectorSecondInitializerNotInvoked() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> firstInitializerFuture = CompletableFuture.completedFuture(
@@ -212,7 +221,13 @@ public class FDv2DataSourceTest extends BaseTest {
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -231,7 +246,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void allInitializersFailSwitchesToSynchronizers() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> firstInitializerFuture = new CompletableFuture<>();
@@ -257,7 +271,13 @@ public class FDv2DataSourceTest extends BaseTest {
             }
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -276,7 +296,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void allThreeInitializersFailWithNoSynchronizers() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
@@ -299,7 +318,13 @@ public class FDv2DataSourceTest extends BaseTest {
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -326,7 +351,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void oneInitializerNoSynchronizerIsWellBehaved() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
@@ -339,7 +363,13 @@ public class FDv2DataSourceTest extends BaseTest {
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -361,7 +391,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void noInitializersOneSynchronizerIsWellBehaved() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -374,7 +403,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockSynchronizer(synchronizerFuture)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -389,7 +424,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void oneInitializerOneSynchronizerIsWellBehaved() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
@@ -408,7 +442,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockSynchronizer(synchronizerFuture)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -423,13 +463,18 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void noInitializersAndNoSynchronizersIsWellBehaved() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -451,7 +496,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void errorWithFDv1FallbackTriggersFallback() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -468,7 +512,13 @@ public class FDv2DataSourceTest extends BaseTest {
             }
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -481,7 +531,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void fallbackAndRecoveryTasksWellBehaved() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -512,7 +561,13 @@ public class FDv2DataSourceTest extends BaseTest {
         );
 
         // Use short timeouts for testing
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 1, 2);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(1),
+            /* recoveryTimeout= */ Duration.ofSeconds(2),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -551,7 +606,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void canDisposeWhenSynchronizersFallingBack() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -565,7 +619,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockQueuedSynchronizer(syncResults)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 1, 2);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(1),
+            /* recoveryTimeout= */ Duration.ofSeconds(2),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -580,12 +640,11 @@ public class FDv2DataSourceTest extends BaseTest {
     }
 
     // ============================================================================
-    // Source Blocking
+    // Source Parking
     // ============================================================================
 
     @Test
-    public void terminalErrorBlocksSynchronizer() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
+    public void terminalErrorFailsOverToNextSynchronizer() throws Exception {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -612,7 +671,13 @@ public class FDv2DataSourceTest extends BaseTest {
             }
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -625,13 +690,13 @@ public class FDv2DataSourceTest extends BaseTest {
         Integer secondCall = synchronizerCallQueue.poll(2, TimeUnit.SECONDS);
 
         assertNotNull("First synchronizer should be called", firstCall);
-        assertNotNull("Second synchronizer should be called after first is blocked", secondCall);
+        assertNotNull("Second synchronizer should be called after first is parked", secondCall);
         assertEquals(Integer.valueOf(1), firstCall);
         assertEquals(Integer.valueOf(2), secondCall);
 
         // Expected status sequence:
         // 1. VALID when first synchronizer sends initial changeset
-        // 2. Terminal error from first synchronizer (blocks it)
+        // 2. Terminal error from first synchronizer (parks it)
         // 3. VALID when second synchronizer sends changeset
         List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(3, 2, TimeUnit.SECONDS);
         assertEquals("Should receive 3 status updates", 3, statuses.size());
@@ -645,47 +710,584 @@ public class FDv2DataSourceTest extends BaseTest {
     }
 
     @Test
-    public void allThreeSynchronizersFailReportsExhaustion() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
+    public void terminalErrorParksSynchronizerAndRestartsItAfterUnparkTime() throws Exception {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
-        // All synchronizers send terminal errors
+        // The first instance fails with a terminal error, and the second instance delivers data.
+        BlockingQueue<FDv2SourceResult> firstInstanceResults = new LinkedBlockingQueue<>();
+        firstInstanceResults.add(makeTerminalErrorResult());
+        BlockingQueue<FDv2SourceResult> secondInstanceResults = new LinkedBlockingQueue<>();
+        secondInstanceResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+        AtomicInteger buildCount = new AtomicInteger();
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> buildCount.incrementAndGet() == 1
+                ? new MockQueuedSynchronizer(firstInstanceResults)
+                : new MockQueuedSynchronizer(secondInstanceResults)
+        );
+
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMillis(100),
+            /* parkMaxDelay= */ Duration.ofSeconds(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system with its only synchronizer.
+        dataSource.start().get(5, TimeUnit.SECONDS);
+
+        // The parked synchronizer is built again after its unpark time, and its data initializes the data system.
+        assertEquals(2, buildCount.get());
+        assertTrue(dataSource.isInitialized());
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
+    }
+
+    @Test
+    public void failedNextParksSynchronizer() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        AtomicInteger buildCount = new AtomicInteger();
+
+        // The first instance fails from next(), and the second instance delivers data.
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> buildCount.incrementAndGet() == 1
+                ? new MockSynchronizer(() -> {
+                    throw new RuntimeException("next-boom");
+                }, "throwing-sync")
+                : new MockSynchronizer(
+                    CompletableFuture.completedFuture(FDv2SourceResult.changeSet(makeChangeSet(true), false)),
+                    "throwing-sync")
+        );
+
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, null, sink, Thread.NORM_PRIORITY, testLogger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMillis(100),
+            /* parkMaxDelay= */ Duration.ofSeconds(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system with its only synchronizer.
+        dataSource.start().get(5, TimeUnit.SECONDS);
+
+        // The failing synchronizer is parked, and is built again after its unpark time.
+        assertEquals(2, buildCount.get());
+        assertTrue(logTextContains(logCapture, LDLogLevel.WARN, "Synchronizer 'throwing-sync' is backing off for "));
+    }
+
+    @Test
+    public void exceptionThrownFromNextParksSynchronizer() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        AtomicInteger buildCount = new AtomicInteger();
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                if (buildCount.incrementAndGet() == 1) {
+                    // The first instance throws from next() instead of returning a future.
+                    return new Synchronizer() {
+                        @Override
+                        public CompletableFuture<FDv2SourceResult> next() {
+                            throw new RuntimeException("next-boom");
+                        }
+
+                        @Override
+                        public void close() {
+                        }
+                    };
+                }
+                // The second instance delivers data.
+                return new MockSynchronizer(
+                    CompletableFuture.completedFuture(FDv2SourceResult.changeSet(makeChangeSet(true), false)));
+            }
+        );
+
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMillis(100),
+            /* parkMaxDelay= */ Duration.ofSeconds(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system with its only synchronizer.
+        dataSource.start().get(5, TimeUnit.SECONDS);
+
+        // The throwing synchronizer is parked, and is built again after its unpark time.
+        assertEquals(2, buildCount.get());
+        assertTrue(dataSource.isInitialized());
+    }
+
+    @Test
+    public void constructionFailureParksSynchronizer() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        AtomicInteger buildCount = new AtomicInteger();
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                if (buildCount.incrementAndGet() == 1) {
+                    // The first build fails.
+                    throw new RuntimeException("build-boom");
+                }
+                // The second build delivers data.
+                return new MockSynchronizer(
+                    CompletableFuture.completedFuture(FDv2SourceResult.changeSet(makeChangeSet(true), false)));
+            }
+        );
+
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMillis(100),
+            /* parkMaxDelay= */ Duration.ofSeconds(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system with its only synchronizer.
+        dataSource.start().get(5, TimeUnit.SECONDS);
+
+        // The synchronizer that failed to build is parked, and is built again after its unpark time.
+        assertEquals(2, buildCount.get());
+        assertTrue(dataSource.isInitialized());
+    }
+
+    @Test
+    public void resetThresholdMetReturnsParkDelayToBase() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        AtomicInteger buildCount = new AtomicInteger();
+        BlockingQueue<Long> buildTimes = new LinkedBlockingQueue<>();
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                buildTimes.offer(System.nanoTime());
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                if (buildCount.incrementAndGet() == 3) {
+                    // The third instance reports that it met its reset threshold before it fails.
+                    results.add(FDv2SourceResult.changeSet(makeChangeSet(true), false).withResetThresholdMet());
+                }
+                // Every instance fails with a terminal error.
+                results.add(makeTerminalErrorResult());
+                return new MockQueuedSynchronizer(results);
+            }
+        );
+
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMillis(100),
+            /* parkMaxDelay= */ Duration.ofSeconds(10),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system, and record when the synchronizer is built for the third and fourth times.
+        dataSource.start();
+        buildTimes.poll(5, TimeUnit.SECONDS);
+        buildTimes.poll(5, TimeUnit.SECONDS);
+        Long thirdBuild = buildTimes.poll(5, TimeUnit.SECONDS);
+        Long fourthBuild = buildTimes.poll(5, TimeUnit.SECONDS);
+
+        // After the reset, the park is at most the base delay. Without the reset, it would be at least twice the base.
+        assertNotNull(fourthBuild);
+        long parkMillis = TimeUnit.NANOSECONDS.toMillis(fourthBuild - thirdBuild);
+        assertTrue("park lasted " + parkMillis + "ms", parkMillis < 200);
+    }
+
+    @Test
+    public void fallbackWithNoOtherAvailableSynchronizerKeepsCurrentSynchronizer() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        AtomicInteger secondaryBuildCount = new AtomicInteger();
+        IterableAsyncQueue<FDv2SourceResult> secondaryResults = new IterableAsyncQueue<>();
+        secondaryResults.put(makeInterruptedResult());
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            // The primary synchronizer fails, so it is parked for the rest of the test.
+            () -> {
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(makeTerminalErrorResult());
+                return new MockQueuedSynchronizer(results);
+            },
+            // The first instance of the secondary synchronizer reports that it is interrupted.
+            () -> secondaryBuildCount.incrementAndGet() == 1
+                ? new MockQueuedSynchronizer(secondaryResults)
+                : new MockQueuedSynchronizer(new IterableAsyncQueue<>())
+        );
+
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofMillis(10),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system. After the fallback condition of the secondary synchronizer is met, send a change set
+        // to the instance of the secondary synchronizer that was already running.
+        dataSource.start();
+        executor.schedule(
+            () -> secondaryResults.put(FDv2SourceResult.changeSet(makeChangeSet(true), false)),
+            60,
+            TimeUnit.MILLISECONDS);
+
+        // The data system applies the change set, so it kept that instance.
+        sink.awaitApplyCount(1, 2, TimeUnit.SECONDS);
+        assertEquals(1, sink.getApplyCount());
+        assertEquals(1, secondaryBuildCount.get());
+    }
+
+    @Test
+    public void unparkWhileCurrentSynchronizerIsHealthyKeepsIt() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        AtomicInteger primaryBuildCount = new AtomicInteger();
+        IterableAsyncQueue<FDv2SourceResult> secondaryResults = new IterableAsyncQueue<>();
+        secondaryResults.put(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            // The primary synchronizer fails, so it is parked briefly.
+            () -> {
+                primaryBuildCount.incrementAndGet();
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(makeTerminalErrorResult());
+                return new MockQueuedSynchronizer(results);
+            },
+            // The secondary synchronizer delivers data and stays healthy.
+            () -> new MockQueuedSynchronizer(secondaryResults)
+        );
+
+        // The primary synchronizer is parked for 25-50ms. The fallback and recovery timeouts are too long to matter.
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMillis(50),
+            /* parkMaxDelay= */ Duration.ofSeconds(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system, and send another change set after the primary synchronizer unparks.
+        dataSource.start();
+        executor.schedule(
+            () -> secondaryResults.put(FDv2SourceResult.changeSet(makeChangeSet(true), false)),
+            100,
+            TimeUnit.MILLISECONDS);
+
+        // The data system applies both change sets, and does not start the primary synchronizer again.
+        sink.awaitApplyCount(2, 2, TimeUnit.SECONDS);
+        assertEquals(2, sink.getApplyCount());
+        assertEquals(1, primaryBuildCount.get());
+    }
+
+    @Test
+    public void fallbackSwitchesWhenParkedSynchronizerUnparks() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        AtomicInteger primaryBuildCount = new AtomicInteger();
+        AtomicInteger secondaryBuildCount = new AtomicInteger();
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            // The first instance of the primary synchronizer fails, and the second instance delivers data.
+            () -> {
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(primaryBuildCount.incrementAndGet() == 1
+                    ? makeTerminalErrorResult()
+                    : FDv2SourceResult.changeSet(makeChangeSet(true), false));
+                return new MockQueuedSynchronizer(results);
+            },
+            // The secondary synchronizer reports that it is interrupted.
+            () -> {
+                secondaryBuildCount.incrementAndGet();
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(makeInterruptedResult());
+                return new MockQueuedSynchronizer(results);
+            }
+        );
+
+        // The fallback condition is met after 10ms, and the primary synchronizer unparks after 50-100ms.
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofMillis(10),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMillis(100),
+            /* parkMaxDelay= */ Duration.ofSeconds(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system.
+        dataSource.start();
+
+        // When the primary synchronizer unparks, the data system falls back to it and applies its data.
+        sink.awaitApplyCount(1, 2, TimeUnit.SECONDS);
+        assertEquals(2, primaryBuildCount.get());
+        assertEquals(1, secondaryBuildCount.get());
+    }
+
+    @Test
+    public void changeSetAfterFallbackIsMetPreventsSwitchAtUnpark() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        AtomicInteger primaryBuildCount = new AtomicInteger();
+        IterableAsyncQueue<FDv2SourceResult> secondaryResults = new IterableAsyncQueue<>();
+        secondaryResults.put(makeInterruptedResult());
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            // The primary synchronizer fails, so it is parked briefly.
+            () -> {
+                primaryBuildCount.incrementAndGet();
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(makeTerminalErrorResult());
+                return new MockQueuedSynchronizer(results);
+            },
+            // The secondary synchronizer reports that it is interrupted.
+            () -> new MockQueuedSynchronizer(secondaryResults)
+        );
+
+        // The fallback condition is met after 10ms, and the primary synchronizer unparks after 80-160ms.
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofMillis(10),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMillis(160),
+            /* parkMaxDelay= */ Duration.ofSeconds(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system, send a change set after the fallback is met, and another after the unpark.
+        dataSource.start();
+        executor.schedule(
+            () -> secondaryResults.put(FDv2SourceResult.changeSet(makeChangeSet(true), false)),
+            50,
+            TimeUnit.MILLISECONDS);
+        executor.schedule(
+            () -> secondaryResults.put(FDv2SourceResult.changeSet(makeChangeSet(true), false)),
+            210,
+            TimeUnit.MILLISECONDS);
+
+        // The data system applies both change sets, and does not start the primary synchronizer again.
+        sink.awaitApplyCount(2, 2, TimeUnit.SECONDS);
+        assertEquals(2, sink.getApplyCount());
+        assertEquals(1, primaryBuildCount.get());
+    }
+
+    @Test
+    public void recoveryWithPreferredSynchronizerParkedWaitsForItsUnpark() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        AtomicInteger primaryBuildCount = new AtomicInteger();
+        AtomicInteger secondaryBuildCount = new AtomicInteger();
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            // The first instance of the primary synchronizer fails, and the second instance delivers data.
+            () -> {
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(primaryBuildCount.incrementAndGet() == 1
+                    ? makeTerminalErrorResult()
+                    : FDv2SourceResult.changeSet(makeChangeSet(true), false));
+                return new MockQueuedSynchronizer(results);
+            },
+            // The secondary synchronizer delivers data and stays healthy.
+            () -> {
+                secondaryBuildCount.incrementAndGet();
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+                return new MockQueuedSynchronizer(results);
+            }
+        );
+
+        // The recovery condition is met after 50ms, and the primary synchronizer unparks after 100-200ms.
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofMillis(50),
+            /* parkInitialDelay= */ Duration.ofMillis(200),
+            /* parkMaxDelay= */ Duration.ofSeconds(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system.
+        dataSource.start();
+
+        // When the primary synchronizer unparks, the data system recovers to it and applies its data.
+        sink.awaitApplyCount(2, 2, TimeUnit.SECONDS);
+        assertEquals(2, primaryBuildCount.get());
+        assertEquals(1, secondaryBuildCount.get());
+    }
+
+    @Test
+    public void changeSetDuringInterruptionRestartsFallbackTimeout() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        IterableAsyncQueue<FDv2SourceResult> primaryResults = new IterableAsyncQueue<>();
+        primaryResults.put(makeInterruptedResult());
+        BlockingQueue<Long> secondaryBuildTimes = new LinkedBlockingQueue<>();
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            // The primary synchronizer reports that it is interrupted.
+            () -> new MockQueuedSynchronizer(primaryResults),
+            // The secondary synchronizer records when it is built.
+            () -> {
+                secondaryBuildTimes.offer(System.nanoTime());
+                return new MockQueuedSynchronizer(new IterableAsyncQueue<>());
+            }
+        );
+
+        // The fallback timeout is 100ms.
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofMillis(100),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system. Before the fallback timeout, the primary delivers a change set and is interrupted again.
+        long start = System.nanoTime();
+        dataSource.start();
+        executor.schedule(
+            () -> primaryResults.put(FDv2SourceResult.changeSet(makeChangeSet(true), false)),
+            50,
+            TimeUnit.MILLISECONDS);
+        executor.schedule(() -> primaryResults.put(makeInterruptedResult()), 90, TimeUnit.MILLISECONDS);
+
+        // The data system falls back a full timeout after the second interruption, not at the original deadline.
+        Long secondaryBuild = secondaryBuildTimes.poll(2, TimeUnit.SECONDS);
+        assertNotNull(secondaryBuild);
+        long fallbackMillis = TimeUnit.NANOSECONDS.toMillis(secondaryBuild - start);
+        assertTrue("fell back after " + fallbackMillis + "ms", fallbackMillis >= 150);
+    }
+
+    // A synchronizer that shuts down without being closed is parked, like one with any other unexpected failure.
+    @Test
+    public void unpromptedShutdownParksSynchronizer() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        AtomicInteger buildCount = new AtomicInteger();
+
+        // The first instance shuts down, and the second instance delivers data.
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(buildCount.incrementAndGet() == 1
+                    ? FDv2SourceResult.shutdown()
+                    : FDv2SourceResult.changeSet(makeChangeSet(true), false));
+                return new MockQueuedSynchronizer(results);
+            }
+        );
+
+        // The synchronizer is parked for 50-100ms.
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMillis(100),
+            /* parkMaxDelay= */ Duration.ofSeconds(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system.
+        dataSource.start().get(2, TimeUnit.SECONDS);
+
+        // The synchronizer is built again after its unpark time, and its data initializes the data system.
+        assertEquals(2, buildCount.get());
+        assertTrue(dataSource.isInitialized());
+    }
+
+    // While every synchronizer is parked, the synchronizer that was parked last is stopped.
+    @Test
+    public void parkedSynchronizerIsClosedWhileAllSynchronizersAreParked() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        CountDownLatch closed = new CountDownLatch(1);
+
+        // The only synchronizer fails with a terminal error, and records when it is closed.
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             () -> {
                 BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
                 results.add(makeTerminalErrorResult());
-                return new MockQueuedSynchronizer(results);
-            },
+                return new MockQueuedSynchronizer(results) {
+                    @Override
+                    public void close() {
+                        closed.countDown();
+                        super.close();
+                    }
+                };
+            }
+        );
+
+        // The synchronizer is parked for much longer than the test.
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system.
+        dataSource.start();
+
+        // The parked synchronizer is closed while it waits for its unpark time.
+        assertTrue(closed.await(1, TimeUnit.SECONDS));
+    }
+
+    @Test
+    public void allSynchronizersParkedRestartsAfterEarliestUnparkTime() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
+
+        // Every instance of every synchronizer fails with a terminal error.
+        BlockingQueue<Integer> buildOrder = new LinkedBlockingQueue<>();
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             () -> {
+                buildOrder.offer(1);
                 BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
                 results.add(makeTerminalErrorResult());
                 return new MockQueuedSynchronizer(results);
             },
             () -> {
+                buildOrder.offer(2);
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(makeTerminalErrorResult());
+                return new MockQueuedSynchronizer(results);
+            },
+            () -> {
+                buildOrder.offer(3);
                 BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
                 results.add(makeTerminalErrorResult());
                 return new MockQueuedSynchronizer(results);
             }
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMillis(100),
+            /* parkMaxDelay= */ Duration.ofSeconds(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
-        Future<Void> startFuture = dataSource.start();
-        startFuture.get(2, TimeUnit.SECONDS);
+        // Start the data system, and wait for each synchronizer to be built and then for one more build.
+        dataSource.start();
+        Integer firstBuild = buildOrder.poll(2, TimeUnit.SECONDS);
+        Integer secondBuild = buildOrder.poll(2, TimeUnit.SECONDS);
+        Integer thirdBuild = buildOrder.poll(2, TimeUnit.SECONDS);
+        Integer buildAfterAllParked = buildOrder.poll(2, TimeUnit.SECONDS);
 
-        // Expected status sequence: 3 terminal errors (one per synchronizer) → OFF when all exhausted
-        // Terminal errors might show as INTERRUPTED status
-        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(4, 2, TimeUnit.SECONDS);
-        assertEquals("Should receive 4 status updates", 4, statuses.size());
-        // Last status should be OFF
-        assertEquals(DataSourceStatusProvider.State.OFF, statuses.get(3));
+        // The synchronizers fail over in order, and a parked synchronizer starts again after all of them are parked.
+        assertEquals(Integer.valueOf(1), firstBuild);
+        assertEquals(Integer.valueOf(2), secondBuild);
+        assertEquals(Integer.valueOf(3), thirdBuild);
+        assertNotNull(buildAfterAllParked);
 
-        assertFalse(dataSource.isInitialized());
-        assertEquals(DataSourceStatusProvider.State.OFF, sink.getLastState());
-        assertNotNull(sink.getLastError());
+        // Each park reports INTERRUPTED.
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(3, 2, TimeUnit.SECONDS);
+        assertEquals(Arrays.asList(
+            DataSourceStatusProvider.State.INTERRUPTED,
+            DataSourceStatusProvider.State.INTERRUPTED,
+            DataSourceStatusProvider.State.INTERRUPTED), statuses);
     }
 
     // ============================================================================
@@ -694,7 +1296,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void disabledDataSourceCannotTriggerActions() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -718,7 +1319,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockQueuedSynchronizer(secondSyncResults)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -751,7 +1358,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void disposeCompletesStartFuture() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -764,7 +1370,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockQueuedSynchronizer(syncResults)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
 
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
@@ -785,13 +1397,18 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void noSourcesProvidedCompletesImmediately() throws Exception{
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -812,7 +1429,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void startFutureCompletesExactlyOnce() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
@@ -831,7 +1447,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockSynchronizer(synchronizerFuture)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -843,7 +1465,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void concurrentCloseAndStartHandledSafely() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
@@ -854,7 +1475,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockQueuedSynchronizer(syncResults)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
 
         Future<Void> startFuture = dataSource.start();
 
@@ -867,7 +1494,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void multipleStartCallsEventuallyComplete() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
@@ -878,7 +1504,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockQueuedSynchronizer(syncResults)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture1 = dataSource.start();
@@ -895,7 +1527,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void isInitializedThreadSafe() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
@@ -906,7 +1537,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockQueuedSynchronizer(syncResults)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         dataSource.start();
@@ -928,7 +1565,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void dataSourceUpdatesApplyThreadSafe() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
@@ -941,7 +1577,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockQueuedSynchronizer(syncResults)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -960,7 +1602,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void initializerThrowsExecutionException() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> badFuture = new CompletableFuture<>();
@@ -977,7 +1618,13 @@ public class FDv2DataSourceTest extends BaseTest {
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -989,7 +1636,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void initializerThrowsInterruptedException() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         AtomicBoolean firstCalled = new AtomicBoolean(false);
@@ -1009,7 +1655,13 @@ public class FDv2DataSourceTest extends BaseTest {
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -1022,7 +1674,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void initializerThrowsCancellationException() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> cancelledFuture = new CompletableFuture<>();
@@ -1039,7 +1690,13 @@ public class FDv2DataSourceTest extends BaseTest {
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -1051,7 +1708,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void synchronizerNextThrowsExecutionException() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -1068,7 +1724,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockSynchronizer(goodFuture)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -1080,7 +1742,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void synchronizerNextThrowsInterruptedException() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -1100,7 +1761,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockSynchronizer(goodFuture)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -1113,7 +1780,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void synchronizerNextThrowsCancellationException() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -1130,7 +1796,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockSynchronizer(goodFuture)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -1146,13 +1818,18 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void closeWithoutStartDoesNotHang() {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
 
         dataSource.close();
 
@@ -1161,7 +1838,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void closeAfterInitializersCompletesImmediately() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
@@ -1174,7 +1850,13 @@ public class FDv2DataSourceTest extends BaseTest {
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
 
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
@@ -1185,7 +1867,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void closeWhileSynchronizerRunningShutdownsSource() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -1205,7 +1886,13 @@ public class FDv2DataSourceTest extends BaseTest {
             }
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
 
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
@@ -1217,7 +1904,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void multipleCloseCallsAreIdempotent() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
@@ -1230,7 +1916,13 @@ public class FDv2DataSourceTest extends BaseTest {
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
 
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
@@ -1244,7 +1936,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void closingDataSourceDuringInitializationReportsOffWithoutErrors() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initializerFuture = new CompletableFuture<>();
@@ -1256,7 +1947,13 @@ public class FDv2DataSourceTest extends BaseTest {
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -1282,7 +1979,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void dataSourceClosedDuringSynchronizationReportsOffWithoutError() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -1296,7 +1992,13 @@ public class FDv2DataSourceTest extends BaseTest {
             }
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
 
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
@@ -1319,7 +2021,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void closeInterruptsConditionWaiting() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -1333,7 +2034,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockQueuedSynchronizer(syncResults)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
 
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
@@ -1350,7 +2057,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void setActiveSourceReturnsShutdownStatus() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
@@ -1371,7 +2077,13 @@ public class FDv2DataSourceTest extends BaseTest {
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
 
         dataSource.close();
         Future<Void> startFuture = dataSource.start();
@@ -1383,7 +2095,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void activeSourceClosedWhenSwitchingSynchronizers() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -1408,7 +2119,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockQueuedSynchronizer(secondSyncResults)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -1422,7 +2139,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void activeSourceClosedOnShutdown() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -1442,7 +2158,13 @@ public class FDv2DataSourceTest extends BaseTest {
             }
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
 
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
@@ -1454,7 +2176,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void setActiveSourceOnInitializerChecksShutdown() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CountDownLatch initializerStarted = new CountDownLatch(1);
@@ -1474,7 +2195,13 @@ public class FDv2DataSourceTest extends BaseTest {
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
 
         Future<Void> startFuture = dataSource.start();
 
@@ -1498,13 +2225,12 @@ public class FDv2DataSourceTest extends BaseTest {
     // ============================================================================
 
     @Test
-    public void blockedSynchronizerSkippedInRotation() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
+    public void parkedSynchronizerSkippedInRotation() throws Exception {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
-        // First: terminal error (blocked)
+        // First: terminal error (parked)
         BlockingQueue<FDv2SourceResult> firstSyncResults = new LinkedBlockingQueue<>();
         firstSyncResults.add(makeTerminalErrorResult());
 
@@ -1535,48 +2261,24 @@ public class FDv2DataSourceTest extends BaseTest {
             }
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
 
-        assertEquals(1, firstCallCount.get()); // Called once, then blocked
+        assertEquals(1, firstCallCount.get()); // Called once, then parked
         assertTrue(secondCallCount.get() >= 1); // Called
     }
 
     @Test
-    public void allSynchronizersBlockedReturnsNullAndExits() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
-        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
-
-        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
-
-        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
-            () -> {
-                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
-                results.add(makeTerminalErrorResult());
-                return new MockQueuedSynchronizer(results);
-            },
-            () -> {
-                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
-                results.add(makeTerminalErrorResult());
-                return new MockQueuedSynchronizer(results);
-            }
-        );
-
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
-        resourcesToClose.add(dataSource);
-
-        Future<Void> startFuture = dataSource.start();
-        startFuture.get(2, TimeUnit.SECONDS);
-
-        assertFalse(dataSource.isInitialized());
-    }
-
-    @Test
     public void recoveryResetsToFirstAvailableSynchronizer() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -1605,7 +2307,13 @@ public class FDv2DataSourceTest extends BaseTest {
         );
 
         // Short recovery timeout
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 1, 2);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(1),
+            /* recoveryTimeout= */ Duration.ofSeconds(2),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -1620,7 +2328,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void fallbackMovesToNextSynchronizer() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -1645,7 +2352,13 @@ public class FDv2DataSourceTest extends BaseTest {
         );
 
         // Short fallback timeout
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 1, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(1),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -1661,34 +2374,7 @@ public class FDv2DataSourceTest extends BaseTest {
     // ============================================================================
 
     @Test
-    public void conditionsClosedAfterSynchronizerLoop() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
-        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
-
-        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
-
-        BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-        syncResults.add(makeTerminalErrorResult());
-
-        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
-            () -> new MockQueuedSynchronizer(syncResults)
-        );
-
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 1, 2);
-        resourcesToClose.add(dataSource);
-
-        Future<Void> startFuture = dataSource.start();
-        startFuture.get(2, TimeUnit.SECONDS);
-
-        dataSource.close();
-
-        // If conditions weren't closed properly, we might see issues
-    }
-
-    @Test
     public void conditionsInformedOfAllResults() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -1702,7 +2388,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockQueuedSynchronizer(syncResults)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 10, 20);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(10),
+            /* recoveryTimeout= */ Duration.ofSeconds(20),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -1714,115 +2406,7 @@ public class FDv2DataSourceTest extends BaseTest {
     }
 
     @Test
-    public void conditionsClosedOnException() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
-        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
-
-        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
-
-        CompletableFuture<FDv2SourceResult> exceptionFuture = new CompletableFuture<>();
-        exceptionFuture.completeExceptionally(new RuntimeException("Error"));
-
-        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
-            () -> new MockSynchronizer(exceptionFuture),
-            () -> new MockSynchronizer(CompletableFuture.completedFuture(
-                FDv2SourceResult.changeSet(makeChangeSet(false), false)
-            ))
-        );
-
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 1, 2);
-        resourcesToClose.add(dataSource);
-
-        Future<Void> startFuture = dataSource.start();
-        startFuture.get(2, TimeUnit.SECONDS);
-
-        // Conditions should be closed despite exception
-    }
-
-    @Test
-    public void primeSynchronizerHasNoRecoveryCondition() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
-        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
-
-        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
-
-        BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-        // Keep alive
-
-        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
-            () -> new MockQueuedSynchronizer(syncResults),
-            () -> new MockQueuedSynchronizer(new LinkedBlockingQueue<>())
-        );
-
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 1, 2);
-        resourcesToClose.add(dataSource);
-
-        Future<Void> startFuture = dataSource.start();
-        startFuture.get(2, TimeUnit.SECONDS);
-
-        // Prime synchronizer should not have a recovery condition
-        // This is tested implicitly by the implementation
-    }
-
-    @Test
-    public void nonPrimeSynchronizerHasBothConditions() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
-        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
-
-        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
-
-        // First: send INTERRUPTED to trigger fallback
-        BlockingQueue<FDv2SourceResult> firstSyncResults = new LinkedBlockingQueue<>();
-        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-        firstSyncResults.add(makeInterruptedResult());
-
-        // Second: will have both conditions
-        BlockingQueue<FDv2SourceResult> secondSyncResults = new LinkedBlockingQueue<>();
-        secondSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-
-        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
-            () -> new MockQueuedSynchronizer(firstSyncResults),
-            () -> new MockQueuedSynchronizer(secondSyncResults)
-        );
-
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 1, 2);
-        resourcesToClose.add(dataSource);
-
-        Future<Void> startFuture = dataSource.start();
-        startFuture.get(2, TimeUnit.SECONDS);
-
-        // Non-prime synchronizer should have both fallback and recovery
-        // This is tested implicitly by the implementation
-    }
-
-    @Test
-    public void singleSynchronizerHasNoConditions() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
-        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
-
-        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
-
-        BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-
-        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
-            () -> new MockQueuedSynchronizer(syncResults)
-        );
-
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 1, 2);
-        resourcesToClose.add(dataSource);
-
-        Future<Void> startFuture = dataSource.start();
-        startFuture.get(2, TimeUnit.SECONDS);
-
-        // Single synchronizer should have no conditions
-        // This is tested implicitly by the implementation
-    }
-
-    @Test
     public void conditionFutureNeverCompletesWhenNoConditions() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -1835,7 +2419,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockQueuedSynchronizer(syncResults)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 1, 2);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(1),
+            /* recoveryTimeout= */ Duration.ofSeconds(2),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -1852,7 +2442,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void changeSetAppliedToDataSourceUpdates() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
@@ -1865,7 +2454,13 @@ public class FDv2DataSourceTest extends BaseTest {
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -1877,7 +2472,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void multipleChangeSetsAppliedInOrder() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -1891,7 +2485,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockQueuedSynchronizer(syncResults)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -1905,7 +2505,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void selectorNonEmptyCompletesInitialization() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> firstInitializerFuture = CompletableFuture.completedFuture(
@@ -1924,7 +2523,13 @@ public class FDv2DataSourceTest extends BaseTest {
             }
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, ImmutableList.of(), null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, ImmutableList.of(), null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -1940,7 +2545,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void initializerChangeSetWithoutSelectorCompletesIfLastInitializer() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
@@ -1953,7 +2557,13 @@ public class FDv2DataSourceTest extends BaseTest {
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -1973,7 +2583,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void synchronizerChangeSetAlwaysCompletesStartFuture() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -1986,7 +2595,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockSynchronizer(synchronizerFuture)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -2001,7 +2616,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void goodbyeStatusHandledGracefully() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -2015,7 +2629,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockQueuedSynchronizer(syncResults)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -2030,7 +2650,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void shutdownStatusExitsImmediately() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -2049,7 +2668,13 @@ public class FDv2DataSourceTest extends BaseTest {
             }
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -2064,7 +2689,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void fdv1FallbackFlagHonored() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -2076,7 +2700,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockQueuedSynchronizer(syncResults)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -2092,7 +2722,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void emptyInitializerListSkipsToSynchronizers() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -2109,7 +2738,13 @@ public class FDv2DataSourceTest extends BaseTest {
             }
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture = dataSource.start();
@@ -2121,7 +2756,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void startedFlagPreventsMultipleRuns() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         AtomicInteger runCount = new AtomicInteger(0);
@@ -2137,7 +2771,13 @@ public class FDv2DataSourceTest extends BaseTest {
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         Future<Void> startFuture1 = dataSource.start();
@@ -2156,7 +2796,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void startBeforeRunCompletesAllComplete() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
@@ -2167,7 +2806,13 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockQueuedSynchronizer(syncResults)
         );
 
-        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger, executor, 120, 300);
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
         resourcesToClose.add(dataSource);
 
         // Call start multiple times before completion
@@ -2187,7 +2832,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void statusTransitionsToValidAfterInitialization() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
@@ -2205,9 +2849,12 @@ public class FDv2DataSourceTest extends BaseTest {
             sink,
             Thread.NORM_PRIORITY,
             logger,
-            executor,
-            120,
-            300
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1)
         );
         resourcesToClose.add(dataSource);
 
@@ -2223,7 +2870,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void statusIncludesErrorInfoOnFailure() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -2251,33 +2897,28 @@ public class FDv2DataSourceTest extends BaseTest {
             sink,
             Thread.NORM_PRIORITY,
             logger,
-            executor,
-            120,
-            300
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1)
         );
         resourcesToClose.add(dataSource);
 
-        Future<Void> startFuture = dataSource.start();
-        startFuture.get(2, TimeUnit.SECONDS);
+        // Start the data system with a synchronizer that fails with a 401.
+        dataSource.start();
+        DataSourceStatusProvider.State status = sink.awaitStatus(2, TimeUnit.SECONDS);
 
-        // Should receive INTERRUPTED first (from terminal error), then OFF (from exhausted synchronizers)
-        DataSourceStatusProvider.State firstStatus = sink.awaitStatus(2, TimeUnit.SECONDS);
-        assertNotNull("Should receive first status update", firstStatus);
-        assertEquals(DataSourceStatusProvider.State.INTERRUPTED, firstStatus);
-
-        DataSourceStatusProvider.State secondStatus = sink.awaitStatus(2, TimeUnit.SECONDS);
-        assertNotNull("Should receive second status update", secondStatus);
-        assertEquals(DataSourceStatusProvider.State.OFF, secondStatus);
-
-        // Final state should be OFF with error info from the last status update
-        assertEquals(DataSourceStatusProvider.State.OFF, sink.getLastState());
+        // The data system reports INTERRUPTED with the error from the synchronizer.
+        assertEquals(DataSourceStatusProvider.State.INTERRUPTED, status);
         assertNotNull("Should have error info", sink.getLastError());
-        assertEquals(DataSourceStatusProvider.ErrorKind.UNKNOWN, sink.getLastError().getKind());
+        assertEquals(DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE, sink.getLastError().getKind());
+        assertEquals(401, sink.getLastError().getStatusCode());
     }
 
     @Test
     public void statusRemainsValidDuringSynchronizerOperation() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -2299,9 +2940,12 @@ public class FDv2DataSourceTest extends BaseTest {
             sink,
             Thread.NORM_PRIORITY,
             logger,
-            executor,
-            120,
-            300
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1)
         );
         resourcesToClose.add(dataSource);
 
@@ -2317,16 +2961,15 @@ public class FDv2DataSourceTest extends BaseTest {
     }
 
     @Test
-    public void statusTransitionsFromValidToOffWhenAllSynchronizersFail() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
+    public void statusStaysInterruptedWhileOnlySynchronizerIsParked() throws Exception {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
-        // First synchronizer sends a changeset then terminal error
-        BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-        syncResults.add(FDv2SourceResult.terminalError(
+        // The first instance sends a changeset and then a terminal error. Later instances send nothing.
+        BlockingQueue<FDv2SourceResult> firstInstanceResults = new LinkedBlockingQueue<>();
+        firstInstanceResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        firstInstanceResults.add(FDv2SourceResult.terminalError(
             new DataSourceStatusProvider.ErrorInfo(
                 DataSourceStatusProvider.ErrorKind.NETWORK_ERROR,
                 500,
@@ -2335,9 +2978,17 @@ public class FDv2DataSourceTest extends BaseTest {
             ),
             false
         ));
+        AtomicInteger buildCount = new AtomicInteger();
+        BlockingQueue<Integer> builds = new LinkedBlockingQueue<>();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
-            () -> new MockQueuedSynchronizer(syncResults)
+            () -> {
+                int build = buildCount.incrementAndGet();
+                builds.offer(build);
+                return build == 1
+                    ? new MockQueuedSynchronizer(firstInstanceResults)
+                    : new MockQueuedSynchronizer(new LinkedBlockingQueue<>());
+            }
         );
 
         FDv2DataSource dataSource = new FDv2DataSource(
@@ -2347,27 +2998,28 @@ public class FDv2DataSourceTest extends BaseTest {
             sink,
             Thread.NORM_PRIORITY,
             logger,
-            executor,
-            120,
-            300
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMillis(100),
+            /* parkMaxDelay= */ Duration.ofSeconds(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1)
         );
         resourcesToClose.add(dataSource);
 
-        Future<Void> startFuture = dataSource.start();
-        startFuture.get(2, TimeUnit.SECONDS);
+        // Start the data system, and wait until the parked synchronizer is built again.
+        dataSource.start();
+        Integer firstBuild = builds.poll(2, TimeUnit.SECONDS);
+        Integer rebuild = builds.poll(2, TimeUnit.SECONDS);
 
-        // Should transition: VALID (from changeset) → INTERRUPTED (from terminal error) → OFF (from exhausted sources)
-        DataSourceStatusProvider.State firstStatus = sink.awaitStatus(2, TimeUnit.SECONDS);
-        assertEquals(DataSourceStatusProvider.State.VALID, firstStatus);
-
-        DataSourceStatusProvider.State secondStatus = sink.awaitStatus(2, TimeUnit.SECONDS);
-        assertEquals(DataSourceStatusProvider.State.INTERRUPTED, secondStatus);
-
-        DataSourceStatusProvider.State thirdStatus = sink.awaitStatus(2, TimeUnit.SECONDS);
-        assertEquals(DataSourceStatusProvider.State.OFF, thirdStatus);
-
-        assertEquals(DataSourceStatusProvider.State.OFF, sink.getLastState());
-        assertNotNull("Should have error info when OFF", sink.getLastError());
+        // The status goes from VALID to INTERRUPTED, and stays INTERRUPTED through the park.
+        assertEquals(Integer.valueOf(1), firstBuild);
+        assertEquals(Integer.valueOf(2), rebuild);
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(2, 2, TimeUnit.SECONDS);
+        assertEquals(Arrays.asList(
+            DataSourceStatusProvider.State.VALID,
+            DataSourceStatusProvider.State.INTERRUPTED), statuses);
+        assertEquals(DataSourceStatusProvider.State.INTERRUPTED, sink.getLastState());
     }
 
     // ============================================================================
@@ -2376,7 +3028,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void fdv1FallbackActivatesWhenFlagSet() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -2407,9 +3058,12 @@ public class FDv2DataSourceTest extends BaseTest {
             sink,
             Thread.NORM_PRIORITY,
             logger,
-            executor,
-            120,
-            300
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1)
         );
         resourcesToClose.add(dataSource);
 
@@ -2426,8 +3080,52 @@ public class FDv2DataSourceTest extends BaseTest {
     }
 
     @Test
+    public void fdv1FallbackSynchronizerIsParkedAndRestartedDuringDirectedFallback() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        AtomicInteger fdv1BuildCount = new AtomicInteger();
+
+        // The FDv2 synchronizer reports an interruption that carries the FDv1 fallback directive.
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(FDv2SourceResult.interrupted(
+                    new DataSourceStatusProvider.ErrorInfo(
+                        DataSourceStatusProvider.ErrorKind.NETWORK_ERROR, 500, null, Instant.now()),
+                    true));
+                return new MockQueuedSynchronizer(results);
+            }
+        );
+
+        // The first instance of the FDv1 fallback synchronizer fails, and the second instance delivers data.
+        FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
+            BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+            results.add(fdv1BuildCount.incrementAndGet() == 1
+                ? makeTerminalErrorResult()
+                : FDv2SourceResult.changeSet(makeChangeSet(true), false));
+            return new MockQueuedSynchronizer(results);
+        };
+
+        // The FDv1 fallback synchronizer is parked for 50-100ms.
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, fdv1Fallback, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMillis(100),
+            /* parkMaxDelay= */ Duration.ofSeconds(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system.
+        dataSource.start();
+
+        // The FDv1 fallback synchronizer is built again after its unpark time, and its data is applied.
+        sink.awaitApplyCount(1, 2, TimeUnit.SECONDS);
+        assertEquals(1, sink.getApplyCount());
+        assertEquals(2, fdv1BuildCount.get());
+    }
+
+    @Test
     public void fdv1FallbackNotCalledWithoutFlag() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -2455,9 +3153,12 @@ public class FDv2DataSourceTest extends BaseTest {
             sink,
             Thread.NORM_PRIORITY,
             logger,
-            executor,
-            120,
-            300
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1)
         );
         resourcesToClose.add(dataSource);
 
@@ -2474,7 +3175,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void fdv1FallbackWorksAfterInterruption() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -2513,9 +3213,12 @@ public class FDv2DataSourceTest extends BaseTest {
             sink,
             Thread.NORM_PRIORITY,
             logger,
-            executor,
-            120,
-            300
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1)
         );
         resourcesToClose.add(dataSource);
 
@@ -2531,84 +3234,318 @@ public class FDv2DataSourceTest extends BaseTest {
         assertTrue("Should have at least 2 changesets", sink.getApplyCount() >= 2);
     }
 
-    // Synchronizer-phase analogue of the initializer halt path: when a synchronizer signals
-    // FDv1 fallback but no FDv1 fallback synchronizer is configured, the data system must halt
-    // (transition to OFF, stop building further synchronizers).
+    // Synchronizer-phase analogue of the initializer recovery path: when a synchronizer signals FDv1 fallback but no
+    // FDv1 fallback synchronizer is configured, the data system reports INTERRUPTED, runs no synchronizer until the
+    // fallback TTL ends, and then restarts the FDv2 synchronizers.
     @Test
-    public void fdv1FallbackOnSynchronizerWithoutFDv1ConfiguredHaltsDataSystem() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
+    public void fdv1FallbackOnSynchronizerWithoutFDv1ConfiguredRecoversAfterTTL() throws Exception {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
-
-        ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
-
-        // First synchronizer sends a normal payload, then a payload with the directive.
-        BlockingQueue<FDv2SourceResult> firstSyncResults = new LinkedBlockingQueue<>();
-        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), true));
-
-        AtomicInteger firstSyncBuildCount = new AtomicInteger(0);
+        AtomicInteger firstSyncBuildCount = new AtomicInteger();
         AtomicBoolean secondSyncCalled = new AtomicBoolean(false);
 
-        // Two synchronizers configured; once the directive halts the data system, neither
-        // should be re-built. The second synchronizer in particular must never run.
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            // The first instance sends a payload, then one with the directive. The second sends a payload.
             () -> {
-                firstSyncBuildCount.incrementAndGet();
-                return new MockQueuedSynchronizer(firstSyncResults);
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                if (firstSyncBuildCount.incrementAndGet() == 1) {
+                    results.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+                    results.add(FDv2SourceResult.changeSet(makeChangeSet(false), true));
+                } else {
+                    results.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+                }
+                return new MockQueuedSynchronizer(results);
             },
+            // The second synchronizer must never run.
             () -> {
                 secondSyncCalled.set(true);
                 return new MockQueuedSynchronizer(new LinkedBlockingQueue<>());
             }
         );
 
-        // No FDv1 fallback configured.
+        // No FDv1 fallback synchronizer is configured, and the fallback TTL ends after 50-100ms.
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofMillis(100));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system.
+        dataSource.start().get(2, TimeUnit.SECONDS);
+
+        // The data system reports INTERRUPTED, and restarts the first synchronizer after the TTL.
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(3, 2, TimeUnit.SECONDS);
+        assertEquals(Arrays.asList(
+            DataSourceStatusProvider.State.VALID,
+            DataSourceStatusProvider.State.INTERRUPTED,
+            DataSourceStatusProvider.State.VALID), statuses);
+        assertEquals(2, firstSyncBuildCount.get());
+        assertFalse(secondSyncCalled.get());
+    }
+
+    // While no FDv1 fallback synchronizer is configured, the FDv2 synchronizer that sent the directive is stopped.
+    @Test
+    public void directiveWithoutFDv1ClosesFDv2SynchronizerDuringFallback() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        CountDownLatch closed = new CountDownLatch(1);
+
+        // The synchronizer sends a payload with the directive, and records when it is closed.
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(FDv2SourceResult.changeSet(makeChangeSet(true), true));
+                return new MockQueuedSynchronizer(results) {
+                    @Override
+                    public void close() {
+                        closed.countDown();
+                        super.close();
+                    }
+                };
+            }
+        );
+
+        // No FDv1 fallback synchronizer is configured, and the fallback lasts much longer than the test.
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system.
+        dataSource.start();
+
+        // The synchronizer is closed during the fallback.
+        assertTrue(closed.await(1, TimeUnit.SECONDS));
+    }
+
+    // When the fallback TTL ends, the data system stops the FDv1 synchronizer and restarts the FDv2 synchronizers.
+    @Test
+    public void fdv1FallbackEndsAfterTTL() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        AtomicInteger fdv2BuildCount = new AtomicInteger();
+        AtomicBoolean fdv1Closed = new AtomicBoolean(false);
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            // The first instance sends a payload with the directive. The second sends a payload.
+            () -> {
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(FDv2SourceResult.changeSet(makeChangeSet(true), fdv2BuildCount.incrementAndGet() == 1));
+                return new MockQueuedSynchronizer(results);
+            }
+        );
+
+        // The FDv1 fallback synchronizer sends a payload, and records when it is closed.
+        FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
+            BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+            results.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+            return new MockQueuedSynchronizer(results) {
+                @Override
+                public void close() {
+                    fdv1Closed.set(true);
+                    super.close();
+                }
+            };
+        };
+
+        // The fallback TTL ends after 50-100ms.
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, fdv1Fallback, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofMillis(100));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system.
+        dataSource.start();
+
+        // After the TTL, the data system has stopped the FDv1 fallback synchronizer and applied FDv2 data again.
+        sink.awaitApplyCount(3, 2, TimeUnit.SECONDS);
+        assertEquals(2, fdv2BuildCount.get());
+        assertTrue(fdv1Closed.get());
+    }
+
+    // When the fallback TTL ends before the FDv1 synchronizer's unpark time, the FDv2 synchronizers restart at the TTL.
+    @Test
+    public void fdv1FallbackEndsWhileFDv1SynchronizerIsParked() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        AtomicInteger fdv2BuildCount = new AtomicInteger();
+        AtomicInteger fdv1BuildCount = new AtomicInteger();
+
+        // The first instance reports an interruption with the directive. The second sends a payload with the directive.
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                if (fdv2BuildCount.incrementAndGet() == 1) {
+                    results.add(FDv2SourceResult.interrupted(
+                        new DataSourceStatusProvider.ErrorInfo(
+                            DataSourceStatusProvider.ErrorKind.NETWORK_ERROR, 500, null, Instant.now()),
+                        true));
+                } else {
+                    results.add(FDv2SourceResult.changeSet(makeChangeSet(true), true));
+                }
+                return new MockQueuedSynchronizer(results);
+            }
+        );
+
+        // The FDv1 fallback synchronizer fails, so the data system parks it.
+        FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
+            fdv1BuildCount.incrementAndGet();
+            BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+            results.add(makeTerminalErrorResult());
+            return new MockQueuedSynchronizer(results);
+        };
+
+        // The FDv1 fallback synchronizer is parked for minutes, and the fallback TTL ends after 100-200ms.
         FDv2DataSource dataSource = new FDv2DataSource(
-            initializers,
+            ImmutableList.of(),
             synchronizers,
-            null,
+            fdv1Fallback,
             sink,
             Thread.NORM_PRIORITY,
             logger,
-            executor,
-            120,
-            300
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofMillis(200)
         );
         resourcesToClose.add(dataSource);
 
-        dataSource.start().get(2, TimeUnit.SECONDS);
+        // Start the data system.
+        dataSource.start();
 
-        // First payload is applied; the directive-bearing payload is also applied (the SDK
-        // surfaces the data) but no further synchronizers are dialled.
-        sink.awaitApplyCount(2, 2, TimeUnit.SECONDS);
+        // The FDv2 synchronizer is built again after the TTL, and its data is applied.
+        sink.awaitApplyCount(1, 2, TimeUnit.SECONDS);
+        assertEquals(1, sink.getApplyCount());
+        assertEquals(2, fdv2BuildCount.get());
 
-        // Status must end up OFF because the directive could not be satisfied.
-        // Poll briefly for the OFF state in case the final transition is observed slightly
-        // after the apply count reaches 2; this keeps the assertion deterministic without
-        // relying on real-time delays.
-        DataSourceStatusProvider.State finalState = null;
-        for (int i = 0; i < 20 && finalState != DataSourceStatusProvider.State.OFF; i++) {
-            DataSourceStatusProvider.State next = sink.awaitStatus(100, TimeUnit.MILLISECONDS);
-            if (next != null) {
-                finalState = next;
-            } else if (sink.getLastState() == DataSourceStatusProvider.State.OFF) {
-                finalState = DataSourceStatusProvider.State.OFF;
+        // Each directive falls back to the FDv1 synchronizer, which is still parked, so nothing runs until the TTL.
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(4, 2, TimeUnit.SECONDS);
+        assertEquals(Arrays.asList(
+            DataSourceStatusProvider.State.INTERRUPTED,
+            DataSourceStatusProvider.State.INTERRUPTED,
+            DataSourceStatusProvider.State.VALID,
+            DataSourceStatusProvider.State.INTERRUPTED), statuses);
+        assertEquals(1, fdv1BuildCount.get());
+    }
+
+    // A directive during the FDv1 fallback replaces the TTL, and the FDv1 synchronizer keeps running.
+    @Test
+    public void directiveDuringFDv1FallbackExtendsTTL() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        AtomicInteger fdv2BuildCount = new AtomicInteger();
+        AtomicInteger fdv1BuildCount = new AtomicInteger();
+        BlockingQueue<Long> fdv2RestartTimes = new LinkedBlockingQueue<>();
+        IterableAsyncQueue<FDv2SourceResult> fdv1Results = new IterableAsyncQueue<>();
+
+        // The first instance sends a payload with the directive. The second records when it is built.
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                if (fdv2BuildCount.incrementAndGet() == 1) {
+                    results.add(FDv2SourceResult.changeSet(makeChangeSet(true), true));
+                } else {
+                    fdv2RestartTimes.offer(System.nanoTime());
+                }
+                return new MockQueuedSynchronizer(results);
             }
-        }
-        assertEquals("Status should be OFF after directive halts the data system",
-            DataSourceStatusProvider.State.OFF, sink.getLastState());
+        );
 
-        // The second synchronizer must never be built.
-        assertFalse("Subsequent synchronizers must not run after directive-induced halt",
-            secondSyncCalled.get());
-        // The first synchronizer should also not be re-built (we should stay halted).
-        assertEquals("First synchronizer should be built exactly once",
-            1, firstSyncBuildCount.get());
+        // The FDv1 fallback synchronizer sends the results that the test puts in its queue.
+        FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
+            fdv1BuildCount.incrementAndGet();
+            return new MockQueuedSynchronizer(fdv1Results);
+        };
+
+        // The fallback TTL ends after 100-200ms.
+        FDv2DataSource dataSource = new FDv2DataSource(
+            ImmutableList.of(),
+            synchronizers,
+            fdv1Fallback,
+            sink,
+            Thread.NORM_PRIORITY,
+            logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofMillis(200)
+        );
+        resourcesToClose.add(dataSource);
+
+        // Start the data system. FDv1 sends a directive every 50ms until 300ms, which is longer than the TTL.
+        long start = System.nanoTime();
+        dataSource.start();
+        for (int delay = 50; delay <= 300; delay += 50) {
+            executor.schedule(
+                () -> fdv1Results.put(FDv2SourceResult.changeSet(makeChangeSet(false), true)),
+                delay,
+                TimeUnit.MILLISECONDS);
+        }
+
+        // FDv2 restarts at least the shortest TTL after the last directive, and FDv1 never restarts.
+        Long fdv2Restart = fdv2RestartTimes.poll(2, TimeUnit.SECONDS);
+        assertNotNull(fdv2Restart);
+        long restartMillis = TimeUnit.NANOSECONDS.toMillis(fdv2Restart - start);
+        assertTrue("restarted FDv2 after " + restartMillis + "ms", restartMillis >= 400);
+        assertEquals(1, fdv1BuildCount.get());
+    }
+
+    // When the FDv2 synchronizers send the directive again after the fallback TTL ends, the data system falls back again.
+    @Test
+    public void directiveDuringRecoveryFallsBackToFDv1Again() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        AtomicInteger fdv2BuildCount = new AtomicInteger();
+        AtomicInteger fdv1BuildCount = new AtomicInteger();
+
+        // Every instance of the FDv2 synchronizer sends a payload with the directive.
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                fdv2BuildCount.incrementAndGet();
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(FDv2SourceResult.changeSet(makeChangeSet(true), true));
+                return new MockQueuedSynchronizer(results);
+            }
+        );
+
+        // Every instance of the FDv1 fallback synchronizer sends a payload.
+        FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
+            fdv1BuildCount.incrementAndGet();
+            BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+            results.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+            return new MockQueuedSynchronizer(results);
+        };
+
+        // The fallback TTL ends after 50-100ms.
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, fdv1Fallback, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofMillis(100));
+        resourcesToClose.add(dataSource);
+
+        // Start the data system.
+        dataSource.start();
+
+        // After the TTL, the FDv2 synchronizer sends the directive again, and the data system starts FDv1 again.
+        sink.awaitApplyCount(4, 2, TimeUnit.SECONDS);
+        assertEquals(2, fdv2BuildCount.get());
+        assertEquals(2, fdv1BuildCount.get());
     }
 
     @Test
     public void fdv1FallbackBlocksOtherSynchronizers() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -2646,9 +3583,12 @@ public class FDv2DataSourceTest extends BaseTest {
             sink,
             Thread.NORM_PRIORITY,
             logger,
-            executor,
-            120,
-            300
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1)
         );
         resourcesToClose.add(dataSource);
 
@@ -2666,7 +3606,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void fdv1FallbackOnlyCalledOncePerDataSource() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -2698,9 +3637,12 @@ public class FDv2DataSourceTest extends BaseTest {
             sink,
             Thread.NORM_PRIORITY,
             logger,
-            executor,
-            120,
-            300
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1)
         );
         resourcesToClose.add(dataSource);
 
@@ -2725,7 +3667,6 @@ public class FDv2DataSourceTest extends BaseTest {
     // without giving any of the configured FDv2 synchronizers a chance to run.
     @Test
     public void fdv1FallbackOnInitializerSuccessAppliesPayloadAndSwitches() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         // Initializer returns a payload with a selector AND the FDv1 fallback signal.
@@ -2760,9 +3701,12 @@ public class FDv2DataSourceTest extends BaseTest {
             sink,
             Thread.NORM_PRIORITY,
             logger,
-            executor,
-            120,
-            300
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1)
         );
         resourcesToClose.add(dataSource);
 
@@ -2785,7 +3729,6 @@ public class FDv2DataSourceTest extends BaseTest {
     // to the FDv1 fallback synchronizer without trying FDv2 synchronizers.
     @Test
     public void fdv1FallbackOnInitializerErrorSwitchesToFDv1() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initFuture = CompletableFuture.completedFuture(
@@ -2827,9 +3770,12 @@ public class FDv2DataSourceTest extends BaseTest {
             sink,
             Thread.NORM_PRIORITY,
             logger,
-            executor,
-            120,
-            300
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1)
         );
         resourcesToClose.add(dataSource);
 
@@ -2842,14 +3788,14 @@ public class FDv2DataSourceTest extends BaseTest {
             fdv2SyncCalled.get());
     }
 
-    // When an initializer signals FDv1 fallback but no FDv1 synchronizer is configured, the
-    // SDK must transition the data source status to OFF -- not stay stuck at INITIALIZING --
-    // and surface the underlying initializer error so monitors can see why.
+    // When an initializer signals FDv1 fallback but no FDv1 synchronizer is configured, the data system reports
+    // INTERRUPTED, runs no synchronizer until the fallback TTL ends, and then starts the FDv2 synchronizers.
     @Test
-    public void fdv1FallbackOnInitializerWithoutFDv1ConfiguredTransitionsToOff() throws Exception {
-        executor = Executors.newScheduledThreadPool(1);
+    public void fdv1FallbackOnInitializerWithoutFDv1ConfiguredRecoversAfterTTL() throws Exception {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        AtomicInteger syncBuildCount = new AtomicInteger();
 
+        // The initializer fails with the directive.
         DataSourceStatusProvider.ErrorInfo initError = new DataSourceStatusProvider.ErrorInfo(
             DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE,
             500,
@@ -2863,38 +3809,34 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> new MockInitializer(initFuture)
         );
 
-        AtomicBoolean fdv2SyncCalled = new AtomicBoolean(false);
+        // The synchronizer delivers data.
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             () -> {
-                fdv2SyncCalled.set(true);
-                return new MockQueuedSynchronizer(new LinkedBlockingQueue<>());
+                syncBuildCount.incrementAndGet();
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+                return new MockQueuedSynchronizer(results);
             }
         );
 
-        // No FDv1 fallback configured.
-        FDv2DataSource dataSource = new FDv2DataSource(
-            initializers,
-            synchronizers,
-            null,
-            sink,
-            Thread.NORM_PRIORITY,
-            logger,
-            executor,
-            120,
-            300
-        );
+        // No FDv1 fallback synchronizer is configured, and the fallback TTL ends after 50-100ms.
+        FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofMillis(100));
         resourcesToClose.add(dataSource);
 
+        // Start the data system, and wait for it to be initialized by the synchronizer.
         dataSource.start().get(2, TimeUnit.SECONDS);
 
-        // Status must end up OFF (not INITIALIZING) so callers can observe the terminal state.
-        assertEquals(DataSourceStatusProvider.State.OFF, sink.getLastState());
-        assertNotNull("Initializer error should be preserved on the OFF status", sink.getLastError());
-        assertEquals(initError.getKind(), sink.getLastError().getKind());
-        assertEquals(initError.getStatusCode(), sink.getLastError().getStatusCode());
-
-        // FDv2 synchronizers should not run.
-        assertFalse(fdv2SyncCalled.get());
+        // The data system never reported OFF, and started the synchronizer after the TTL.
+        List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(3, 2, TimeUnit.SECONDS);
+        assertFalse(statuses.contains(DataSourceStatusProvider.State.OFF));
+        assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
+        assertEquals(1, syncBuildCount.get());
     }
 
     // When an initializer returns a successful payload-without-selector AND the FDv1 fallback
@@ -2905,7 +3847,6 @@ public class FDv2DataSourceTest extends BaseTest {
     // Ruby behavior on initialization gating.
     @Test
     public void fdv1FallbackOnInitializerSuccessNoSelectorAppliesPayloadAndSwitches() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initFuture = CompletableFuture.completedFuture(
@@ -2934,9 +3875,12 @@ public class FDv2DataSourceTest extends BaseTest {
             sink,
             Thread.NORM_PRIORITY,
             logger,
-            executor,
-            120,
-            300
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1)
         );
         resourcesToClose.add(dataSource);
 
@@ -2957,7 +3901,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void orchestrationLogging_warnsWhenNoInitializersOrSynchronizersConfigured() throws Exception {
-        executor = Executors.newScheduledThreadPool(1);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
         FDv2DataSource dataSource = new FDv2DataSource(
             ImmutableList.of(),
@@ -2966,9 +3909,12 @@ public class FDv2DataSourceTest extends BaseTest {
             sink,
             Thread.NORM_PRIORITY,
             testLogger,
-            executor,
-            120,
-            300
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1)
         );
         resourcesToClose.add(dataSource);
         dataSource.start().get(2, TimeUnit.SECONDS);
@@ -2979,7 +3925,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void orchestrationLogging_logsInitializerStartSuccessAndErrorOnException() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
         CompletableFuture<FDv2SourceResult> first = new CompletableFuture<>();
         first.completeExceptionally(new RuntimeException("first-init-failure"));
@@ -2997,9 +3942,12 @@ public class FDv2DataSourceTest extends BaseTest {
             sink,
             Thread.NORM_PRIORITY,
             testLogger,
-            executor,
-            120,
-            300
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1)
         );
         resourcesToClose.add(dataSource);
         dataSource.start().get(2, TimeUnit.SECONDS);
@@ -3011,7 +3959,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void orchestrationLogging_logsInitializerFailedOnStatusResult() throws Exception {
-        executor = Executors.newScheduledThreadPool(1);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
         CompletableFuture<FDv2SourceResult> initFuture = CompletableFuture.completedFuture(
             FDv2SourceResult.interrupted(
@@ -3034,9 +3981,12 @@ public class FDv2DataSourceTest extends BaseTest {
             sink,
             Thread.NORM_PRIORITY,
             testLogger,
-            executor,
-            120,
-            300
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1)
         );
         resourcesToClose.add(dataSource);
         dataSource.start().get(2, TimeUnit.SECONDS);
@@ -3047,7 +3997,6 @@ public class FDv2DataSourceTest extends BaseTest {
 
     @Test
     public void orchestrationLogging_logsSynchronizerStartingStatusInterruptedAndShutdown() throws Exception {
-        executor = Executors.newScheduledThreadPool(2);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
         IterableAsyncQueue<FDv2SourceResult> q = new IterableAsyncQueue<>();
         q.put(FDv2SourceResult.interrupted(
@@ -3070,25 +4019,34 @@ public class FDv2DataSourceTest extends BaseTest {
             sink,
             Thread.NORM_PRIORITY,
             testLogger,
-            executor,
-            120,
-            300
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1)
         );
         resourcesToClose.add(dataSource);
-        dataSource.start().get(2, TimeUnit.SECONDS);
+        dataSource.start();
+        // Wait for the status from the interruption, and the status from parking the synchronizer after it shuts down.
+        sink.awaitStatuses(2, 2, TimeUnit.SECONDS);
         assertTrue(logTextContains(logCapture, LDLogLevel.INFO, "Synchronizer 'primary-sync' is starting."));
         assertTrue(logTextContains(logCapture, LDLogLevel.INFO, "Synchronizer 'primary-sync' reported status: INTERRUPTED."));
         assertTrue(logTextContains(logCapture, LDLogLevel.INFO, "Synchronizer 'primary-sync' reported status: SHUTDOWN."));
     }
 
     @Test
-    public void orchestrationLogging_logsSynchronizerPermanentFailureAndNoMoreSynchronizers() throws Exception {
-        executor = Executors.newScheduledThreadPool(1);
+    public void orchestrationLogging_logsSynchronizerParkedAndAllParked() throws Exception {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
-        IterableAsyncQueue<FDv2SourceResult> q = new IterableAsyncQueue<>();
-        q.put(makeTerminalErrorResult());
+        BlockingQueue<Integer> builds = new LinkedBlockingQueue<>();
+        // Every instance of the only synchronizer fails with a terminal error. Each build is recorded.
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
-            () -> new MockQueuedSynchronizer(q, "failing-sync")
+            () -> {
+                builds.offer(1);
+                IterableAsyncQueue<FDv2SourceResult> q = new IterableAsyncQueue<>();
+                q.put(makeTerminalErrorResult());
+                return new MockQueuedSynchronizer(q, "failing-sync");
+            }
         );
         FDv2DataSource dataSource = new FDv2DataSource(
             ImmutableList.of(),
@@ -3097,33 +4055,36 @@ public class FDv2DataSourceTest extends BaseTest {
             sink,
             Thread.NORM_PRIORITY,
             testLogger,
-            executor,
-            120,
-            300
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMillis(100),
+            /* parkMaxDelay= */ Duration.ofSeconds(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1)
         );
         resourcesToClose.add(dataSource);
-        dataSource.start().get(2, TimeUnit.SECONDS);
+
+        // Start the data system, and wait until the parked synchronizer is built again.
+        dataSource.start();
+        builds.poll(2, TimeUnit.SECONDS);
+        Integer rebuild = builds.poll(2, TimeUnit.SECONDS);
+
+        // The data system logs the park, and logs that every synchronizer is parked.
+        assertNotNull(rebuild);
         assertTrue(logTextContains(logCapture, LDLogLevel.INFO, "Synchronizer 'failing-sync' is starting."));
         assertTrue(logTextContains(logCapture, LDLogLevel.INFO, "Synchronizer 'failing-sync' reported status: TERMINAL_ERROR."));
-        assertTrue(
-            logTextContains(
-                logCapture,
-                LDLogLevel.WARN,
-                "Synchronizer 'failing-sync' permanently failed and will not be used again until application restart."
-            )
-        );
-        assertTrue(logTextContains(logCapture, LDLogLevel.WARN, "No more synchronizers available."));
+        assertTrue(logTextContains(logCapture, LDLogLevel.WARN, "Synchronizer 'failing-sync' is backing off for "));
+        assertTrue(logTextContains(logCapture, LDLogLevel.WARN, "All synchronizers are backing off for at least "));
     }
 
     @Test
     public void orchestrationLogging_logsErrorWhenSynchronizerNextThrows() throws Exception {
-        executor = Executors.newScheduledThreadPool(1);
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
-        // Two tiers: the first throws on next() once; the second shuts down immediately so the outer loop
-        // does not spin forever re-building the same throwing factory (single-tier would never block).
+        // The second synchronizer delivers data, so start() completes.
         IterableAsyncQueue<FDv2SourceResult> followUpQueue = new IterableAsyncQueue<>();
-        followUpQueue.put(FDv2SourceResult.shutdown());
+        followUpQueue.put(FDv2SourceResult.changeSet(makeChangeSet(true), false));
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            // The first synchronizer fails from next().
             () -> new MockSynchronizer(() -> {
                 throw new RuntimeException("next-boom");
             }, "throwing-sync"),
@@ -3136,9 +4097,12 @@ public class FDv2DataSourceTest extends BaseTest {
             sink,
             Thread.NORM_PRIORITY,
             testLogger,
-            executor,
-            120,
-            300
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1)
         );
         resourcesToClose.add(dataSource);
         dataSource.start().get(2, TimeUnit.SECONDS);
@@ -3169,9 +4133,12 @@ public class FDv2DataSourceTest extends BaseTest {
 
         @Override
         public void updateStatus(DataSourceStatusProvider.State newState, DataSourceStatusProvider.ErrorInfo errorInfo) {
-            lastState.set(newState);
+            // Like DataSourceUpdatesImpl, broadcast only a new state or a new error.
+            DataSourceStatusProvider.State oldState = lastState.getAndSet(newState);
             lastError.set(errorInfo);
-            statusUpdates.offer(newState);
+            if (newState != oldState || errorInfo != null) {
+                statusUpdates.offer(newState);
+            }
         }
 
         @Override

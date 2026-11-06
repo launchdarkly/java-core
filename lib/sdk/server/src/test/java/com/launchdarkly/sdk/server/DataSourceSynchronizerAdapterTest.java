@@ -4,6 +4,7 @@ import com.launchdarkly.sdk.fdv2.ChangeSetType;
 import com.launchdarkly.sdk.fdv2.SourceResultType;
 import com.launchdarkly.sdk.fdv2.SourceSignal;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
+import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.server.subsystems.DataSource;
 import com.launchdarkly.sdk.server.DataStoreTestTypes.DataBuilder;
 import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
@@ -358,6 +359,85 @@ public class DataSourceSynchronizerAdapterTest extends BaseTest {
         CompletableFuture<FDv2SourceResult> reinitFuture = adapter.next();
         capturedSink.get().init(new FullDataSet<>(DataBuilder.forStandardTypes().build().getData(), true, null));
         assertEquals("env-from-fdv1", reinitFuture.get(2, TimeUnit.SECONDS).getChangeSet().getEnvironmentId());
+
+        adapter.close();
+    }
+
+    /**
+     * Test that an interrupted status with an unexpected HTTP error is reported as terminal, and an
+     * interrupted status with a normal HTTP error is reported as interrupted.
+     */
+    @Test
+    public void interruptedStatusIsTerminalOnlyForUnexpectedHttpErrors() throws Exception {
+        AtomicReference<DataSourceUpdateSink> capturedSink = new AtomicReference<>();
+
+        DataSourceSynchronizerAdapter adapter = new DataSourceSynchronizerAdapter(sink -> {
+            capturedSink.set(sink);
+            return new MockDataSource(null, null);
+        });
+        resourcesToClose.add(adapter);
+
+        // Report a 503 as interrupted, as the FDv1 data sources do.
+        CompletableFuture<FDv2SourceResult> normalFuture = adapter.next();
+        capturedSink.get().updateStatus(DataSourceStatusProvider.State.INTERRUPTED,
+                DataSourceStatusProvider.ErrorInfo.fromHttpError(503));
+        FDv2SourceResult normalResult = normalFuture.get(2, TimeUnit.SECONDS);
+
+        // The 503 stays interrupted.
+        assertEquals(SourceSignal.INTERRUPTED, normalResult.getStatus().getState());
+
+        // Report a 401 as interrupted, as the FDv1 data sources do.
+        CompletableFuture<FDv2SourceResult> unexpectedFuture = adapter.next();
+        capturedSink.get().updateStatus(DataSourceStatusProvider.State.INTERRUPTED,
+                DataSourceStatusProvider.ErrorInfo.fromHttpError(401));
+        FDv2SourceResult unexpectedResult = unexpectedFuture.get(2, TimeUnit.SECONDS);
+
+        // The 401 becomes terminal.
+        assertEquals(SourceSignal.TERMINAL_ERROR, unexpectedResult.getStatus().getState());
+        assertEquals(401, unexpectedResult.getStatus().getErrorInfo().getStatusCode());
+
+        adapter.close();
+    }
+
+    /** Test that two VALID statuses in a row meet the reset threshold, and a failure restarts the count. */
+    @Test
+    public void resetThresholdIsMetAfterTwoValidStatusesInARow() throws Exception {
+        AtomicReference<DataSourceUpdateSink> capturedSink = new AtomicReference<>();
+
+        DataSourceSynchronizerAdapter adapter = new DataSourceSynchronizerAdapter(sink -> {
+            capturedSink.set(sink);
+            return new MockDataSource(null, null);
+        });
+        resourcesToClose.add(adapter);
+
+        // Report a successful poll, a failed poll, and two more successful polls, as the FDv1 polling data source does.
+        CompletableFuture<FDv2SourceResult> firstFuture = adapter.next();
+        DataSourceUpdateSink sink = capturedSink.get();
+        sink.init(new FullDataSet<>(DataBuilder.forStandardTypes().build().getData(), true, null));
+        sink.updateStatus(DataSourceStatusProvider.State.VALID, null);
+        sink.updateStatus(DataSourceStatusProvider.State.INTERRUPTED,
+                DataSourceStatusProvider.ErrorInfo.fromHttpError(503));
+        sink.init(new FullDataSet<>(DataBuilder.forStandardTypes().build().getData(), true, null));
+        sink.updateStatus(DataSourceStatusProvider.State.VALID, null);
+        sink.init(new FullDataSet<>(DataBuilder.forStandardTypes().build().getData(), true, null));
+        sink.updateStatus(DataSourceStatusProvider.State.VALID, null);
+        List<FDv2SourceResult> results = new ArrayList<>();
+        results.add(firstFuture.get(2, TimeUnit.SECONDS));
+        for (int i = 0; i < 4; i++) {
+            results.add(adapter.next().get(2, TimeUnit.SECONDS));
+        }
+
+        // Only the last poll meets the reset threshold, and it reports the reset after its data.
+        assertEquals(SourceResultType.CHANGE_SET, results.get(0).getResultType());
+        assertFalse(results.get(0).isResetThresholdMet());
+        assertEquals(SourceSignal.INTERRUPTED, results.get(1).getStatus().getState());
+        assertFalse(results.get(1).isResetThresholdMet());
+        assertEquals(SourceResultType.CHANGE_SET, results.get(2).getResultType());
+        assertFalse(results.get(2).isResetThresholdMet());
+        assertEquals(SourceResultType.CHANGE_SET, results.get(3).getResultType());
+        assertFalse(results.get(3).isResetThresholdMet());
+        assertEquals(ChangeSetType.None, results.get(4).getChangeSet().getType());
+        assertTrue(results.get(4).isResetThresholdMet());
 
         adapter.close();
     }
