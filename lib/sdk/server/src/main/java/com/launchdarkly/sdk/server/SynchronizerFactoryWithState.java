@@ -2,8 +2,6 @@ package com.launchdarkly.sdk.server;
 
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
 
-import java.time.Instant;
-
 class SynchronizerFactoryWithState {
     public enum State {
         /**
@@ -31,7 +29,7 @@ class SynchronizerFactoryWithState {
     /**
      * The time at which the synchronizer stops being parked, or null if it is not parked.
      */
-    private Instant unparkTime = null;
+    private MonotonicTime unparkTime = null;
 
 
     public SynchronizerFactoryWithState(FDv2DataSource.DataSourceFactory<Synchronizer> factory) {
@@ -77,7 +75,7 @@ class SynchronizerFactoryWithState {
         parkCount = 0;
     }
 
-    public void park(Instant unparkTime) {
+    public void park(MonotonicTime unparkTime) {
         this.unparkTime = unparkTime;
     }
 
@@ -86,7 +84,7 @@ class SynchronizerFactoryWithState {
      *
      * @return the unpark time, or null if the synchronizer is not parked
      */
-    public Instant getUnparkTime() {
+    public MonotonicTime getUnparkTime() {
         return unparkTime;
     }
 
@@ -95,7 +93,7 @@ class SynchronizerFactoryWithState {
      *
      * @param now the current time
      */
-    public void unparkIfExpired(Instant now) {
+    public void unparkIfExpired(MonotonicTime now) {
         if (unparkTime != null && !now.isBefore(unparkTime)) {
             unparkTime = null;
         }
