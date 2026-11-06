@@ -708,6 +708,8 @@ class FDv2DataSource implements DataSource {
                 wait = Duration.between(Instant.now(), earliest);
                 logger.warn("All synchronizers are backing off for at least {}s.", Math.max(0, wait.getSeconds()));
             }
+            // No synchronizer is running until the wait ends.
+            dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.INTERRUPTED, null);
             if (!waitUnlessClosed(wait)) {
                 return null;
             }
