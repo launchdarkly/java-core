@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.17.6](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.5...launchdarkly-java-server-sdk-7.17.6) (2026-11-06)
+
+
+### Bug Fixes
+
+* Make TestData valueForAll return its value when targeting is off ([#251](https://github.com/launchdarkly/java-core/issues/251)) ([db17ab9](https://github.com/launchdarkly/java-core/commit/db17ab99608282e959286897ef81a0e9263849fa))
+
 ## [7.17.5](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.4...launchdarkly-java-server-sdk-7.17.5) (2026-11-03)
 
 
