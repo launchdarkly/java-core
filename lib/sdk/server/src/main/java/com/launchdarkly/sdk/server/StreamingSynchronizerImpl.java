@@ -219,9 +219,8 @@ class StreamingSynchronizerImpl implements Synchronizer {
                         e.toString(),
                         Instant.now()
                 );
-                // We aren't restarting the event source here. We aren't going to automatically recover, so the
-                // data system will move to the next source when it determined this source is unhealthy.
-                resultQueue.put(FDv2SourceResult.interrupted(errorInfo, getFallback(e)));
+                // This synchronizer cannot recover, so the failure is terminal. The data system will start a new one.
+                shutdownFuture.complete(FDv2SourceResult.terminalError(errorInfo, getFallback(e)));
             } finally {
                 eventSource.close();
             }

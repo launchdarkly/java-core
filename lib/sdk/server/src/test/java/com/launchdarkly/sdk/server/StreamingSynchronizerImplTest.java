@@ -2177,4 +2177,37 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             synchronizer.close();
         }
     }
+
+    @Test
+    public void unexpectedExceptionOnStreamThreadIsTerminal() throws Exception {
+        try (HttpServer server = HttpServer.start(Handlers.SSE.start())) {
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            // The selector source throws when the stream connects, which ends the stream thread.
+            SelectorSource selectorSource = mock(SelectorSource.class);
+            when(selectorSource.getSelector()).thenThrow(new IllegalStateException("unexpected"));
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    selectorSource,
+                    executor,
+                    null,
+                    Duration.ofMillis(100),
+                    StreamingSynchronizerImpl.RESET_THRESHOLD,
+                    Thread.NORM_PRIORITY,
+                    null
+            );
+
+            // Start the stream.
+            FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
+
+            // The stream thread cannot recover, so the failure is terminal for this synchronizer.
+            assertEquals(SourceResultType.STATUS, result.getResultType());
+            assertEquals(SourceSignal.TERMINAL_ERROR, result.getStatus().getState());
+
+            synchronizer.close();
+        }
+    }
 }
