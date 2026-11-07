@@ -147,10 +147,10 @@ final class DeliveryCooldownTracker {
       return false;
     }
     if (inCooldown()) {
-      // Defensive: analytics tokens are issued atomically with the cooldown check and go stale
-      // when a window opens, and diagnostic successes do not reach the tracker, so no current
-      // caller gets here. The invariant stands on its own: an outcome arriving while a window is
-      // open must never move delivery state.
+      // Defensive: tokens are issued atomically with the cooldown check (a diagnostic dispatched
+      // in-window gets no token at all), and a pre-window token goes stale when the window opens,
+      // so no current caller gets here. The invariant stands on its own: an outcome arriving
+      // while a window is open must never move delivery state.
       return false;
     }
     boolean resumed = false;
@@ -216,9 +216,7 @@ final class DeliveryCooldownTracker {
       return 0;
     }
     if (inCooldown()) {
-      // Load-bearing: diagnostic deliveries are not gated by the window, so an in-window
-      // diagnostic failure arrives with a current token, and it must not lengthen the window or
-      // step the ladder again for the same incident.
+      // Defensive; see recordSuccess.
       return 0;
     }
     consecutiveSuccesses = 0;

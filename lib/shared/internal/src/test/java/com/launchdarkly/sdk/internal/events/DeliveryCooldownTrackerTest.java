@@ -260,8 +260,9 @@ public class DeliveryCooldownTrackerTest extends BaseTest {
 
   @Test
   public void inWindowOutcomesWithCurrentTokenUpdateNothing() {
-    // Diagnostic deliveries are not gated by the window, so an outcome can arrive in-window with
-    // a current token; no such outcome may move delivery state.
+    // No production caller currently presents a current token for an in-window outcome (tokens
+    // are issued atomically with the cooldown check), but the tracker's own contract is that no
+    // such outcome may move delivery state.
     tracker.recordUnexpectedFailure(tracker.beginDelivery());
     long remainingBefore = tracker.remainingMillis();
     WindowToken inWindowToken = tracker.beginDelivery();
