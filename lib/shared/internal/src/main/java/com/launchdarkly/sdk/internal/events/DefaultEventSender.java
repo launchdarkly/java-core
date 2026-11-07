@@ -2,6 +2,7 @@ package com.launchdarkly.sdk.internal.events;
 
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.logging.LogValues;
+import com.launchdarkly.sdk.internal.http.FailureClass;
 import com.launchdarkly.sdk.internal.http.HttpHelpers;
 import com.launchdarkly.sdk.internal.http.HttpProperties;
 
@@ -16,7 +17,7 @@ import java.util.Locale;
 import java.util.UUID;
 import java.util.zip.GZIPOutputStream;
 
-import static com.launchdarkly.sdk.internal.http.HttpErrors.checkIfErrorIsRecoverableAndLog;
+import static com.launchdarkly.sdk.internal.http.HttpErrors.classifyHttpFailure;
 import static com.launchdarkly.sdk.internal.http.HttpErrors.httpErrorDescription;
 
 import okhttp3.Headers;
@@ -211,19 +212,16 @@ public final class DefaultEventSender implements EventSender {
         }
 
         String errorDesc = httpErrorDescription(response.code());
-        boolean recoverable = checkIfErrorIsRecoverableAndLog(
-            logger,
-            errorDesc,
-            errorContext,
-            response.code(),
-            nextActionMessage
-            );
-        if (!recoverable) {
+        if (classifyHttpFailure(response.code()) == FailureClass.UNEXPECTED) {
+          logger.error("Error {} (giving up permanently): {}", errorContext, errorDesc);
           mustShutDown = true;
           break;
         }
+        logger.warn("Error {} ({}): {}", errorContext, nextActionMessage, errorDesc);
       } catch (IOException e) {
-        checkIfErrorIsRecoverableAndLog(logger, e.toString(), errorContext, 0, nextActionMessage);
+        // Transport-level failures are always worth one retry here, whatever their cause; the
+        // request may simply have hit a transient network problem.
+        logger.warn("Error {} ({}): {}", errorContext, nextActionMessage, e.toString());
       }
     }
 
