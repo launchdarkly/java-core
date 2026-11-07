@@ -396,6 +396,8 @@ public class DefaultEventSenderTest extends BaseEventTest {
         EventSender.Result result = es.sendAnalyticsEvents(FAKE_DATA_BYTES, 1, server.getUri());
 
         assertFalse(result.isSuccess());
+        assertTrue(result.isUnexpectedFailure());
+        // The legacy flag is still written for consumers that have not migrated.
         assertTrue(result.isMustShutDown());
       }
 
@@ -404,6 +406,34 @@ public class DefaultEventSenderTest extends BaseEventTest {
       // it does not retry after this type of error, so there are no more requests
       server.getRecorder().requireNoRequests(Duration.ofMillis(100));
     }
+  }
+
+  @Test
+  public void transportErrorIsRecoverableAndIsRetriedOnce() throws Exception {
+    // A transport-level failure (no HTTP response) is never classified as unexpected, whatever
+    // its cause: the request is retried once and the failure leaves the delivery schedule alone.
+    URI unreachable;
+    try (java.net.ServerSocket socket = new java.net.ServerSocket(0)) {
+      unreachable = URI.create("http://127.0.0.1:" + socket.getLocalPort());
+    } // closing the socket leaves the port with no listener
+
+    long startTime = System.currentTimeMillis();
+    try (EventSender es = makeEventSender()) {
+      EventSender.Result result = es.sendAnalyticsEvents(FAKE_DATA_BYTES, 1, unreachable);
+
+      assertFalse(result.isSuccess());
+      assertFalse(result.isUnexpectedFailure());
+      assertFalse(result.isMustShutDown());
+    }
+    // The one retry implies the sender waited out the retry delay between the two attempts.
+    assertTrue(System.currentTimeMillis() - startTime >= BRIEF_RETRY_DELAY_MILLIS);
+    int retryLines = 0;
+    for (com.launchdarkly.logging.LogCapture.Message message : logCapture.getMessages()) {
+      if (message.getText().contains("Will retry posting")) {
+        retryLines++;
+      }
+    }
+    assertEquals(1, retryLines);
   }
 
   private void testRecoverableHttpError(int status) throws Exception {
@@ -416,6 +446,7 @@ public class DefaultEventSenderTest extends BaseEventTest {
         EventSender.Result result = es.sendAnalyticsEvents(FAKE_DATA_BYTES, 1, server.getUri());
 
         assertFalse(result.isSuccess());
+        assertFalse(result.isUnexpectedFailure());
         assertFalse(result.isMustShutDown());
       }
 

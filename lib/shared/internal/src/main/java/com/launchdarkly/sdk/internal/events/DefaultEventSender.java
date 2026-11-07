@@ -153,7 +153,7 @@ public final class DefaultEventSender implements EventSender {
   private Result sendEventData(boolean isDiagnostic, byte[] data, int eventCount, URI eventsBaseUri) {
     if (data == null || data.length == 0) {
       // DefaultEventProcessor won't normally pass us an empty payload, but if it does, don't bother sending
-      return new Result(true, false, null);
+      return Result.success(null);
     }
 
     Headers.Builder headersBuilder = baseHeaders.newBuilder();
@@ -174,7 +174,7 @@ public final class DefaultEventSender implements EventSender {
     URI uri = HttpHelpers.concatenateUriPath(eventsBaseUri, path);
     CompressionResult<byte[]> compressionResult = compressData(data);
     RequestBody body = RequestBody.create(compressionResult.data, JSON_CONTENT_TYPE);
-    boolean mustShutDown = false;
+    boolean unexpected = false;
 
     if (compressionResult.wasCompressed) {
       headersBuilder.add("Content-Encoding", "gzip");
@@ -208,13 +208,13 @@ public final class DefaultEventSender implements EventSender {
         logger.debug("{} delivery took {} ms, response status {}", description, endTime - startTime, response.code());
 
         if (response.isSuccessful()) {
-          return new Result(true, false, parseResponseDate(response));
+          return Result.success(parseResponseDate(response));
         }
 
         String errorDesc = httpErrorDescription(response.code());
         if (classifyHttpFailure(response.code()) == FailureClass.UNEXPECTED) {
-          logger.error("Error {} (giving up permanently): {}", errorContext, errorDesc);
-          mustShutDown = true;
+          logger.error("Error {} (the payload will not be retried): {}", errorContext, errorDesc);
+          unexpected = true;
           break;
         }
         logger.warn("Error {} ({}): {}", errorContext, nextActionMessage, errorDesc);
@@ -225,7 +225,7 @@ public final class DefaultEventSender implements EventSender {
       }
     }
 
-    return new Result(false, mustShutDown, null);
+    return unexpected ? Result.unexpectedFailure() : Result.failure();
   }
 
   private final Date parseResponseDate(Response response) {

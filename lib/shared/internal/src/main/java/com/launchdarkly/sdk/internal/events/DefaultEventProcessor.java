@@ -319,6 +319,7 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
     private final AtomicInteger busyFlushWorkersCount;
     private final AtomicLong lastKnownPastTime = new AtomicLong(0);
     private final AtomicBoolean disabled = new AtomicBoolean(false);
+    private final DeliveryCooldownTracker cooldown;
     private final AtomicBoolean didSendInitEvent = new AtomicBoolean(false);
     final DiagnosticStore diagnosticStore; // visible for testing
     private final EventContextDeduplicator contextDeduplicator;
@@ -346,6 +347,7 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
       this.diagnosticStore = eventsConfig.diagnosticStore;
       this.busyFlushWorkersCount = new AtomicInteger(0);
       this.logger = logger;
+      this.cooldown = new DeliveryCooldownTracker(eventsConfig.cooldownNanoTimeFn);
 
       ThreadFactory threadFactory = new ThreadFactory() {
         @Override
@@ -603,10 +605,21 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
     }
 
     private void triggerFlush(EventBuffer outbox, BlockingQueue<FlushPayload> payloadQueue) {
-      if (disabled.get() || outbox.isEmpty()) {
+      if (disabled.get()) {
         return;
       }
-      FlushPayload payload = outbox.getPayload();
+      // The cooldown check and the token issue are one atomic step, so a window opening
+      // concurrently on a worker thread either diverts this flush to the discard path or makes
+      // the dispatched payload's token stale.
+      DeliveryCooldownTracker.WindowToken token = cooldown.beginDeliveryUnlessInCooldown();
+      if (token == null) {
+        discardPayloadInCooldown(outbox);
+        return;
+      }
+      if (outbox.isEmpty()) {
+        return;
+      }
+      FlushPayload payload = outbox.getPayload(token);
       if (diagnosticStore != null) {
         int summaryCount = 0;
         for (EventSummary summary : payload.summaries) {
@@ -632,12 +645,80 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
       }
     }
     
-    private void handleResponse(EventSender.Result result) {
+    // While a window is open, a flush of any kind is a no-op that behaves exactly as if the batch
+    // had been sent and the service had refused it: the buffered events are disposed of, and any
+    // context introductions they carried are forgotten so a later payload can introduce those
+    // contexts again. Only the network attempt and the serialization work are skipped.
+    private void discardPayloadInCooldown(EventBuffer outbox) {
+      if (outbox.isEmpty()) {
+        return;
+      }
+      // No batch reached the service, so the diagnostic batch-size stat must not report one.
+      if (diagnosticStore != null) {
+        diagnosticStore.recordEventsInBatch(0);
+      }
+      FlushPayload payload = outbox.getPayload(null);
+      outbox.clear();
+      int eventCount = payload.events.length;
+      for (EventSummary summary : payload.summaries) {
+        if (!summary.isEmpty()) {
+          eventCount++;
+        }
+      }
+      boolean hadContextIntroductions = false;
+      for (Event e : payload.events) {
+        if (e instanceof Event.Index || e instanceof Event.Identify) {
+          hadContextIntroductions = true;
+          break;
+        }
+      }
+      if (hadContextIntroductions && contextDeduplicator != null) {
+        contextDeduplicator.flush();
+      }
+      long remainingSeconds = Math.max(1, (cooldown.remainingMillis() + 999) / 1000);
+      if (cooldown.takeDiscardWarning()) {
+        logger.warn("Discarded {} events: event delivery is cooling down for another {} seconds",
+            eventCount, remainingSeconds);
+      } else {
+        logger.debug("Discarded {} events: event delivery is cooling down for another {} seconds",
+            eventCount, remainingSeconds);
+      }
+    }
+
+    private void handleResponse(EventSender.Result result, DeliveryCooldownTracker.WindowToken token) {
       if (result.getTimeFromServer() != null) {
         lastKnownPastTime.set(result.getTimeFromServer().getTime());
       }
-      if (result.isMustShutDown()) {
-        disabled.set(true);
+      if (result.isUnexpectedFailure()) {
+        noteUnexpectedFailure(token);
+      } else if (result.isSuccess()) {
+        if (cooldown.recordSuccess(token)) {
+          logger.info("Event delivery resumed after cooldown");
+        }
+      } else {
+        cooldown.recordFailure(token);
+      }
+    }
+
+    // Diagnostic deliveries are not gated by the cooldown, and their outcomes drive it only the
+    // way they drove the old permanent disable: an unexpected failure opens a window, while a
+    // diagnostic success or ordinary failure has no effect on delivery state. In particular, a
+    // diagnostic success is not the probe and cannot count toward the reset threshold; only
+    // analytics deliveries prove the service is accepting analytics payloads again.
+    private void handleDiagnosticResponse(EventSender.Result result, DeliveryCooldownTracker.WindowToken token) {
+      if (result.getTimeFromServer() != null) {
+        lastKnownPastTime.set(result.getTimeFromServer().getTime());
+      }
+      if (result.isUnexpectedFailure()) {
+        noteUnexpectedFailure(token);
+      }
+    }
+
+    private void noteUnexpectedFailure(DeliveryCooldownTracker.WindowToken token) {
+      long windowMillis = cooldown.recordUnexpectedFailure(token);
+      if (windowMillis > 0) {
+        logger.error("Event delivery failed with an unexpected error;"
+            + " event delivery will not be attempted for the next {} seconds", windowMillis / 1000);
       }
     }
 
@@ -650,9 +731,13 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
             Writer writer = new BufferedWriter(new OutputStreamWriter(buffer, Charset.forName("UTF-8")), INITIAL_OUTPUT_BUFFER_SIZE);
             gson.toJson(diagnosticEvent.value, writer);
             writer.flush();
+            // The send itself is not gated by the cooldown, but a diagnostic dispatched inside a
+            // window gets a null token, so its outcome cannot move delivery state even if it
+            // lands after the window has elapsed.
+            DeliveryCooldownTracker.WindowToken token = cooldown.beginDeliveryUnlessInCooldown();
             EventSender.Result result = eventsConfig.eventSender.sendDiagnosticEvent(
                 buffer.toByteArray(), eventsConfig.eventsUri);
-            handleResponse(result);
+            handleDiagnosticResponse(result, token);
             if (diagnosticEvent.initEvent) {
               didSendInitEvent.set(true);
             }
@@ -716,10 +801,10 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
       return res;
     }
 
-    FlushPayload getPayload() {
+    FlushPayload getPayload(DeliveryCooldownTracker.WindowToken token) {
       Event[] eventsOut = events.toArray(new Event[events.size()]);
       List<EventSummarizer.EventSummary> summaries = summarizer.getSummariesAndReset();
-      return new FlushPayload(eventsOut, summaries);
+      return new FlushPayload(eventsOut, summaries, token);
     }
 
     void clear() {
@@ -731,15 +816,17 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
   private static final class FlushPayload {
     final Event[] events;
     final List<EventSummary> summaries;
+    final DeliveryCooldownTracker.WindowToken token;
 
-    FlushPayload(Event[] events, List<EventSummary> summaries) {
+    FlushPayload(Event[] events, List<EventSummary> summaries, DeliveryCooldownTracker.WindowToken token) {
       this.events = events;
       this.summaries = summaries;
+      this.token = token;
     }
   }
 
   private static interface EventResponseListener {
-    void handleResponse(EventSender.Result result);
+    void handleResponse(EventSender.Result result, DeliveryCooldownTracker.WindowToken token);
   }
 
   private static final class SendEventsTask implements Runnable {
@@ -780,18 +867,31 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
         } catch (InterruptedException e) {
           continue;
         }
+        EventSender.Result result;
         try {
           ByteArrayOutputStream buffer = new ByteArrayOutputStream(INITIAL_OUTPUT_BUFFER_SIZE);
           Writer writer = new BufferedWriter(new OutputStreamWriter(buffer, Charset.forName("UTF-8")), INITIAL_OUTPUT_BUFFER_SIZE);
           int outputEventCount = formatter.writeOutputEvents(payload.events, payload.summaries, writer);
           writer.flush();
-          EventSender.Result result = eventsConfig.eventSender.sendAnalyticsEvents(
+          result = eventsConfig.eventSender.sendAnalyticsEvents(
               buffer.toByteArray(),
               outputEventCount,
               eventsConfig.eventsUri
               );
-          responseListener.handleResponse(result);
         } catch (Exception e) {
+          logger.error("Unexpected error in event processor: {}", LogValues.exceptionSummary(e));
+          logger.debug(LogValues.exceptionTrace(e));
+          // The batch was not delivered, and the delivery schedule must know that: an exception
+          // here counts as an ordinary failure, which breaks the consecutive-success streak
+          // without opening a cooldown window.
+          result = EventSender.Result.failure();
+        }
+        try {
+          responseListener.handleResponse(result, payload.token);
+        } catch (Exception e) {
+          // An exception here (such as a null result from a custom EventSender) must not kill
+          // this worker thread: the busy-worker count would stay elevated forever and close()
+          // would never return.
           logger.error("Unexpected error in event processor: {}", LogValues.exceptionSummary(e));
           logger.debug(LogValues.exceptionTrace(e));
         }

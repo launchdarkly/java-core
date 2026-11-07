@@ -228,18 +228,18 @@ public class DefaultEventProcessorTest extends BaseEventTest {
   }
   
   @Test
-  public void noMoreEventsAreProcessedAfterUnrecoverableError() throws Exception {
+  public void eventsAreNotSentWhileDeliveryIsCoolingDownAfterUnexpectedError() throws Exception {
+    // Delivery suppression after an unexpected error is a bounded cooldown window, not a
+    // permanent stop; the window-crossing behavior is covered in DefaultEventProcessorCooldownTest.
     MockEventSender es = new MockEventSender();
-    es.result = new EventSender.Result(false, true, null); // mustShutdown == true
-    
+    es.result = EventSender.Result.unexpectedFailure();
+
     try (DefaultEventProcessor ep = makeEventProcessor(baseConfig(es))) {
       ep.sendEvent(identifyEvent(user));
       ep.flushAsync();
       es.awaitRequest();
-      
-      // allow a little time for the event processor to pass the "must shut down" signal back from the sender
-      Thread.sleep(50);
-      
+      ep.waitUntilInactive(); // the failure result has now been handled
+
       ep.sendEvent(identifyEvent(user));
       ep.flushAsync();
       es.expectNoRequests(100);
