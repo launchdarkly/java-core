@@ -29,8 +29,19 @@ public interface EventSender extends Closeable {
     FAILURE,
     
     /**
-     * The EventSender was not able to deliver the events, and the nature of the error indicates that
-     * the SDK should not attempt to send any more events.
+     * The EventSender was not able to deliver the events, and the nature of the error (such as an
+     * HTTP 401 error, implying that the SDK key is invalid) indicates that the SDK should stop
+     * attempting delivery for a while.
+     * <p>
+     * The SDK responds by entering a bounded cooldown window. While the window is open, the SDK
+     * initiates no new analytics-event deliveries through this EventSender (a delivery already
+     * dispatched when the window opened still completes), and analytics events that would have
+     * been sent during the window are discarded rather than held. Diagnostic-event calls are not
+     * suppressed, and this result from one of them opens a window of its own. If delivery is
+     * still failing this way when a window elapses, the next window is longer, up to a ceiling;
+     * sustained successful delivery returns it to the initial length. Delivery resumes on its own
+     * once a window has elapsed; no application action is required, and event delivery is never
+     * disabled permanently. Returning {@link #FAILURE} instead never opens or lengthens a window.
      */
     STOP
   };
