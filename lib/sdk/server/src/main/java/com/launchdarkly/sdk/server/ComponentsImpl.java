@@ -299,11 +299,11 @@ abstract class ComponentsImpl {
       private Result transformResult(com.launchdarkly.sdk.server.subsystems.EventSender.Result result) {
         switch (result) {
         case FAILURE:
-          return new Result(false, false, null);
+          return Result.failure();
         case STOP:
-          return new Result(false, true, null);
+          return Result.unexpectedFailure();
         default:
-          return new Result(true, false, null);
+          return Result.success(null);
         }
       }
     }
