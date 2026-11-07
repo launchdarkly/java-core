@@ -2,6 +2,7 @@ package com.launchdarkly.sdk.internal.events;
 
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.logging.LogValues;
+import com.launchdarkly.sdk.internal.http.FailureClass;
 import com.launchdarkly.sdk.internal.http.HttpHelpers;
 import com.launchdarkly.sdk.internal.http.HttpProperties;
 
@@ -16,7 +17,7 @@ import java.util.Locale;
 import java.util.UUID;
 import java.util.zip.GZIPOutputStream;
 
-import static com.launchdarkly.sdk.internal.http.HttpErrors.checkIfErrorIsRecoverableAndLog;
+import static com.launchdarkly.sdk.internal.http.HttpErrors.classifyHttpFailure;
 import static com.launchdarkly.sdk.internal.http.HttpErrors.httpErrorDescription;
 
 import okhttp3.Headers;
@@ -152,7 +153,7 @@ public final class DefaultEventSender implements EventSender {
   private Result sendEventData(boolean isDiagnostic, byte[] data, int eventCount, URI eventsBaseUri) {
     if (data == null || data.length == 0) {
       // DefaultEventProcessor won't normally pass us an empty payload, but if it does, don't bother sending
-      return new Result(true, false, null);
+      return Result.success(null);
     }
 
     Headers.Builder headersBuilder = baseHeaders.newBuilder();
@@ -173,7 +174,7 @@ public final class DefaultEventSender implements EventSender {
     URI uri = HttpHelpers.concatenateUriPath(eventsBaseUri, path);
     CompressionResult<byte[]> compressionResult = compressData(data);
     RequestBody body = RequestBody.create(compressionResult.data, JSON_CONTENT_TYPE);
-    boolean mustShutDown = false;
+    boolean unexpected = false;
 
     if (compressionResult.wasCompressed) {
       headersBuilder.add("Content-Encoding", "gzip");
@@ -207,27 +208,24 @@ public final class DefaultEventSender implements EventSender {
         logger.debug("{} delivery took {} ms, response status {}", description, endTime - startTime, response.code());
 
         if (response.isSuccessful()) {
-          return new Result(true, false, parseResponseDate(response));
+          return Result.success(parseResponseDate(response));
         }
 
         String errorDesc = httpErrorDescription(response.code());
-        boolean recoverable = checkIfErrorIsRecoverableAndLog(
-            logger,
-            errorDesc,
-            errorContext,
-            response.code(),
-            nextActionMessage
-            );
-        if (!recoverable) {
-          mustShutDown = true;
+        if (classifyHttpFailure(response.code()) == FailureClass.UNEXPECTED) {
+          logger.error("Error {} (the payload will not be retried): {}", errorContext, errorDesc);
+          unexpected = true;
           break;
         }
+        logger.warn("Error {} ({}): {}", errorContext, nextActionMessage, errorDesc);
       } catch (IOException e) {
-        checkIfErrorIsRecoverableAndLog(logger, e.toString(), errorContext, 0, nextActionMessage);
+        // Transport-level failures are always worth one retry here, whatever their cause; the
+        // request may simply have hit a transient network problem.
+        logger.warn("Error {} ({}): {}", errorContext, nextActionMessage, e.toString());
       }
     }
 
-    return new Result(false, mustShutDown, null);
+    return unexpected ? Result.unexpectedFailure() : Result.failure();
   }
 
   private final Date parseResponseDate(Response response) {

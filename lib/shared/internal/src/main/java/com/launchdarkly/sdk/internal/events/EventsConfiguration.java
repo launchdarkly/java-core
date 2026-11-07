@@ -33,6 +33,12 @@ public final class EventsConfiguration {
   final boolean perContextSummarization;
   final boolean redactAnonymousAllEvents;
 
+  // Test seam only, which is why it is not part of any constructor: lets unit tests drive the
+  // delivery cooldown across window boundaries with a fake clock. Null means System.nanoTime() is
+  // used. Tests must set this before constructing the processor, on the same thread; the field is
+  // never written after construction, so it needs no synchronization.
+  DeliveryCooldownTracker.NanoTimeSource cooldownNanoTimeFn = null;
+
   /**
    * Creates an instance.
    *
