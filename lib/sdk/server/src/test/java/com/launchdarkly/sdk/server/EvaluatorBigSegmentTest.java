@@ -1,6 +1,8 @@
 package com.launchdarkly.sdk.server;
 
+import com.launchdarkly.sdk.AttributeRef;
 import com.launchdarkly.sdk.ContextKind;
+import com.launchdarkly.sdk.EvaluationReason;
 import com.launchdarkly.sdk.EvaluationReason.BigSegmentsStatus;
 import com.launchdarkly.sdk.LDContext;
 import com.launchdarkly.sdk.LDValue;
@@ -14,6 +16,7 @@ import org.junit.Test;
 import static com.launchdarkly.sdk.server.Evaluator.makeBigSegmentRef;
 import static com.launchdarkly.sdk.server.EvaluatorTestUtil.expectNoPrerequisiteEvals;
 import static com.launchdarkly.sdk.server.ModelBuilders.booleanFlagWithClauses;
+import static com.launchdarkly.sdk.server.ModelBuilders.clause;
 import static com.launchdarkly.sdk.server.ModelBuilders.clauseMatchingContext;
 import static com.launchdarkly.sdk.server.ModelBuilders.clauseMatchingSegment;
 import static com.launchdarkly.sdk.server.ModelBuilders.flagBuilder;
@@ -191,5 +194,51 @@ public class EvaluatorBigSegmentTest extends EvaluatorTestBase {
     EvalResult result = evaluator.evaluate(flag, context, expectNoPrerequisiteEvals());
     assertEquals(LDValue.of(true), result.getValue());
     assertEquals(BigSegmentsStatus.HEALTHY, result.getReason().getBigSegmentsStatus());
+  }
+
+  @Test
+  public void bigSegmentStatusIsIncludedWhenLaterClauseIsMalformed() {
+    Segment segment = segmentBuilder("segmentkey").unbounded(true).generation(2).build();
+    Clause malformedClause = clause(null, (AttributeRef)null, DataModel.Operator.in, LDValue.of("x"));
+    FeatureFlag flag = flagBuilder("key")
+        .on(true)
+        .fallthroughVariation(0)
+        .variations(false, true)
+        .rules(
+            ruleBuilder().variation(1).clauses(clauseMatchingSegment(segment)).build(),
+            ruleBuilder().variation(1).clauses(malformedClause).build()
+        )
+        .build();
+
+    // The context is not in the big segment, so evaluation continues to the malformed rule.
+    BigSegmentStoreWrapper.BigSegmentsQueryResult queryResult = new BigSegmentStoreWrapper.BigSegmentsQueryResult();
+    queryResult.status = BigSegmentsStatus.STALE;
+    queryResult.membership = createMembershipFromSegmentRefs(null, null);
+    Evaluator evaluator = evaluatorBuilder().withStoredSegments(segment).withBigSegmentQueryResult(testUser.getKey(), queryResult).build();
+
+    EvalResult result = evaluator.evaluate(flag, testUser, expectNoPrerequisiteEvals());
+    assertEquals(LDValue.ofNull(), result.getValue());
+    assertEquals(EvaluationReason.ErrorKind.MALFORMED_FLAG, result.getReason().getErrorKind());
+    assertEquals(BigSegmentsStatus.STALE, result.getReason().getBigSegmentsStatus());
+  }
+
+  @Test
+  public void bigSegmentStatusIsIncludedWhenLaterClauseIsMalformedAndNoProviderIsConfigured() {
+    Segment segment = segmentBuilder("segmentkey").unbounded(true).generation(2).build();
+    Clause malformedClause = clause(null, (AttributeRef)null, DataModel.Operator.in, LDValue.of("x"));
+    FeatureFlag flag = flagBuilder("key")
+        .on(true)
+        .fallthroughVariation(0)
+        .variations(false, true)
+        .rules(
+            ruleBuilder().variation(1).clauses(clauseMatchingSegment(segment)).build(),
+            ruleBuilder().variation(1).clauses(malformedClause).build()
+        )
+        .build();
+    Evaluator evaluator = evaluatorBuilder().withStoredSegments(segment).withBigSegmentQueryResult(testUser.getKey(), null).build();
+
+    EvalResult result = evaluator.evaluate(flag, testUser, expectNoPrerequisiteEvals());
+    assertEquals(EvaluationReason.ErrorKind.MALFORMED_FLAG, result.getReason().getErrorKind());
+    assertEquals(BigSegmentsStatus.NOT_CONFIGURED, result.getReason().getBigSegmentsStatus());
   }
 }
