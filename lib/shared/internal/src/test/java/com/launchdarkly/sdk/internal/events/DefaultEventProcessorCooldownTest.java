@@ -336,6 +336,10 @@ public class DefaultEventProcessorCooldownTest extends BaseEventTest {
     MockEventSender es = new MockEventSender();
     try (DefaultEventProcessor ep = makeProcessorWithClock(baseConfig(es).diagnosticStore(diagnosticStore))) {
       es.awaitDiagnostic(); // the startup diagnostic event succeeds
+      // The await returns when the payload is captured, which is before the diagnostic task has
+      // read the sender's result field; wait for the task to finish before changing the result,
+      // or the startup diagnostic can consume the failure and open the window itself.
+      sharedExecutor.submit(() -> {}).get();
       enterCooldown(ep, es, EventSender.Result.unexpectedFailure());
       assertEquals(1, countLogLines(LDLogLevel.ERROR, "the next 300 seconds"));
 
@@ -407,6 +411,7 @@ public class DefaultEventProcessorCooldownTest extends BaseEventTest {
     MockEventSender es = new MockEventSender();
     try (DefaultEventProcessor ep = makeProcessorWithClock(baseConfig(es).diagnosticStore(diagnosticStore))) {
       es.awaitDiagnostic(); // the startup diagnostic event
+      sharedExecutor.submit(() -> {}).get(); // see diagnosticSuccessesDoNotResetTheLadderOrEndTheWindow
 
       // A delivered batch records its size.
       ep.sendEvent(identifyEvent(user));
@@ -457,6 +462,7 @@ public class DefaultEventProcessorCooldownTest extends BaseEventTest {
     MockEventSender es = new MockEventSender();
     try (DefaultEventProcessor ep = makeProcessorWithClock(baseConfig(es).diagnosticStore(diagnosticStore))) {
       es.awaitDiagnostic(); // the startup diagnostic event succeeds
+      sharedExecutor.submit(() -> {}).get(); // see diagnosticSuccessesDoNotResetTheLadderOrEndTheWindow
       enterCooldown(ep, es, EventSender.Result.unexpectedFailure());
       assertEquals(1, countLogLines(LDLogLevel.ERROR, "the next 300 seconds"));
 
