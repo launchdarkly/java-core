@@ -37,6 +37,12 @@ class FDv2DataSource implements DataSource {
      */
     private static final long defaultRecoveryTimeout = 5 * 60;
 
+    /**
+     * Default time to wait for a synchronizer to deliver data, before any data has been applied, before falling back
+     * to the next synchronizer. The timeout is only configurable for testing.
+     */
+    private static final long defaultInitializationFallbackTimeoutSeconds = 10;
+
     private final SourceManager sourceManager;
 
     private final List<ConditionFactory> conditionFactories;
@@ -45,6 +51,7 @@ class FDv2DataSource implements DataSource {
 
     private final CompletableFuture<Boolean> startFuture = new CompletableFuture<>();
     private final AtomicBoolean started = new AtomicBoolean(false);
+    private final AtomicBoolean dataApplied = new AtomicBoolean(false);
 
     private final int threadPriority;
 
@@ -95,6 +102,31 @@ class FDv2DataSource implements DataSource {
         long fallbackTimeout,
         long recoveryTimeout
     ) {
+        this(initializers,
+            synchronizers,
+            fdv1DataSourceFactory,
+            dataSourceUpdates,
+            threadPriority,
+            logger,
+            sharedExecutor,
+            fallbackTimeout,
+            recoveryTimeout,
+            defaultInitializationFallbackTimeoutSeconds
+        );
+    }
+
+    public FDv2DataSource(
+        ImmutableList<DataSourceFactory<Initializer>> initializers,
+        ImmutableList<DataSourceFactory<Synchronizer>> synchronizers,
+        DataSourceFactory<Synchronizer> fdv1DataSourceFactory,
+        DataSourceUpdateSinkV2 dataSourceUpdates,
+        int threadPriority,
+        LDLogger logger,
+        ScheduledExecutorService sharedExecutor,
+        long fallbackTimeout,
+        long recoveryTimeout,
+        long initializationFallbackTimeout
+    ) {
         List<SynchronizerFactoryWithState> synchronizerFactories = synchronizers
             .stream()
             .map(SynchronizerFactoryWithState::new)
@@ -118,7 +150,8 @@ class FDv2DataSource implements DataSource {
         this.threadPriority = threadPriority;
         this.logger = logger;
         this.conditionFactories = new ArrayList<>();
-        this.conditionFactories.add(new FallbackCondition.Factory(sharedExecutor, fallbackTimeout));
+        this.conditionFactories.add(new FallbackCondition.Factory(
+            sharedExecutor, fallbackTimeout, initializationFallbackTimeout, dataApplied::get));
         this.conditionFactories.add(new RecoveryCondition.Factory(sharedExecutor, recoveryTimeout));
     }
 
@@ -210,7 +243,9 @@ class FDv2DataSource implements DataSource {
                     DataSourceStatusProvider.ErrorInfo fallbackErrorInfo = null;
                     switch (result.getResultType()) {
                         case CHANGE_SET:
-                            dataSourceUpdates.apply(result.getChangeSet());
+                            if (dataSourceUpdates.apply(result.getChangeSet())) {
+                                dataApplied.set(true);
+                            }
                             anyDataReceived = true;
                             logger.info("Initialized via '{}'.", initializerName);
                             if (!result.getChangeSet().getSelector().isEmpty()) {
@@ -405,7 +440,9 @@ class FDv2DataSource implements DataSource {
                                     case CHANGE_SET:
                                         // A data update breaks the "in a row" streak for status deduplication.
                                         resetSynchronizerStatusDedupe();
-                                        dataSourceUpdates.apply(result.getChangeSet());
+                                        if (dataSourceUpdates.apply(result.getChangeSet())) {
+                                            dataApplied.set(true);
+                                        }
                                         dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
                                         // This could have been completed by any data source. But if it has not been completed before
                                         // now, then we complete it.
