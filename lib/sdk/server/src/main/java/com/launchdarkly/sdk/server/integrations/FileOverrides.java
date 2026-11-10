@@ -103,7 +103,8 @@ public abstract class FileOverrides {
    * override. A configured file that does not exist contributes no overrides, so deleting every file
    * removes them all. A file that exists but cannot be read or parsed makes the reload fail: the
    * overrides in effect stay, the source logs the failure, and it recovers on its own once the file
-   * can be read again.
+   * can be read again. A file that contains an entry marked as deleted fails to load in the same way;
+   * to remove an override, remove its entry or delete the file.
    * <p>
    * Files can be rewritten in place: if the source finds a file empty while it is being rewritten, it
    * keeps the overrides in effect until the new content is written. To remove a file's overrides,

@@ -25,7 +25,9 @@ public interface OverrideSink {
    * and {@link com.launchdarkly.sdk.server.DataModel#SEGMENTS}, with item descriptors whose items
    * are the SDK's flag and segment model objects, as produced by
    * {@link DataKind#deserialize(String)}. Sources supply ordinary, fully parsed entities. The SDK
-   * itself marks the entries as overrides. The source's objects are never modified.
+   * itself marks the entries as overrides. The source's objects are never modified. A snapshot that
+   * contains a deleted flag or segment is rejected as a whole: the SDK logs an error and the overrides
+   * in effect stay.
    * <p>
    * This method is safe to call from any thread. The SDK serializes calls, and the new layer
    * contents are visible to evaluations when the call returns.

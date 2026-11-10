@@ -40,8 +40,9 @@ import static com.launchdarkly.sdk.server.DataModel.SEGMENTS;
  * This loader is separate from the file data source's loader because the override source has
  * different rules: a configured file that does not exist contributes no entries, entries keep the
  * versions that the documents specify, a value-only entry becomes a flag that is on and serves the
- * value by fallthrough, the format of a file is chosen by its extension, and every failure to read or
- * parse a file is reported as a file data error. The file data source keeps its own behavior.
+ * value by fallthrough, the format of a file is chosen by its extension, a flag or segment entry that
+ * is marked as deleted fails the load, and every failure to read or parse a file is reported as a file
+ * data error. The file data source keeps its own behavior.
  * <p>
  * Whether a file with no content is valid depends on its format, like the rest of its content. A JSON
  * file with no content is not a JSON document, so it fails to parse. A YAML file with no content is a
@@ -426,7 +427,8 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
     try {
       if (document.flags != null) {
         for (Map.Entry<String, LDValue> e : document.flags.entrySet()) {
-          if (add(data, FEATURES, e.getKey(), FlagFactory.flagFromJson(e.getValue()))) {
+          ItemDescriptor flag = notDeleted("flag", e.getKey(), FlagFactory.flagFromJson(e.getValue()));
+          if (add(data, FEATURES, e.getKey(), flag)) {
             flagsAdded++;
           }
         }
@@ -440,7 +442,8 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
       }
       if (document.segments != null) {
         for (Map.Entry<String, LDValue> e : document.segments.entrySet()) {
-          if (add(data, SEGMENTS, e.getKey(), FlagFactory.segmentFromJson(e.getValue()))) {
+          ItemDescriptor segment = notDeleted("segment", e.getKey(), FlagFactory.segmentFromJson(e.getValue()));
+          if (add(data, SEGMENTS, e.getKey(), segment)) {
             segmentsAdded++;
           }
         }
@@ -454,6 +457,18 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
       throw new FileDataException("file " + path + ": cannot parse flag or segment data", e);
     }
     return new int[] { flagsAdded, segmentsAdded };
+  }
+
+  // A definition marked as deleted deserializes to a deleted item placeholder. In an override file it
+  // is a mistake, not a way to remove an override, which is done by removing the entry, so it fails the
+  // load like a file that cannot be parsed. It fails even when the duplicate keys handling would drop
+  // the entry, because the file still needs correcting. The file data source keeps accepting it.
+  private static ItemDescriptor notDeleted(String kind, String key, ItemDescriptor item) throws FileDataException {
+    if (item.getItem() == null) {
+      throw new FileDataException(kind + " \"" + key + "\" is marked as deleted; remove the entry to remove its override",
+          null);
+    }
+    return item;
   }
 
   /**

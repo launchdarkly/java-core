@@ -61,6 +61,9 @@ final class OverrideSinkImpl implements OverrideSink {
    * Atomically replaces the entire override layer, then notifies listeners of every flag whose
    * merged-view evaluation may have changed. Calls are serialized, so overlapping updates from a
    * source cannot interleave.
+   * <p>
+   * A snapshot that contains a deleted item is rejected as a whole: the error is logged, the layer
+   * keeps its contents, and no listener is notified.
    */
   @Override
   public synchronized void setOverrides(Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data) {
@@ -68,7 +71,12 @@ final class OverrideSinkImpl implements OverrideSink {
       logger.debug("Ignoring an override snapshot supplied after the override source was closed");
       return;
     }
-    apply(data);
+    try {
+      apply(data);
+    } catch (OverrideLayer.DeletedItemException e) {
+      logger.error("Rejected an override snapshot because {}; the overrides in effect are unchanged",
+          e.getMessage());
+    }
   }
 
   /**

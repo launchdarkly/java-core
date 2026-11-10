@@ -364,6 +364,65 @@ public class FileOverrideSourceTest {
     }
   }
 
+  private void awaitLogMessage(String message) throws InterruptedException {
+    long deadline = System.currentTimeMillis() + WAIT_MILLIS;
+    while (!logCapture.getMessageStrings().contains(message)) {
+      if (System.currentTimeMillis() > deadline) {
+        fail("expected log message " + message + " but got " + logCapture.getMessageStrings());
+      }
+      Thread.sleep(20);
+    }
+  }
+
+  // An edit that adds an entry marked as deleted fails the reload like a malformed edit: the
+  // overrides in effect stay, nothing is supplied, and the failure names the file and the key. Other
+  // changes in the same edit are not applied either.
+  private void entryMarkedAsDeletedFailsTheReload(String document, String kind, String key) throws Exception {
+    try (TempDir dir = TempDir.create()) {
+      Path file = write(dir, "overrides.json", docWith("flag", "first"));
+      RecordingSink sink = new RecordingSink();
+      start(FileOverrides.source().filePaths(file), sink);
+      assertEquals("first", flagValue(sink.await(), "flag"));
+
+      Files.write(file, document.getBytes());
+      awaitLogMessage("ERROR:Unable to load flags: file " + file + ": " + kind + " \"" + key
+          + "\" is marked as deleted; remove the entry to remove its override");
+      sink.assertNoSnapshot(200);
+
+      // Removing the entry corrects the file.
+      Files.write(file, docWith("flag", "second").getBytes());
+      assertEquals("second", flagValue(sink.await(), "flag"));
+    }
+  }
+
+  @Test
+  public void flagMarkedAsDeletedFailsTheReloadAndKeepsTheOverrides() throws Exception {
+    entryMarkedAsDeletedFailsTheReload("{\"flagValues\":{\"flag\":\"changed\"},"
+        + "\"flags\":{\"gone\":{\"key\":\"gone\",\"version\":1,\"deleted\":true}}}", "flag", "gone");
+  }
+
+  @Test
+  public void segmentMarkedAsDeletedFailsTheReloadAndKeepsTheOverrides() throws Exception {
+    entryMarkedAsDeletedFailsTheReload("{\"flagValues\":{\"flag\":\"changed\"},"
+        + "\"segments\":{\"gone\":{\"key\":\"gone\",\"version\":1,\"deleted\":true}}}", "segment", "gone");
+  }
+
+  @Test
+  public void entriesWithDeletedFalseLoad() throws Exception {
+    try (TempDir dir = TempDir.create()) {
+      Path file = write(dir, "overrides.json",
+          "{\"flags\":{\"flag\":{\"key\":\"flag\",\"version\":1,\"on\":true,\"variations\":[\"value\"],"
+          + "\"fallthrough\":{\"variation\":0},\"deleted\":false}},"
+          + "\"segments\":{\"seg\":{\"key\":\"seg\",\"version\":1,\"deleted\":false}}}");
+      RecordingSink sink = new RecordingSink();
+      start(FileOverrides.source().filePaths(file), sink);
+
+      Map<String, Map<String, ItemDescriptor>> snapshot = sink.await();
+      assertEquals("value", flagValue(snapshot, "flag"));
+      assertNotNull(snapshot.get(SEGMENTS.getName()).get("seg").getItem());
+    }
+  }
+
   private void reloadsOnChange(ChangeDetection mode) throws Exception {
     try (TempDir dir = TempDir.create()) {
       Path file = write(dir, "overrides.json", docWith("flag", "first"));

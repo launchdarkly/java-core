@@ -20,6 +20,9 @@ import java.util.Set;
  * nested collections with the source's entity, and the layer never writes to them. The source's
  * entity is never marked, so a source may retain the entities it supplied and supply them again.
  * <p>
+ * The layer never holds a deleted item. Serving one would hide the LaunchDarkly data for its key,
+ * but an override only adds or replaces definitions, so a replacement that contains one is rejected.
+ * <p>
  * This class is package-private and should not be used by application code.
  */
 final class OverrideLayer implements DataModelDependencies.ExternalDependencies {
@@ -51,10 +54,33 @@ final class OverrideLayer implements DataModelDependencies.ExternalDependencies 
   private volatile DataModelDependencies.DependencyTracker dependencies = new DataModelDependencies.DependencyTracker();
 
   /**
+   * Thrown by {@link OverrideLayer#setAll(Iterable)} when the data contains a deleted item. The layer
+   * never holds one, so the data is rejected as a whole and the layer is unchanged.
+   */
+  static final class DeletedItemException extends IllegalArgumentException {
+    private static final long serialVersionUID = 1L;
+
+    DeletedItemException(DataKind kind, String key) {
+      super(describeKind(kind) + " \"" + key + "\" is marked as deleted");
+    }
+
+    private static String describeKind(DataKind kind) {
+      if (kind == DataModel.FEATURES) {
+        return "flag";
+      }
+      if (kind == DataModel.SEGMENTS) {
+        return "segment";
+      }
+      return "item of kind " + (kind == null ? "null" : kind.getName());
+    }
+  }
+
+  /**
    * Atomically replaces the entire layer contents. A null or empty collection clears the layer.
    *
    * @param data the complete set of entries, grouped by data kind
    * @return the previous and the new contents
+   * @throws DeletedItemException if the data contains a deleted item; the layer is unchanged
    */
   Replacement setAll(Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data) {
     Map<DataKind, Map<String, ItemDescriptor>> collected = new HashMap<>();
@@ -69,6 +95,11 @@ final class OverrideLayer implements DataModelDependencies.ExternalDependencies 
           continue;
         }
         for (Map.Entry<String, ItemDescriptor> item : kindItems) {
+          // Nothing is swapped in until every entry is collected, so a rejection leaves the layer as
+          // it was.
+          if (isDeleted(item.getValue())) {
+            throw new DeletedItemException(kindEntry.getKey(), item.getKey());
+          }
           ItemDescriptor copied = markedCopy(item.getValue());
           items.put(item.getKey(), copied);
           tracker.updateDependenciesFrom(kindEntry.getKey(), item.getKey(), copied);
@@ -137,8 +168,20 @@ final class OverrideLayer implements DataModelDependencies.ExternalDependencies 
     return !nonEmpty;
   }
 
+  // Reports whether a descriptor is a deleted item: the placeholder with no item, which
+  // DataKind.deserialize produces for a definition marked as deleted, or a flag or segment that is
+  // marked as deleted.
+  private static boolean isDeleted(ItemDescriptor item) {
+    if (item == null) {
+      return false;
+    }
+    Object entity = item.getItem();
+    return entity == null
+        || (entity instanceof DataModel.VersionedData && ((DataModel.VersionedData) entity).isDeleted());
+  }
+
   // Returns a copy of the descriptor whose item carries the override marker. An item of another
-  // type, or a deleted item placeholder, is returned as is.
+  // type is returned as is.
   static ItemDescriptor markedCopy(ItemDescriptor item) {
     Object entity = item.getItem();
     if (entity instanceof FeatureFlag) {
