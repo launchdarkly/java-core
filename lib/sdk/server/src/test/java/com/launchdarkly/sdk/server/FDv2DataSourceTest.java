@@ -2193,6 +2193,47 @@ public class FDv2DataSourceTest extends BaseTest {
         assertTrue(firstSyncClosed.get());
     }
 
+    // A synchronizer that throws from close does not stop the data source from starting the next synchronizer.
+    @Test
+    public void exceptionFromSynchronizerCloseDoesNotStopSynchronization() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        CountDownLatch secondSyncStarted = new CountDownLatch(1);
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            // The first synchronizer reports a terminal error, and throws when the data source closes it.
+            () -> {
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(makeTerminalErrorResult());
+                return new MockQueuedSynchronizer(results) {
+                    @Override
+                    public void close() {
+                        throw new IllegalStateException("close failed");
+                    }
+                };
+            },
+            // The second synchronizer records when it starts.
+            () -> {
+                secondSyncStarted.countDown();
+                return new MockQueuedSynchronizer(new LinkedBlockingQueue<>());
+            }
+        );
+
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
+        resourcesToClose.add(dataSource);
+
+        // Start the data source.
+        dataSource.start();
+
+        // The data source starts the second synchronizer.
+        assertTrue(secondSyncStarted.await(2, TimeUnit.SECONDS));
+    }
+
     @Test
     public void activeSourceClosedOnShutdown() throws Exception {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
