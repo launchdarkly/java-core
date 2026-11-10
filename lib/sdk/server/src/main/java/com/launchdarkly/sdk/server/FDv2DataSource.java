@@ -51,6 +51,11 @@ class FDv2DataSource implements DataSource {
      */
     private static final Duration DEFAULT_FDV1_FALLBACK_TTL = Duration.ofHours(1);
 
+    /**
+     * The longest time that close waits for the data source to stop.
+     */
+    private static final Duration CLOSE_TIMEOUT = Duration.ofSeconds(5);
+
     private final SourceManager sourceManager;
 
     private final Duration fallbackTimeout;
@@ -72,9 +77,14 @@ class FDv2DataSource implements DataSource {
     private volatile boolean closed = false;
 
     /**
-     * Completes when the data source is closed.
+     * Released when the data source is closed.
      */
-    private final CompletableFuture<Void> closedSignal = new CompletableFuture<>();
+    private final AsyncLatch closeLatch = new AsyncLatch();
+
+    /**
+     * The thread that runs the initializers and synchronizers, or null if the data source has not started.
+     */
+    private volatile Thread runThread;
 
     /**
      * Avoid duplicate orchestration logs for the same synchronizer and {@link SourceSignal}.
@@ -155,7 +165,7 @@ class FDv2DataSource implements DataSource {
     }
 
     private void run() {
-        Thread runThread = new Thread(() -> {
+        runThread = new Thread(() -> {
             if (!sourceManager.hasAvailableSources()) {
                 // There are not any initializer or synchronizers, so we are at the best state that
                 // can be achieved.
@@ -353,6 +363,9 @@ class FDv2DataSource implements DataSource {
                     // The result the loop is waiting for, or null if it has not asked the synchronizer for one.
                     CompletableFuture<FDv2SourceResult> nextResultFuture = null;
                     while (running) {
+                        if (closed) {
+                            return;
+                        }
                         if (nextResultFuture == null) {
                             nextResultFuture = synchronizer.next();
                         }
@@ -546,7 +559,7 @@ class FDv2DataSource implements DataSource {
      */
     private boolean waitUnlessClosed(Duration duration) {
         try {
-            closedSignal.get(Math.max(0, duration.toMillis()), TimeUnit.MILLISECONDS);
+            closeLatch.newFuture().get(Math.max(0, duration.toMillis()), TimeUnit.MILLISECONDS);
             return false;
         } catch (TimeoutException e) {
             return true;
@@ -559,27 +572,28 @@ class FDv2DataSource implements DataSource {
     }
 
     /**
-     * Waits for the future to complete, or until the given time.
+     * Waits for the future to complete, until the given time, or until the data source is closed.
      *
      * @param future the future to wait for
-     * @param time the time to stop waiting, or null to wait until the future completes
+     * @param time the time to stop waiting, or null to wait until the future completes or the data source is closed
      * @return true if the future completed
      * @throws InterruptedException if the thread is interrupted while waiting
      */
-    private static boolean awaitUntil(CompletableFuture<?> future, Instant time) throws InterruptedException {
+    private boolean awaitUntil(CompletableFuture<?> future, Instant time) throws InterruptedException {
+        CompletableFuture<Object> futureOrClosed = CompletableFuture.anyOf(future, closeLatch.newFuture());
         try {
             if (time == null) {
-                future.get();
+                futureOrClosed.get();
             } else {
-                future.get(Math.max(0, Duration.between(Instant.now(), time).toNanos()), TimeUnit.NANOSECONDS);
+                futureOrClosed.get(
+                        Math.max(0, Duration.between(Instant.now(), time).toNanos()), TimeUnit.NANOSECONDS);
             }
-            return true;
         } catch (TimeoutException e) {
             return false;
         } catch (ExecutionException e) {
             // The future completed with an error, which the caller gets from the future.
-            return true;
         }
+        return future.isDone();
     }
 
     /**
@@ -758,12 +772,21 @@ class FDv2DataSource implements DataSource {
     @Override
     public void close() {
         closed = true;
-        closedSignal.complete(null);
-        // If there is an active source, we will shut it down, and that will result in the loop handling that source
-        // exiting.
+        closeLatch.release();
+        // If there is an active source, we will shut it down, and that will make the loop handling that source exit.
         // If we do not have an active source, then the loop will check isShutdown when attempting to set one. When
         // it detects shutdown, it will exit the loop.
         sourceManager.close();
+
+        // Wait for the data source to stop, so that it does not report a status or apply data after OFF.
+        Thread thread = runThread;
+        if (thread != null && thread != Thread.currentThread()) {
+            try {
+                thread.join(CLOSE_TIMEOUT.toMillis());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
 
         dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.OFF, null);
 

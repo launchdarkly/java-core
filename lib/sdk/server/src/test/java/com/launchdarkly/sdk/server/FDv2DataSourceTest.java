@@ -2019,6 +2019,62 @@ public class FDv2DataSourceTest extends BaseTest {
         assertTrue(dataSource.isInitialized());  // Was initialized before close
     }
 
+    // A status that the data source reports while it closes does not replace OFF.
+    @Test
+    public void closeWhileReportingStatusEndsWithOff() throws Exception {
+        CountDownLatch interruptedReporting = new CountDownLatch(1);
+        CountDownLatch finishReporting = new CountDownLatch(1);
+        CountDownLatch offReported = new CountDownLatch(1);
+
+        // The sink holds the run thread inside the first INTERRUPTED report until the test releases it.
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink() {
+            @Override
+            public void updateStatus(DataSourceStatusProvider.State newState, DataSourceStatusProvider.ErrorInfo errorInfo) {
+                if (newState == DataSourceStatusProvider.State.INTERRUPTED && interruptedReporting.getCount() > 0) {
+                    interruptedReporting.countDown();
+                    try {
+                        finishReporting.await(5, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+                super.updateStatus(newState, errorInfo);
+                if (newState == DataSourceStatusProvider.State.OFF) {
+                    offReported.countDown();
+                }
+            }
+        };
+
+        // The synchronizer reports an interruption.
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            () -> {
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(makeInterruptedResult());
+                return new MockQueuedSynchronizer(results);
+            }
+        );
+
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofSeconds(1),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
+        resourcesToClose.add(dataSource);
+
+        // Start the data source, close it while it reports INTERRUPTED, and then let it finish the report.
+        dataSource.start();
+        assertTrue(interruptedReporting.await(2, TimeUnit.SECONDS));
+        Future<?> closeFuture = executor.submit(dataSource::close);
+        offReported.await(500, TimeUnit.MILLISECONDS);
+        finishReporting.countDown();
+        closeFuture.get(5, TimeUnit.SECONDS);
+
+        // The last status is OFF.
+        assertEquals(DataSourceStatusProvider.State.OFF, sink.getLastState());
+    }
+
     @Test
     public void closeInterruptsConditionWaiting() throws Exception {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
