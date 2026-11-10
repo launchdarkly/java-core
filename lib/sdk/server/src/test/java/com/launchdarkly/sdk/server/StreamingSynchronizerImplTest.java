@@ -26,6 +26,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.launchdarkly.sdk.server.ComponentsImpl.toHttpProperties;
@@ -2141,6 +2142,56 @@ public class StreamingSynchronizerImplTest extends BaseTest {
             assertEquals(SourceResultType.CHANGE_SET, secondStreamChangeSet.getResultType());
             assertFalse(secondStreamChangeSet.isResetThresholdMet());
             assertTrue(reset.isResetThresholdMet());
+
+            synchronizer.close();
+        }
+    }
+
+    @Test
+    public void failureThatKeepsStreamOpenCancelsPendingResetThresholdReport() throws Exception {
+        String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String payloadTransferred = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
+        String unknownEvent = makeEvent("unknown-event-type", "{}");
+
+        // The stream sends a change set and then an event that it reports as a failure, and stays open.
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.SSE.start(),
+                Handlers.SSE.event(serverIntent),
+                Handlers.SSE.event(payloadTransferred),
+                Handlers.SSE.event(unknownEvent),
+                Handlers.SSE.leaveOpen()))) {
+
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                    httpProperties,
+                    server.getUri(),
+                    "/stream",
+                    testLogger,
+                    mockSelectorSource(),
+                    executor,
+                    null,
+                    Duration.ofMillis(100),
+                    Duration.ofSeconds(1),
+                    Thread.NORM_PRIORITY,
+                    null
+            );
+
+            // Read the change set and the failure, then wait well past the reset threshold for another result.
+            FDv2SourceResult changeSet = synchronizer.next().get(5, TimeUnit.SECONDS);
+            FDv2SourceResult failure = synchronizer.next().get(5, TimeUnit.SECONDS);
+            CompletableFuture<FDv2SourceResult> afterFailure = synchronizer.next();
+            FDv2SourceResult unexpected = null;
+            try {
+                unexpected = afterFailure.get(2, TimeUnit.SECONDS);
+            } catch (TimeoutException e) {
+                // No result arrived, which is what the test expects.
+            }
+
+            // The failure cancels the timer, so the stream does not report that the reset threshold was met.
+            assertEquals(SourceResultType.CHANGE_SET, changeSet.getResultType());
+            assertEquals(SourceSignal.INTERRUPTED, failure.getStatus().getState());
+            assertNull(unexpected);
 
             synchronizer.close();
         }

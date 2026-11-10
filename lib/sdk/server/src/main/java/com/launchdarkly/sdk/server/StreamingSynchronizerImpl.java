@@ -416,6 +416,9 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 result = FDv2SourceResult.interrupted(internalError, getFallback(event));
                 if(kind == DataSourceStatusProvider.ErrorKind.INVALID_DATA) {
                     restartStream(true);
+                } else {
+                    // The stream stays open, but the failure restarts the measurement of healthy operation.
+                    cancelResetThresholdTimer();
                 }
                 break;
 
