@@ -2704,9 +2704,9 @@ public class FDv2DataSourceTest extends BaseTest {
         Future<Void> startFuture = dataSource.start();
         startFuture.get(2, TimeUnit.SECONDS);
 
-        // A single initializer applied a selectorless basis and there are no synchronizers,
-        // so once the initializer chain exhausts the applied data is enough to mark the
-        // data source VALID and complete startFuture.
+        // A single initializer applied a full payload without a selector and there are no
+        // synchronizers, so once the initializer chain exhausts the applied data is enough to
+        // mark the data source VALID and complete startFuture.
         List<DataSourceStatusProvider.State> statuses = sink.awaitStatuses(1, 2, TimeUnit.SECONDS);
         assertEquals("Should receive 1 status update", 1, statuses.size());
         assertEquals(DataSourceStatusProvider.State.VALID, statuses.get(0));
@@ -3974,11 +3974,11 @@ public class FDv2DataSourceTest extends BaseTest {
         assertEquals(1, syncBuildCount.get());
     }
 
-    // When an initializer returns a successful payload-without-selector AND the FDv1 fallback
-    // flag, the partial payload should still be applied (so evaluations can serve it) and the
+    // When an initializer returns a full payload without a selector AND the FDv1 fallback
+    // flag, the payload should still be applied (so evaluations can serve it) and the
     // SDK should move on to the FDv1 synchronizer rather than scanning further FDv2 sources.
-    // Crucially, a selectorless basis must NOT mark the data source VALID -- that transition
-    // belongs to the FDv1 synchronizer once it serves a selectorful payload. Match Go/Python/
+    // A full payload without a selector is not a basis, so it does not raise the readiness
+    // signal -- the FDv1 synchronizer raises it when it serves a full payload. Match Go/Python/
     // Ruby behavior on initialization gating.
     @Test
     public void fdv1FallbackOnInitializerSuccessNoSelectorAppliesPayloadAndSwitches() throws Exception {
@@ -3993,7 +3993,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of();
 
-        // FDv1 sync must serve a selectorful basis to move the data source to VALID.
+        // The FDv1 synchronizer serves a full payload, which raises the readiness signal.
         BlockingQueue<FDv2SourceResult> fdv1SyncResults = new LinkedBlockingQueue<>();
         fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
 
@@ -4021,16 +4021,15 @@ public class FDv2DataSourceTest extends BaseTest {
 
         dataSource.start().get(2, TimeUnit.SECONDS);
 
-        // Both payloads applied: the selectorless initializer basis and the selectorful FDv1 basis.
+        // Both payloads applied: the initializer's payload without a selector and the FDv1 payload.
         sink.awaitApplyCount(2, 2, TimeUnit.SECONDS);
         assertTrue("Both initializer and FDv1 payloads should have been applied",
             sink.getApplyCount() >= 2);
         assertNotNull(fdv1CalledQueue.poll(2, TimeUnit.SECONDS));
 
-        // VALID may only come from the FDv1 synchronizer's selectorful basis. The data source
-        // is initialized iff that transition has been observed.
+        // The FDv1 synchronizer's full payload raised the readiness signal.
         assertEquals(DataSourceStatusProvider.State.VALID, sink.getLastState());
-        assertTrue("isInitialized() must be true after FDv1 served selectorful basis",
+        assertTrue("isInitialized() must be true after FDv1 served a full payload",
             dataSource.isInitialized());
     }
 
