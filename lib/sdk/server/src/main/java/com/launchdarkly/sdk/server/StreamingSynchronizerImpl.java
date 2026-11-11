@@ -318,6 +318,12 @@ class StreamingSynchronizerImpl implements Synchronizer {
 
     private boolean handleEvent(StreamEvent event) {
         if (event instanceof MessageEvent) {
+            synchronized (closeLock) {
+                // The event source can connect again after close(). Stop the stream instead of handling the event.
+                if (closed) {
+                    return false;
+                }
+            }
             handleMessage((MessageEvent) event);
             return true;
         } else if (event instanceof FaultEvent) {
@@ -457,6 +463,13 @@ class StreamingSynchronizerImpl implements Synchronizer {
             // restartStream() already queued a result and recorded the stream init.
             // Continue to read events so that the event source connects again.
             return true;
+        }
+
+        synchronized (closeLock) {
+            // The event source can connect again after close(). Stop the stream instead of reconnecting.
+            if (closed) {
+                return false;
+            }
         }
 
         cancelResetThresholdTimer();
