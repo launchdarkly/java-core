@@ -354,7 +354,7 @@ class FDv2DataSource implements DataSource {
                     boolean running = true;
                     // Fallback and recovery apply only when another synchronizer can take over.
                     boolean canFallBack = sourceManager.getAvailableSynchronizerCount() > 1;
-                    boolean canRecover = canFallBack && !sourceManager.isPrimeSynchronizer();
+                    boolean canRecover = sourceManager.getAvailableSynchronizerCount() > 1 && !sourceManager.isPrimeSynchronizer();
                     Instant recoveryTime = canRecover ? Instant.now().plus(recoveryTimeout) : null;
                     Instant fallbackTime = null;
                     // True once the loop has seen the deadline pass.
