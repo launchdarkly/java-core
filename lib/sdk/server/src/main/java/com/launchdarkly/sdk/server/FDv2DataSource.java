@@ -460,7 +460,7 @@ class FDv2DataSource implements DataSource {
                                         // A directive during the FDv1 fallback replaces its TTL, and FDv1 keeps running.
                                         Duration fallbackTTL = jittered(defaultFDv1FallbackTTL);
                                         sourceManager.startFDv1Fallback(Instant.now().plus(fallbackTTL));
-                                        logger.info("FDv2 retry scheduled in {}s.", fallbackTTL.getSeconds());
+                                        logger.info("Retrying the configured synchronizers in {}s.", fallbackTTL.getSeconds());
                                     } else {
                                         // A directive to fall back to FDv1 ends the run of an FDv2 synchronizer.
                                         fallBackToFDv1(
@@ -481,7 +481,7 @@ class FDv2DataSource implements DataSource {
                         Instant now = Instant.now();
                         sourceManager.unparkExpiredSynchronizers();
                         if (sourceManager.endFDv1FallbackIfExpired()) {
-                            logger.info("Fallback TTL elapsed, restarting FDv2 data sources.");
+                            logger.info("FDv1 fallback ended, returning to the configured synchronizers.");
                             break;
                         }
                         boolean recoveryJustMet = !recoveryMet && recoveryTime != null && !now.isBefore(recoveryTime);
@@ -675,7 +675,7 @@ class FDv2DataSource implements DataSource {
             logger.warn("Fallback to FDv1 was requested, but no FDv1 fallback synchronizer is configured.");
             dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.INTERRUPTED, errorInfo);
         }
-        logger.info("FDv2 retry scheduled in {}s.", fallbackTTL.getSeconds());
+        logger.info("Retrying the configured synchronizers in {}s.", fallbackTTL.getSeconds());
     }
 
     /**
@@ -689,7 +689,7 @@ class FDv2DataSource implements DataSource {
     private Synchronizer buildNextAvailableSynchronizer() {
         while (!closed) {
             if (sourceManager.endFDv1FallbackIfExpired()) {
-                logger.info("Fallback TTL elapsed, restarting FDv2 data sources.");
+                logger.info("FDv1 fallback ended, returning to the configured synchronizers.");
             }
             Synchronizer synchronizer;
             try {
