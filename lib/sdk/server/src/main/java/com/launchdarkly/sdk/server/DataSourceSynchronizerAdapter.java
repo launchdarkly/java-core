@@ -209,6 +209,8 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
                     consecutiveSuccessfulResults = 0;
                     if (newError != null) {
                         resultQueue.put(FDv2SourceResult.terminalError(newError, false));
+                    } else {
+                        resultQueue.put(FDv2SourceResult.shutdown());
                     }
                     break;
                 case VALID:

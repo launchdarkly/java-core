@@ -2193,6 +2193,44 @@ public class FDv2DataSourceTest extends BaseTest {
         assertTrue(firstSyncClosed.get());
     }
 
+    // A synchronizer that shuts down by itself is parked with an error that describes the shutdown.
+    @Test
+    public void synchronizerShutdownByItselfReportsError() throws Exception {
+        MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
+        CountDownLatch secondSyncStarted = new CountDownLatch(1);
+
+        ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
+            // The first synchronizer shuts down by itself.
+            () -> {
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                results.add(FDv2SourceResult.shutdown());
+                return new MockQueuedSynchronizer(results);
+            },
+            // The second synchronizer records when it starts.
+            () -> {
+                secondSyncStarted.countDown();
+                return new MockQueuedSynchronizer(new LinkedBlockingQueue<>());
+            }
+        );
+
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), synchronizers, null, sink, Thread.NORM_PRIORITY, logger,
+            /* fallbackTimeout= */ Duration.ofSeconds(120),
+            /* recoveryTimeout= */ Duration.ofSeconds(300),
+            /* parkInitialDelay= */ Duration.ofMinutes(5),
+            /* parkMaxDelay= */ Duration.ofHours(1),
+            /* failoverDelay= */ Duration.ofMillis(10),
+            /* defaultFDv1FallbackTTL= */ Duration.ofHours(1));
+        resourcesToClose.add(dataSource);
+
+        // Start the data source, and wait until it moves on to the second synchronizer.
+        dataSource.start();
+        assertTrue(secondSyncStarted.await(2, TimeUnit.SECONDS));
+
+        // The data source reported INTERRUPTED with an error.
+        assertEquals(DataSourceStatusProvider.State.INTERRUPTED, sink.getLastState());
+        assertNotNull(sink.getLastError());
+    }
+
     // A synchronizer that throws from close does not stop the data source from starting the next synchronizer.
     @Test
     public void exceptionFromSynchronizerCloseDoesNotStopSynchronization() throws Exception {

@@ -399,6 +399,28 @@ public class DataSourceSynchronizerAdapterTest extends BaseTest {
         adapter.close();
     }
 
+    /** Test that an OFF status with no error is reported as a shutdown. */
+    @Test
+    public void offStatusWithoutErrorIsReportedAsShutdown() throws Exception {
+        AtomicReference<DataSourceUpdateSink> capturedSink = new AtomicReference<>();
+
+        DataSourceSynchronizerAdapter adapter = new DataSourceSynchronizerAdapter(sink -> {
+            capturedSink.set(sink);
+            return new MockDataSource(null, null);
+        });
+        resourcesToClose.add(adapter);
+
+        // Report OFF with no error.
+        CompletableFuture<FDv2SourceResult> resultFuture = adapter.next();
+        capturedSink.get().updateStatus(DataSourceStatusProvider.State.OFF, null);
+        FDv2SourceResult result = resultFuture.get(2, TimeUnit.SECONDS);
+
+        // The adapter reports that the data source shut down.
+        assertEquals(SourceSignal.SHUTDOWN, result.getStatus().getState());
+
+        adapter.close();
+    }
+
     /** Test that two VALID statuses in a row meet the reset threshold, and a failure restarts the count. */
     @Test
     public void resetThresholdIsMetAfterTwoValidStatusesInARow() throws Exception {

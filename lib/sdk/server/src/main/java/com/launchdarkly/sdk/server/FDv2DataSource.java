@@ -423,12 +423,20 @@ class FDv2DataSource implements DataSource {
                                                     return;
                                                 }
                                                 // The synchronizer shut down by itself, so park it.
-                                                parkActiveSynchronizer(synchronizer.name(), status.getErrorInfo());
+                                                DataSourceStatusProvider.ErrorInfo shutdownError =
+                                                        status.getErrorInfo() != null
+                                                                ? status.getErrorInfo()
+                                                                : new DataSourceStatusProvider.ErrorInfo(
+                                                                        DataSourceStatusProvider.ErrorKind.UNKNOWN,
+                                                                        0,
+                                                                        "Synchronizer shut down unexpectedly",
+                                                                        Instant.now());
+                                                parkActiveSynchronizer(synchronizer.name(), shutdownError);
                                                 parked = true;
                                                 running = false;
                                                 dataSourceUpdates.updateStatus(
                                                         DataSourceStatusProvider.State.INTERRUPTED,
-                                                        status.getErrorInfo());
+                                                        shutdownError);
                                                 break;
                                             case TERMINAL_ERROR:
                                                 maybeLogSynchronizerStatusChange(
