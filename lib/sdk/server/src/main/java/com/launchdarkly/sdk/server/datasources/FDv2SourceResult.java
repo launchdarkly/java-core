@@ -72,18 +72,21 @@ public class FDv2SourceResult implements Closeable {
     private final Status status;
     private final SourceResultType resultType;
     private final boolean fdv1Fallback;
+    private final boolean resetThresholdMet;
     private final Function<Void, Void> completionCallback;
 
     private FDv2SourceResult(
         ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet,
         Status status, SourceResultType resultType,
         boolean fdv1Fallback,
+        boolean resetThresholdMet,
         Function<Void, Void> completionCallback
     ) {
         this.changeSet = changeSet;
         this.status = status;
         this.resultType = resultType;
         this.fdv1Fallback = fdv1Fallback;
+        this.resetThresholdMet = resetThresholdMet;
         this.completionCallback = completionCallback;
     }
 
@@ -93,10 +96,11 @@ public class FDv2SourceResult implements Closeable {
 
     public static FDv2SourceResult interrupted(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
         return new FDv2SourceResult(
-            null,
+            /* changeSet= */ null,
             Status.interrupted(errorInfo),
             SourceResultType.STATUS,
             fdv1Fallback,
+            /* resetThresholdMet= */ false,
             completionCallback);
     }
 
@@ -105,10 +109,12 @@ public class FDv2SourceResult implements Closeable {
     }
 
     public static FDv2SourceResult shutdown(Function<Void, Void> completionCallback) {
-        return new FDv2SourceResult(null,
+        return new FDv2SourceResult(
+            /* changeSet= */ null,
             Status.shutdown(),
             SourceResultType.STATUS,
-            false,
+            /* fdv1Fallback= */ false,
+            /* resetThresholdMet= */ false,
             completionCallback);
     }
 
@@ -117,10 +123,12 @@ public class FDv2SourceResult implements Closeable {
     }
 
     public static FDv2SourceResult terminalError(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
-        return new FDv2SourceResult(null,
+        return new FDv2SourceResult(
+            /* changeSet= */ null,
             Status.terminalError(errorInfo),
             SourceResultType.STATUS,
             fdv1Fallback,
+            /* resetThresholdMet= */ false,
             completionCallback);
     }
 
@@ -131,9 +139,10 @@ public class FDv2SourceResult implements Closeable {
     public static FDv2SourceResult changeSet(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
         return new FDv2SourceResult(
             changeSet,
-            null,
+            /* status= */ null,
             SourceResultType.CHANGE_SET,
             fdv1Fallback,
+            /* resetThresholdMet= */ false,
             completionCallback);
     }
 
@@ -143,10 +152,11 @@ public class FDv2SourceResult implements Closeable {
 
     public static FDv2SourceResult goodbye(String reason, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
         return new FDv2SourceResult(
-            null,
+            /* changeSet= */ null,
             Status.goodbye(reason),
             SourceResultType.STATUS,
             fdv1Fallback,
+            /* resetThresholdMet= */ false,
             completionCallback);
     }
 
@@ -167,6 +177,30 @@ public class FDv2SourceResult implements Closeable {
     }
 
     /**
+     * True if the source met its reset threshold at the time of this result.
+     *
+     * @return true if the source met its reset threshold
+     */
+    public boolean isResetThresholdMet() {
+        return resetThresholdMet;
+    }
+
+    /**
+     * Creates a copy of this result that reports that the source met its reset threshold.
+     *
+     * @return a new FDv2SourceResult with {@link #isResetThresholdMet()} set to true
+     */
+    public FDv2SourceResult withResetThresholdMet() {
+        return new FDv2SourceResult(
+            changeSet,
+            status,
+            resultType,
+            fdv1Fallback,
+            /* resetThresholdMet= */ true,
+            completionCallback);
+    }
+
+    /**
      * Creates a new result wrapping this one with an additional completion callback.
      * <p>
      * The new completion callback will be invoked when the result is closed, followed by
@@ -183,7 +217,13 @@ public class FDv2SourceResult implements Closeable {
             }
             return null;
         };
-        return new FDv2SourceResult(changeSet, status, resultType, fdv1Fallback, combinedCallback);
+        return new FDv2SourceResult(
+            changeSet,
+            status,
+            resultType,
+            fdv1Fallback,
+            resetThresholdMet,
+            combinedCallback);
     }
 
     @Override

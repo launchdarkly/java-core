@@ -176,8 +176,7 @@ final class FDv2DataSystem implements DataSystem, Closeable {
         fdv1FallbackFactory,
         dataSourceUpdates,
         config.threadPriority,
-        clientContext.getBaseLogger().subLogger(Loggers.DATA_SOURCE_LOGGER_NAME),
-        clientContext.sharedExecutor
+        clientContext.getBaseLogger().subLogger(Loggers.DATA_SOURCE_LOGGER_NAME)
       );
     }
 

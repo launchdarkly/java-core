@@ -4,6 +4,7 @@ import com.launchdarkly.sdk.server.datasources.Initializer;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -36,6 +37,12 @@ class SourceManager implements Closeable {
      */
     private SynchronizerFactoryWithState currentSynchronizerFactory;
 
+    /**
+     * The time at which the fallback to FDv1 ends, or null if the SDK is not falling back to FDv1. Accessed only
+     * under activeSourceLock.
+     */
+    private Instant fdv1FallbackEndTime;
+
     public SourceManager(List<SynchronizerFactoryWithState> synchronizers, List<FDv2DataSource.DataSourceFactory<Initializer>> initializers) {
         this.synchronizers = synchronizers;
         this.initializers = initializers;
@@ -60,16 +67,77 @@ class SourceManager implements Closeable {
         return false;
     }
 
-    /**
-     * Block all synchronizers aside from the fdv1 fallback and unblock the fdv1 fallback.
-     */
-    public void fdv1Fallback() {
+    public boolean hasFDv2Synchronizers() {
         for (SynchronizerFactoryWithState factory : synchronizers) {
-            if(factory.isFDv1Fallback()) {
-                factory.unblock();
-            } else {
-                factory.block();
+            if (!factory.isFDv1Fallback()) {
+                return true;
             }
+        }
+        return false;
+    }
+
+    /**
+     * Block all synchronizers aside from the fdv1 fallback and unblock the fdv1 fallback, until the given time.
+     *
+     * @param endTime the time at which the fallback to FDv1 ends
+     */
+    public void startFDv1Fallback(Instant endTime) {
+        synchronized (activeSourceLock) {
+            fdv1FallbackEndTime = endTime;
+            for (SynchronizerFactoryWithState factory : synchronizers) {
+                if (factory.isFDv1Fallback()) {
+                    factory.unblock();
+                } else {
+                    factory.block();
+                }
+            }
+        }
+    }
+
+    /**
+     * Stops parking every synchronizer whose unpark time has arrived.
+     */
+    public void unparkExpiredSynchronizers() {
+        synchronized (activeSourceLock) {
+            Instant now = Instant.now();
+            for (SynchronizerFactoryWithState factory : synchronizers) {
+                factory.unparkIfExpired(now);
+            }
+        }
+    }
+
+    /**
+     * The time at which the fallback to FDv1 ends.
+     *
+     * @return the end time, or null if the SDK is not falling back to FDv1
+     */
+    public Instant getFDv1FallbackEndTime() {
+        synchronized (activeSourceLock) {
+            return fdv1FallbackEndTime;
+        }
+    }
+
+    /**
+     * Ends the fallback to FDv1 if its end time has arrived. This unblocks the FDv2 synchronizers, blocks the fdv1
+     * fallback, and starts the search for the next synchronizer from the most-preferred one.
+     *
+     * @return true if the fallback ended
+     */
+    public boolean endFDv1FallbackIfExpired() {
+        synchronized (activeSourceLock) {
+            if (fdv1FallbackEndTime == null || Instant.now().isBefore(fdv1FallbackEndTime)) {
+                return false;
+            }
+            fdv1FallbackEndTime = null;
+            for (SynchronizerFactoryWithState factory : synchronizers) {
+                if (factory.isFDv1Fallback()) {
+                    factory.block();
+                } else {
+                    factory.unblock();
+                }
+            }
+            synchronizerIndex = -1;
+            return true;
         }
     }
 
@@ -88,6 +156,7 @@ class SourceManager implements Closeable {
      */
     private SynchronizerFactoryWithState getNextAvailableSynchronizer() {
         SynchronizerFactoryWithState factory = null;
+        unparkExpiredSynchronizers();
 
         int visited = 0;
         while(visited < synchronizers.size()) {
@@ -101,7 +170,7 @@ class SourceManager implements Closeable {
             }
 
             SynchronizerFactoryWithState candidate = synchronizers.get(synchronizerIndex);
-            if (candidate.getState() == SynchronizerFactoryWithState.State.Available) {
+            if (candidate.isEligible()) {
                 factory = candidate;
                 break;
             }
@@ -116,9 +185,6 @@ class SourceManager implements Closeable {
      * <p>
      * If shutdown has been initiated, returns null without building or setting a source.
      * Any previously active source will be closed before setting the new one.
-     * <p>
-     * The current synchronizer factory can be retrieved with {@link #blockCurrentSynchronizer()}
-     * or {@link #isCurrentSynchronizerFDv1Fallback()} to interact with it.
      *
      * @return the built synchronizer that is now active, or null if no more synchronizers are available or shutdown has been initiated
      */
@@ -176,11 +242,46 @@ class SourceManager implements Closeable {
         return initializers.get(initializerIndex);
     }
 
-    public void blockCurrentSynchronizer() {
+    /**
+     * Records an unexpected failure of the current synchronizer.
+     *
+     * @return the park count of the current synchronizer, including this failure
+     */
+    public int incrementCurrentSynchronizerParkCount() {
         synchronized (activeSourceLock) {
-            if (currentSynchronizerFactory != null) {
-                currentSynchronizerFactory.block();
+            return currentSynchronizerFactory.incrementParkCount();
+        }
+    }
+
+    public void resetCurrentSynchronizerParkCount() {
+        synchronized (activeSourceLock) {
+            currentSynchronizerFactory.resetParkCount();
+        }
+    }
+
+    public void parkCurrentSynchronizer(Instant unparkTime) {
+        synchronized (activeSourceLock) {
+            currentSynchronizerFactory.park(unparkTime);
+        }
+    }
+
+    /**
+     * The earliest unpark time of the available synchronizers.
+     *
+     * @return the earliest unpark time, or null if no available synchronizer is parked
+     */
+    public Instant getEarliestUnparkTime() {
+        synchronized (activeSourceLock) {
+            Instant earliest = null;
+            for (SynchronizerFactoryWithState factory : synchronizers) {
+                Instant unparkTime = factory.getUnparkTime();
+                if (factory.getState() == SynchronizerFactoryWithState.State.Available
+                    && unparkTime != null
+                    && (earliest == null || unparkTime.isBefore(earliest))) {
+                    earliest = unparkTime;
+                }
             }
+            return earliest;
         }
     }
 
@@ -224,6 +325,41 @@ class SourceManager implements Closeable {
     }
 
     /**
+     * True if a synchronizer other than the current one is available.
+     *
+     * @return true if another synchronizer is available
+     */
+    public boolean hasOtherAvailableSynchronizer() {
+        synchronized (activeSourceLock) {
+            for (SynchronizerFactoryWithState factory : synchronizers) {
+                if (factory != currentSynchronizerFactory && factory.isEligible()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    /**
+     * True if a synchronizer earlier in the list than the current one is available.
+     *
+     * @return true if a more-preferred synchronizer is available
+     */
+    public boolean hasMorePreferredAvailableSynchronizer() {
+        synchronized (activeSourceLock) {
+            for (SynchronizerFactoryWithState factory : synchronizers) {
+                if (factory == currentSynchronizerFactory) {
+                    return false;
+                }
+                if (factory.isEligible()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    /**
      * Determine if the currently active synchronizer is the prime (first available) synchronizer.
      * @return true if the current synchronizer is the prime synchronizer, false otherwise
      */
@@ -261,6 +397,19 @@ class SourceManager implements Closeable {
 
 
     /**
+     * Closes the active source, if there is one.
+     */
+    public void closeActiveSource() {
+        synchronized (activeSourceLock) {
+            Closeable source = activeSource;
+            activeSource = null;
+            if (source != null) {
+                safeClose(source);
+            }
+        }
+    }
+
+    /**
      * Close the state manager and shut down any active source.
      * Implements AutoCloseable to enable try-with-resources usage.
      */
@@ -268,15 +417,7 @@ class SourceManager implements Closeable {
     public void close() {
         synchronized (activeSourceLock) {
             isShutdown = true;
-            if (activeSource != null) {
-                try {
-                    activeSource.close();
-                } catch (IOException e) {
-                    // We are done with this synchronizer, so we don't care if it encounters
-                    // an error condition.
-                }
-                activeSource = null;
-            }
+            closeActiveSource();
         }
     }
 
@@ -290,7 +431,7 @@ class SourceManager implements Closeable {
         }
         try {
             closeable.close();
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
             // Ignore close exceptions.
         }
     }
