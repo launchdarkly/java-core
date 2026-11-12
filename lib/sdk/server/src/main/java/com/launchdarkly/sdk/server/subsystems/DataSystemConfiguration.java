@@ -74,7 +74,7 @@ public final class DataSystemConfiguration {
    * @param persistentStore see {@link #getPersistentStore()}
    * @param persistentDataStoreMode see {@link #getPersistentDataStoreMode()}
    * @param overrideSource see {@link #getOverrideSource()}
-   * @since 7.18.0
+   * @since 7.19.0
    */
   public DataSystemConfiguration(
       ImmutableList<DataSourceBuilder<Initializer>> initializers,
@@ -148,7 +148,7 @@ public final class DataSystemConfiguration {
    * status. Flag overrides are currently experimental and subject to change.
    *
    * @return the override source configurer, or null
-   * @since 7.18.0
+   * @since 7.19.0
    */
   public ComponentConfigurer<OverrideSource> getOverrideSource() {
     return overrideSource;

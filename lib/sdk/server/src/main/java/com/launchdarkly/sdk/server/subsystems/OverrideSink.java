@@ -13,7 +13,7 @@ import java.util.Map;
  * <p>
  * Flag overrides are currently experimental and subject to change.
  *
- * @since 7.18.0
+ * @since 7.19.0
  */
 public interface OverrideSink {
   /**

@@ -138,7 +138,7 @@ public final class DataSystemBuilder {
    *
    * @param overrideSource the override source configuration, or null for none
    * @return a reference to the builder
-   * @since 7.18.0
+   * @since 7.19.0
    */
   public DataSystemBuilder overrides(ComponentConfigurer<OverrideSource> overrideSource) {
     this.overrideSource = overrideSource;

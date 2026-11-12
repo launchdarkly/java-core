@@ -20,7 +20,7 @@ import java.io.Closeable;
  * <p>
  * Flag overrides are currently experimental and subject to change.
  *
- * @since 7.18.0
+ * @since 7.19.0
  */
 public interface OverrideSource extends Closeable {
   /**
