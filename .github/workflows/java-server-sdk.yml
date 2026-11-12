@@ -60,6 +60,7 @@ jobs:
         with:
           test_service_port: '8000'
           version: 'v3'
+          branch: 'v3'
           token: ${{ secrets.GITHUB_TOKEN }}
           debug_logging: 'true'
           enable_persistence_tests: 'false'
