@@ -85,7 +85,7 @@ public interface EventProcessor extends Closeable {
    * @param excludeFromSummaries true if the event evaluation should not be included in summaries
    * @param samplingRatio ratio used to control event sampling
    * @param overrideAffected true if an override affected the evaluation
-   * @since 7.18.0
+   * @since 7.19.0
    */
   default void recordEvaluationEvent(
       LDContext context,
