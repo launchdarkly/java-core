@@ -18,6 +18,7 @@ This includes shared libraries, used by SDKs and other tools, as well as SDKs.
 | ---------------------------------------------------------------------------- |--------------------------------------------------------------| ---------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------- |
 | [@launchdarkly/java-server-sdk-otel](lib/java-server-sdk-otel/README.md)     | [![Documentation][server-otel-docs-badge]][server-otel-docs-link]    | [![maven][server-otel-maven-badge]][server-otel-maven-link]         | [Issues][server-otel-issues]         | [![Actions Status][server-otel-ci-badge]][server-otel-ci-link]         |
 | [@launchdarkly/java-server-sdk-redis-store](lib/java-server-sdk-redis-store/README.md)     | [![Documentation][server-redis-docs-badge]][server-redis-docs-link]    | [![maven][server-redis-maven-badge]][server-redis-maven-link]         | [Issues][server-redis-issues]         | [![Actions Status][server-redis-ci-badge]][server-redis-ci-link]         |
+| [@launchdarkly/java-server-sdk-dynamodb-store](lib/java-server-sdk-dynamodb-store/README.md)     | [![Documentation][server-dynamodb-docs-badge]][server-dynamodb-docs-link]    | [![maven][server-dynamodb-maven-badge]][server-dynamodb-maven-link]         | [Issues][server-dynamodb-issues]         | [![Actions Status][server-dynamodb-ci-badge]][server-dynamodb-ci-link]         |
 
 ## Organization
 
@@ -80,6 +81,15 @@ We encourage pull requests and other contributions from the community. Check out
 [server-redis-ci-link]: https://github.com/launchdarkly/java-core/actions/workflows/java-server-sdk-redis-store.yml
 [server-redis-docs-badge]: https://img.shields.io/static/v1?label=GitHub+Pages&message=API+reference&color=00add8
 [server-redis-docs-link]: https://launchdarkly.github.io/java-core/lib/java-server-sdk-redis-store/
+
+[//]: # 'java-server-sdk-dynamodb-store'
+[server-dynamodb-issues]: https://github.com/launchdarkly/java-core/issues?q=is%3Aissue+is%3Aopen+label%3A%22package%3A+java-server-sdk-dynamodb-store%22+
+[server-dynamodb-maven-badge]: https://img.shields.io/maven-central/v/com.launchdarkly/launchdarkly-java-server-sdk-dynamodb-store
+[server-dynamodb-maven-link]: https://central.sonatype.com/artifact/com.launchdarkly/launchdarkly-java-server-sdk-dynamodb-store
+[server-dynamodb-ci-badge]: https://github.com/launchdarkly/java-core/actions/workflows/java-server-sdk-dynamodb-store.yml/badge.svg
+[server-dynamodb-ci-link]: https://github.com/launchdarkly/java-core/actions/workflows/java-server-sdk-dynamodb-store.yml
+[server-dynamodb-docs-badge]: https://img.shields.io/static/v1?label=GitHub+Pages&message=API+reference&color=00add8
+[server-dynamodb-docs-link]: https://launchdarkly.github.io/java-core/lib/java-server-sdk-dynamodb-store/
 
 [//]: # 'java-sdk-internal'
 [sdk-internal-issues]: https://github.com/launchdarkly/java-core/issues?q=is%3Aissue+is%3Aopen+label%3A%22package%3A+java-sdk-internal%22+

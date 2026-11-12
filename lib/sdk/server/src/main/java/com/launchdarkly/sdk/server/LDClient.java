@@ -31,6 +31,7 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -71,6 +72,14 @@ public final class LDClient implements LDClientInterface {
   private final AtomicBoolean isFlagKnownCachedDataWarned = new AtomicBoolean(false);
 
   private static final int EXCESSIVE_INIT_WAIT_MILLIS = 60000;
+
+  // The largest start wait the SDK can represent in milliseconds. A longer wait is clamped to it rather than
+  // converted, because converting it would overflow and throw (and would do so after the data system starts).
+  private static final Duration MAX_MILLIS_START_WAIT = Duration.ofMillis(Long.MAX_VALUE);
+
+  // On close, how long to let already-submitted shared-executor tasks finish (so a terminal data source status
+  // broadcast is delivered rather than discarded) before forcing termination so close() cannot hang.
+  private static final long SHUTDOWN_DRAIN_MILLIS = 5000;
 
   /**
    * Creates a new client instance that connects to LaunchDarkly with the default configuration.
@@ -259,15 +268,21 @@ public final class LDClient implements LDClientInterface {
     // Start the data system
     Future<Void> startFuture = dataSystem.start();
     if (!config.startWait.isZero() && !config.startWait.isNegative()) {
+      // Convert the start wait to milliseconds, clamping a wait too large to represent to the maximum rather
+      // than converting it, which would overflow and throw. Only the positive boundary matters here, since
+      // zero and negative waits are excluded above.
+      long startWaitMillis = config.startWait.compareTo(MAX_MILLIS_START_WAIT) >= 0
+          ? Long.MAX_VALUE
+          : config.startWait.toMillis();
       if (!dataSystem.isInitialized()) {
         baseLogger.info("Waiting up to {} milliseconds for LaunchDarkly client to start...",
-            config.startWait.toMillis());
-        if (config.startWait.toMillis() > EXCESSIVE_INIT_WAIT_MILLIS) {
-          baseLogger.warn("LaunchDarkly client created with start wait time of {} milliseconds.  We recommend a timeout of less than {} milliseconds.", config.startWait.toMillis(), EXCESSIVE_INIT_WAIT_MILLIS);
+            startWaitMillis);
+        if (startWaitMillis > EXCESSIVE_INIT_WAIT_MILLIS) {
+          baseLogger.warn("LaunchDarkly client created with start wait time of {} milliseconds.  We recommend a timeout of less than {} milliseconds.", startWaitMillis, EXCESSIVE_INIT_WAIT_MILLIS);
         }
       }
       try {
-        startFuture.get(config.startWait.toMillis(), TimeUnit.MILLISECONDS);
+        startFuture.get(startWaitMillis, TimeUnit.MILLISECONDS);
       } catch (TimeoutException e) {
         baseLogger.error("Timeout encountered waiting for LaunchDarkly client initialization");
       } catch (Exception e) {
@@ -496,7 +511,20 @@ public final class LDClient implements LDClientInterface {
     if (this.bigSegmentStoreWrapper != null) {
       this.bigSegmentStoreWrapper.close();
     }
-    this.sharedExecutor.shutdownNow();
+    // Let already-submitted tasks (such as the terminal data source status broadcast emitted above during
+    // dataSystem.close()) run, so status listeners are not left without the final OFF, then force termination if
+    // they do not finish promptly so close() cannot hang on a stuck task.
+    this.sharedExecutor.shutdown();
+    try {
+      if (!this.sharedExecutor.awaitTermination(SHUTDOWN_DRAIN_MILLIS, TimeUnit.MILLISECONDS)) {
+        this.sharedExecutor.shutdownNow();
+      }
+    } catch (InterruptedException e) {
+      this.sharedExecutor.shutdownNow();
+      Thread.currentThread().interrupt();
+    }
+    // NOTE: the awaitTermination above blocks the caller, so any teardown added below this point may be delayed
+    // by up to SHUTDOWN_DRAIN_MILLIS (until the executor drains or the drain times out).
   }
 
   @Override

@@ -18,6 +18,8 @@ import com.launchdarkly.sdk.internal.events.DiagnosticStore;
 import com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event;
 import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ProtocolHandler;
 import com.launchdarkly.sdk.fdv2.Selector;
+import com.launchdarkly.sdk.internal.http.FailureClass;
+import com.launchdarkly.sdk.internal.http.HttpErrors;
 import com.launchdarkly.sdk.internal.http.HttpHelpers;
 import com.launchdarkly.sdk.internal.http.HttpProperties;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
@@ -25,26 +27,29 @@ import com.launchdarkly.sdk.server.datasources.SelectorSource;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.fdv2.ChangeSet;
+import com.launchdarkly.sdk.fdv2.ChangeSetType;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 import com.launchdarkly.sdk.server.subsystems.SerializationException;
 import com.google.gson.stream.JsonReader;
+import okhttp3.ConnectionPool;
 import okhttp3.Headers;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.Reader;
+import java.util.Collections;
 import java.util.Map;
 import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import static com.launchdarkly.sdk.internal.http.HttpErrors.checkIfErrorIsRecoverableAndLog;
 
 /**
  * Implementation of FDv2 streaming synchronizer.
@@ -52,6 +57,11 @@ import static com.launchdarkly.sdk.internal.http.HttpErrors.checkIfErrorIsRecove
  */
 class StreamingSynchronizerImpl implements Synchronizer {
     private static final Duration DEAD_CONNECTION_INTERVAL = Duration.ofSeconds(300);
+
+    /**
+     * The time a stream must stay healthy, from its first valid result, to meet the reset threshold.
+     */
+    static final Duration RESET_THRESHOLD = Duration.ofSeconds(60);
 
     private final HttpProperties httpProperties;
     private final SelectorSource selectorSource;
@@ -70,7 +80,17 @@ class StreamingSynchronizerImpl implements Synchronizer {
 
     private final int threadPriority;
     private final DiagnosticStore diagnosticStore;
+    private final ScheduledExecutorService sharedExecutor;
+    private final Duration resetThreshold;
     private volatile long streamStarted = 0;
+
+    private final Object resetThresholdLock = new Object();
+
+    /**
+     * The timer that reports that the current stream met its reset threshold, or null if the current stream has
+     * not produced a valid result. Guarded by {@link #resetThresholdLock}.
+     */
+    private ScheduledFuture<?> resetThresholdFuture;
 
     public StreamingSynchronizerImpl(
             HttpProperties httpProperties,
@@ -78,8 +98,10 @@ class StreamingSynchronizerImpl implements Synchronizer {
             String requestPath,
             LDLogger logger,
             SelectorSource selectorSource,
+            ScheduledExecutorService sharedExecutor,
             String payloadFilter,
             Duration initialReconnectDelaySeconds,
+            Duration resetThreshold,
             int threadPriority,
             DiagnosticStore diagnosticStore
     ) {
@@ -91,6 +113,8 @@ class StreamingSynchronizerImpl implements Synchronizer {
         this.initialReconnectDelay = initialReconnectDelaySeconds;
         this.threadPriority = threadPriority;
         this.diagnosticStore = diagnosticStore;
+        this.sharedExecutor = sharedExecutor;
+        this.resetThreshold = resetThreshold;
 
         // The stream will lazily start when `next` is called.
     }
@@ -109,6 +133,11 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 .headers(headers)
                 .clientBuilderActions(clientBuilder -> {
                     httpProperties.applyToHttpClientBuilder(clientBuilder);
+                    // Keep no idle connections, so each reconnect opens a new connection. After a
+                    // stream read timeout, OkHttp can treat a dead HTTP/2 connection as healthy for
+                    // up to 1 second. A reconnect in that time uses the dead connection and stalls
+                    // until the next read timeout. Set this after httpProperties, which sets its own pool.
+                    clientBuilder.connectionPool(new ConnectionPool(0, 1, TimeUnit.SECONDS));
                     // Add interceptor to inject selector and filter query parameters on each request
                     clientBuilder.addInterceptor(chain -> {
                         okhttp3.Request originalRequest = chain.request();
@@ -181,6 +210,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 logger.error("Stream thread ended with exception: {}", LogValues.exceptionSummary(e));
                 logger.debug(LogValues.exceptionTrace(e));
 
+                cancelResetThresholdTimer();
                 recordStreamInit(true);  // Record failed init for unexpected thread exception
 
                 DataSourceStatusProvider.ErrorInfo errorInfo = new DataSourceStatusProvider.ErrorInfo(
@@ -189,9 +219,8 @@ class StreamingSynchronizerImpl implements Synchronizer {
                         e.toString(),
                         Instant.now()
                 );
-                // We aren't restarting the event source here. We aren't going to automatically recover, so the
-                // data system will move to the next source when it determined this source is unhealthy.
-                resultQueue.put(FDv2SourceResult.interrupted(errorInfo, getFallback(e)));
+                // This synchronizer cannot recover, so the failure is terminal. The data system will start a new one.
+                shutdownFuture.complete(FDv2SourceResult.terminalError(errorInfo, getFallback(e)));
             } finally {
                 eventSource.close();
             }
@@ -232,6 +261,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
             }
         }
 
+        cancelResetThresholdTimer();
         shutdownFuture.complete(FDv2SourceResult.shutdown());
     }
 
@@ -242,8 +272,58 @@ class StreamingSynchronizerImpl implements Synchronizer {
         }
     }
 
+    /**
+     * Starts the reset threshold timer if the current stream does not have one yet. Call this for each
+     * valid result, so that the first valid result on a stream starts the timer.
+     */
+    private void startResetThresholdTimerIfNeeded() {
+        synchronized (resetThresholdLock) {
+            if (resetThresholdFuture != null) {
+                return;
+            }
+            resetThresholdFuture = sharedExecutor.schedule(
+                    this::reportResetThresholdMet,
+                    resetThreshold.toMillis(),
+                    TimeUnit.MILLISECONDS);
+        }
+    }
+
+    /**
+     * Stops the reset threshold timer of the current stream. Call this when the stream ends.
+     */
+    private void cancelResetThresholdTimer() {
+        synchronized (resetThresholdLock) {
+            if (resetThresholdFuture != null) {
+                resetThresholdFuture.cancel(false);
+                resetThresholdFuture = null;
+            }
+        }
+    }
+
+    private void reportResetThresholdMet() {
+        synchronized (resetThresholdLock) {
+            // The timer can start to run before a cancel. Do not report anything for a stream that ended.
+            if (resetThresholdFuture == null) {
+                return;
+            }
+            ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> noChanges = new ChangeSet<>(
+                    ChangeSetType.None,
+                    Selector.EMPTY,
+                    Collections.emptyList(),
+                    /* environmentId= */ null,
+                    /* shouldPersist= */ true);
+            resultQueue.put(FDv2SourceResult.changeSet(noChanges, /* fdv1Fallback= */ false).withResetThresholdMet());
+        }
+    }
+
     private boolean handleEvent(StreamEvent event) {
         if (event instanceof MessageEvent) {
+            synchronized (closeLock) {
+                // The event source can connect again after close(). Stop the stream instead of handling the event.
+                if (closed) {
+                    return false;
+                }
+            }
             handleMessage((MessageEvent) event);
             return true;
         } else if (event instanceof FaultEvent) {
@@ -290,6 +370,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                     // Reset to 0 after successful init to prevent duplicate recordings until next restart
                     streamStarted = 0;
                     result = FDv2SourceResult.changeSet(converted, getFallback(event));
+                    startResetThresholdTimerIfNeeded();
                 } catch (Exception e) {
                     logger.error("Failed to convert FDv2 changeset: {}", LogValues.exceptionSummary(e));
                     logger.debug(LogValues.exceptionTrace(e));
@@ -341,6 +422,9 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 result = FDv2SourceResult.interrupted(internalError, getFallback(event));
                 if(kind == DataSourceStatusProvider.ErrorKind.INVALID_DATA) {
                     restartStream(true);
+                } else {
+                    // The stream stays open, but the failure restarts the measurement of healthy operation.
+                    cancelResetThresholdTimer();
                 }
                 break;
 
@@ -367,26 +451,40 @@ class StreamingSynchronizerImpl implements Synchronizer {
     }
 
     private boolean handleError(StreamException e) {
-        // Check if this was a deliberate shutdown/restart rather than an actual error
-        boolean streamFailed = !(e instanceof StreamClosedByCallerException);
-        recordStreamInit(streamFailed);
-
         if (e instanceof StreamClosedByCallerException) {
-            // We closed it ourselves (shutdown was called or stream was deliberately restarted)
-            return false;
+            // The event source can send this fault after close() or after restartStream().
+            // Only close() stops the stream.
+            synchronized (closeLock) {
+                if (closed) {
+                    recordStreamInit(false);
+                    return false;
+                }
+            }
+            // restartStream() already queued a result and recorded the stream init.
+            // Continue to read events so that the event source connects again.
+            return true;
         }
+
+        synchronized (closeLock) {
+            // The event source can connect again after close(). Stop the stream instead of reconnecting.
+            if (closed) {
+                return false;
+            }
+        }
+
+        cancelResetThresholdTimer();
+        recordStreamInit(true);
 
         if (e instanceof StreamHttpErrorException) {
             int status = ((StreamHttpErrorException) e).getCode();
             DataSourceStatusProvider.ErrorInfo errorInfo = DataSourceStatusProvider.ErrorInfo.fromHttpError(status);
 
-            boolean recoverable = checkIfErrorIsRecoverableAndLog(logger,
-                    "HTTP error " + status,
-                    "in FDv2 streaming connection",
+            FailureClass failureClass = HttpErrors.classifyAndLogHttpFailure(logger,
                     status,
+                    "in FDv2 streaming connection",
                     "will retry");
 
-            if (!recoverable) {
+            if (failureClass == FailureClass.UNEXPECTED) {
                 shutdownFuture.complete(FDv2SourceResult.terminalError(errorInfo, getFallback(e)));
                 return false;
             } else {
@@ -406,6 +504,10 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 e.toString(),
                 Instant.now()
         );
+        if (HttpErrors.classifyTransportFailure(e) == FailureClass.UNEXPECTED) {
+            shutdownFuture.complete(FDv2SourceResult.terminalError(errorInfo, getFallback(e)));
+            return false;
+        }
         resultQueue.put(FDv2SourceResult.interrupted(errorInfo, getFallback(e)));
         streamStarted = System.currentTimeMillis();
         return true; // allow reconnect
@@ -413,6 +515,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
 
     private void restartStream(boolean failed) {
         Objects.requireNonNull(eventSource, "eventSource must not be null");
+        cancelResetThresholdTimer();
         recordStreamInit(failed);
         streamStarted = System.currentTimeMillis();
         eventSource.interrupt();

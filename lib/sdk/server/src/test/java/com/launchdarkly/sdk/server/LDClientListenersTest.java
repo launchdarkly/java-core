@@ -13,7 +13,10 @@ import com.launchdarkly.sdk.server.interfaces.FlagChangeListener;
 import com.launchdarkly.sdk.server.interfaces.FlagValueChangeEvent;
 import com.launchdarkly.sdk.server.subsystems.BigSegmentStore;
 import com.launchdarkly.sdk.server.subsystems.BigSegmentStoreTypes;
+import com.launchdarkly.sdk.server.subsystems.ClientContext;
 import com.launchdarkly.sdk.server.subsystems.ComponentConfigurer;
+import com.launchdarkly.sdk.server.subsystems.DataSource;
+import com.launchdarkly.sdk.server.subsystems.DataSourceUpdateSink;
 import com.launchdarkly.sdk.server.subsystems.DataStore;
 import com.launchdarkly.sdk.server.subsystems.PersistentDataStore;
 
@@ -22,7 +25,12 @@ import org.junit.Test;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -192,7 +200,91 @@ public class LDClientListenersTest extends BaseTest {
       assertThat(newStatus.getLastError(), equalTo(errorInfo));
     }
   }
-  
+
+  @Test
+  public void statusListenerReceivesTheTerminalOffWhenCloseOccursWhileTheExecutorThreadIsBusy() throws Exception {
+    // Regression test for SDK-3432. Data-source status broadcasts run on the single shared executor thread, and
+    // LDClient.close() calls shutdownNow() on that executor. If the thread is busy when the terminal OFF is
+    // broadcast on close, the OFF task is still queued and shutdownNow() discards it, so a status listener never
+    // observes the OFF the data source emits when the client closes. This test fails on that bug and passes once
+    // close() delivers the terminal status before tearing the executor down.
+    CountDownLatch listenerBlocking = new CountDownLatch(1);
+    List<DataSourceStatusProvider.State> received = new CopyOnWriteArrayList<>();
+
+    OffOnCloseDataSourceFactory factory = new OffOnCloseDataSourceFactory();
+    LDConfig config = baseConfig()
+        .dataSource(factory)
+        .events(Components.noEvents())
+        .build();
+    LDClient client = new LDClient(SDK_KEY, config);
+
+    client.getDataSourceStatusProvider().addStatusListener(status -> {
+      received.add(status.getState());
+      if (status.getState() == DataSourceStatusProvider.State.INTERRUPTED) {
+        // Occupy the single shared executor thread briefly, so the OFF that close() triggers is queued behind
+        // this callback when close() begins tearing the executor down, then free the thread so a graceful drain
+        // can still run the queued OFF (an abrupt shutdownNow discards it instead).
+        listenerBlocking.countDown();
+        try {
+          Thread.sleep(300);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+        }
+      }
+    });
+
+    factory.sink.updateStatus(DataSourceStatusProvider.State.INTERRUPTED, new DataSourceStatusProvider.ErrorInfo(
+        DataSourceStatusProvider.ErrorKind.NETWORK_ERROR, 0, "interrupted", Instant.now()));
+    assertTrue("listener did not start", listenerBlocking.await(2, TimeUnit.SECONDS));
+
+    // close() -> data source close() broadcasts OFF (queued behind the still-busy listener). An abrupt
+    // shutdownNow() discards that queued task; a graceful drain lets it run once the thread frees.
+    client.close();
+
+    Thread.sleep(500); // allow the terminal OFF broadcast to be delivered if close() preserves it
+    assertTrue("listener should have observed INTERRUPTED",
+        received.contains(DataSourceStatusProvider.State.INTERRUPTED));
+    assertTrue("the terminal OFF emitted on close must be delivered, not dropped by shutdownNow()",
+        received.contains(DataSourceStatusProvider.State.OFF));
+  }
+
+  // A data source that becomes valid on start and, like the real streaming/polling sources, broadcasts OFF when
+  // it is closed. Exposes its update sink so a test can drive status changes.
+  static final class OffOnCloseDataSourceFactory implements ComponentConfigurer<DataSource> {
+    volatile DataSourceUpdateSink sink;
+
+    @Override
+    public DataSource build(ClientContext clientContext) {
+      sink = clientContext.getDataSourceUpdateSink();
+      return new OffOnCloseDataSource(sink);
+    }
+  }
+
+  static final class OffOnCloseDataSource implements DataSource {
+    private final DataSourceUpdateSink sink;
+
+    OffOnCloseDataSource(DataSourceUpdateSink sink) {
+      this.sink = sink;
+    }
+
+    @Override
+    public Future<Void> start() {
+      sink.updateStatus(DataSourceStatusProvider.State.VALID, null);
+      return CompletableFuture.completedFuture(null);
+    }
+
+    @Override
+    public boolean isInitialized() {
+      return true;
+    }
+
+    @Override
+    public void close() {
+      sink.updateStatus(DataSourceStatusProvider.State.OFF, new DataSourceStatusProvider.ErrorInfo(
+          DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE, 0, "closed", Instant.now()));
+    }
+  }
+
   @Test
   public void dataStoreStatusMonitoringIsDisabledForInMemoryStore() throws Exception {
     LDConfig config = baseConfig()

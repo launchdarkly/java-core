@@ -49,6 +49,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
+import okhttp3.ConnectionPool;
 import okhttp3.Headers;
 
 /**
@@ -191,11 +192,17 @@ final class StreamProcessor implements DataSource {
     // smaller one there because we don't expect long delays within any *non*-streaming response that the
     // LD client gets. A read timeout on the stream will result in the connection being cycled, so we set
     // this to be slightly more than the expected interval between heartbeat signals.
+    //
+    // 3. The connection pool keeps no idle connections, so each reconnect opens a new connection. After a
+    // stream read timeout, OkHttp can treat a dead HTTP/2 connection as healthy for up to 1 second. A
+    // reconnect in that time uses the dead connection and stalls until the next read timeout.
 
     HttpConnectStrategy eventSourceHttpConfig = ConnectStrategy.http(this.streamUri)
         .headers(headers)
         .clientBuilderActions(clientBuilder -> {
           httpProperties.applyToHttpClientBuilder(clientBuilder);
+          // Set the connection pool after httpProperties, which sets its own pool (see note 3 above).
+          clientBuilder.connectionPool(new ConnectionPool(0, 1, TimeUnit.SECONDS));
         })
         // Set readTimeout last, to ensure that this hard-coded value overrides any other read
         // timeout that might have been set by httpProperties (see comment about readTimeout above).

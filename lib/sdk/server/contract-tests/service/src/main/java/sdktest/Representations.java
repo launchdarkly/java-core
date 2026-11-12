@@ -31,6 +31,8 @@ public abstract class Representations {
     SdkConfigEventParams events;
     SdkConfigBigSegmentsParams bigSegments;
     SdkConfigTagParams tags;
+    SdkConfigWrapperParams wrapper;
+    SdkConfigProxyParams proxy;
     SdkConfigServiceEndpointParams serviceEndpoints;
     SdkConfigHookParams hooks;
     SdkConfigDataSystemParams dataSystem;
@@ -63,6 +65,15 @@ public abstract class Representations {
   public static class SdkConfigTagParams {
     String applicationId;
     String applicationVersion;
+  }
+
+  public static class SdkConfigWrapperParams {
+    String name;
+    String version;
+  }
+
+  public static class SdkConfigProxyParams {
+    String httpProxy;
   }
 
   public static class SdkConfigServiceEndpointParams {
@@ -210,11 +221,47 @@ public abstract class Representations {
     CustomEventParams customEvent;
     ContextBuildParams contextBuild;
     ContextConvertParams contextConvert;
+    ContextComparisonPairParams contextComparison;
     SecureModeHashParams secureModeHash;
 
     MigrationVariationParams migrationVariation;
 
     MigrationOperationParams migrationOperation;
+
+    RegisterFlagChangeListenerParams registerFlagChangeListener;
+    RegisterFlagValueChangeListenerParams registerFlagValueChangeListener;
+    UnregisterListenerParams unregisterListener;
+  }
+
+  public static class RegisterFlagChangeListenerParams {
+    String listenerId;
+    URI callbackUri;
+  }
+
+  public static class RegisterFlagValueChangeListenerParams {
+    String listenerId;
+    String flagKey;
+    LDContext context;
+    LDValue defaultValue;
+    URI callbackUri;
+  }
+
+  public static class UnregisterListenerParams {
+    String listenerId;
+  }
+
+  // Posted to a listener's callback URI when a general flag change listener fires.
+  public static class FlagChangeNotification {
+    String listenerId;
+    String flagKey;
+  }
+
+  // Posted to a listener's callback URI when a flag value change listener fires.
+  public static class FlagValueChangeNotification {
+    String listenerId;
+    String flagKey;
+    LDValue oldValue;
+    LDValue newValue;
   }
 
   public static class EvaluateFlagParams {
@@ -296,6 +343,37 @@ public abstract class Representations {
   
   public static class ContextConvertParams {
     String input;
+  }
+
+  public static class ContextComparisonPairParams {
+    ContextComparisonParams context1;
+    ContextComparisonParams context2;
+  }
+
+  public static class ContextComparisonParams {
+    ContextComparisonSingleParams single;
+    ContextComparisonSingleParams[] multi;
+  }
+
+  public static class ContextComparisonSingleParams {
+    String kind;
+    String key;
+    AttributeDefinition[] attributes;
+    PrivateAttribute[] privateAttributes;
+  }
+
+  public static class AttributeDefinition {
+    String name;
+    LDValue value;
+  }
+
+  public static class PrivateAttribute {
+    String value;
+    boolean literal;
+  }
+
+  public static class ContextComparisonResponse {
+    boolean equals;
   }
   
   public static class SecureModeHashParams {

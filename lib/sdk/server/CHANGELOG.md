@@ -2,6 +2,50 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.18.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.5...launchdarkly-java-server-sdk-7.18.0) (2026-11-12)
+
+
+### Features
+
+* Apply RETRY to FDv2 synchronizer orchestration ([#252](https://github.com/launchdarkly/java-core/issues/252)) ([6a4aac5](https://github.com/launchdarkly/java-core/commit/6a4aac5ee5f9c2bed72c3676b05f0c0237a6ad86))
+
+
+### Bug Fixes
+
+* Include the big segments status on evaluation reasons when a flag fails to evaluate ([#258](https://github.com/launchdarkly/java-core/issues/258)) ([ce08ae8](https://github.com/launchdarkly/java-core/commit/ce08ae844539c1fbe66de4545d67df4c5a300589))
+* Make TestData valueForAll return its value when targeting is off ([#251](https://github.com/launchdarkly/java-core/issues/251)) ([db17ab9](https://github.com/launchdarkly/java-core/commit/db17ab99608282e959286897ef81a0e9263849fa))
+* Measure synchronizer deadlines with a monotonic clock ([#253](https://github.com/launchdarkly/java-core/issues/253)) ([3c7da2c](https://github.com/launchdarkly/java-core/commit/3c7da2c12d5ab03292ecfa4ad7a59f87d02de34f))
+
+## [7.17.5](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.4...launchdarkly-java-server-sdk-7.17.5) (2026-11-03)
+
+
+### Bug Fixes
+
+* Bump embedded Guava to 33.8.0-jre to address CVE-2026-102554 ([#246](https://github.com/launchdarkly/java-core/issues/246)) ([0d66cfb](https://github.com/launchdarkly/java-core/commit/0d66cfb885957a7aa91d58dbc8a5081fcb94b6db))
+* Deliver the terminal OFF data source status when the client is closed ([#247](https://github.com/launchdarkly/java-core/issues/247)) ([f444bee](https://github.com/launchdarkly/java-core/commit/f444bee54b7c72b74e61b8254a5405e19399f427))
+
+## [7.17.4](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.3...launchdarkly-java-server-sdk-7.17.4) (2026-11-02)
+
+
+### Bug Fixes
+
+* Clamp an over-large start wait time instead of overflowing ([#243](https://github.com/launchdarkly/java-core/issues/243)) ([754ee94](https://github.com/launchdarkly/java-core/commit/754ee94deeb5032c3b19de6b6d69783bcd2aca59))
+
+## [7.17.3](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.2...launchdarkly-java-server-sdk-7.17.3) (2026-10-14)
+
+
+### Bug Fixes
+
+* Open a new connection on each stream reconnect ([#232](https://github.com/launchdarkly/java-core/issues/232)) ([770f0a9](https://github.com/launchdarkly/java-core/commit/770f0a9122abbef288df11cdc85603bc167c7f13))
+* Reconnect the FDv2 stream after a restart that follows an earlier disconnect ([#233](https://github.com/launchdarkly/java-core/issues/233)) ([3c69b44](https://github.com/launchdarkly/java-core/commit/3c69b449312af1476762011c40f6b4478c34e887))
+
+## [7.17.2](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.1...launchdarkly-java-server-sdk-7.17.2) (2026-09-30)
+
+
+### Bug Fixes
+
+* Bump java-sdk-internal to 1.12.2 for redactedAttributes escaping ([#203](https://github.com/launchdarkly/java-core/issues/203)) ([4c0c7bd](https://github.com/launchdarkly/java-core/commit/4c0c7bdf9540e9e20d9d2df5dc6f79e3e370dcb5))
+
 ## [7.17.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.0...launchdarkly-java-server-sdk-7.17.1) (2026-09-15)
 
 

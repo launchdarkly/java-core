@@ -423,6 +423,36 @@ public class StreamProcessorTest extends BaseTest {
   }
 
   @Test
+  public void streamReconnectOpensNewConnection() throws Exception {
+    // The first stream ends normally. This leaves a connection that the HTTP client could reuse.
+    Semaphore closeFirstStream = new Semaphore(0);
+    Handler streamHandler = Handlers.sequential(
+        closableStreamResponse(EMPTY_DATA_EVENT, closeFirstStream),
+        streamResponse(EMPTY_DATA_EVENT)
+        );
+    AtomicInteger connectionCount = new AtomicInteger();
+
+    try (HttpServer server = HttpServer.start(streamHandler)) {
+      TcpHandler forwardToServer = TcpHandlers.forwardToPort(server.getPort());
+      TcpHandler countConnections = socket -> {
+        connectionCount.incrementAndGet();
+        forwardToServer.apply(socket);
+      };
+      try (TcpServer countingServer = TcpServer.start(countConnections)) {
+        try (StreamProcessor sp = createStreamProcessor(null, countingServer.getHttpUri())) {
+          startAndWait(sp);
+          server.getRecorder().requireRequest();
+
+          closeFirstStream.release();
+          server.getRecorder().requireRequest();
+
+          assertThat(connectionCount.get(), equalTo(2));
+        }
+      }
+    }
+  }
+
+  @Test
   public void streamInitDiagnosticRecordedOnOpen() throws Exception {
     DiagnosticStore acc = basicDiagnosticStore();
     long startTime = System.currentTimeMillis();

@@ -13,6 +13,7 @@ on:
           - lib/sdk/server-ai
           - lib/java-server-sdk-otel
           - lib/java-server-sdk-redis-store
+          - lib/java-server-sdk-dynamodb-store
       dry_run:
         description: 'Is this a dry run. If so no docs will be published.'
         type: boolean
