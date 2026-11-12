@@ -700,23 +700,22 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
       }
     }
 
-    // Diagnostic deliveries are not gated by the cooldown, and their outcomes drive it only the
-    // way they drove the old permanent disable: an unexpected failure opens a window, while a
-    // diagnostic success or ordinary failure has no effect on delivery state. In particular, a
-    // diagnostic success is not the probe and cannot count toward the reset threshold; only
-    // analytics deliveries prove the service is accepting analytics payloads again.
-    private void handleDiagnosticResponse(EventSender.Result result, DeliveryCooldownTracker.WindowToken token) {
+    // The cooldown governs analytics delivery only (EVTPROC section 1.8 scopes it to flush
+    // payloads). A diagnostic delivery never touches cooldown state.
+    private void handleDiagnosticResponse(EventSender.Result result) {
       if (result.getTimeFromServer() != null) {
         lastKnownPastTime.set(result.getTimeFromServer().getTime());
-      }
-      if (result.isUnexpectedFailure()) {
-        noteUnexpectedFailure(token);
       }
     }
 
     private void noteUnexpectedFailure(DeliveryCooldownTracker.WindowToken token) {
       long windowMillis = cooldown.recordUnexpectedFailure(token);
       if (windowMillis > 0) {
+        // The refused batch's index and identify events were lost with it, so forget every
+        // context key
+        if (contextDeduplicator != null) {
+          inbox.offer(new EventProcessorMessage(MessageType.FLUSH_USERS, null, false));
+        }
         logger.error("Event delivery failed with an unexpected error;"
             + " event delivery will not be attempted for the next {} seconds", windowMillis / 1000);
       }
@@ -731,13 +730,9 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
             Writer writer = new BufferedWriter(new OutputStreamWriter(buffer, Charset.forName("UTF-8")), INITIAL_OUTPUT_BUFFER_SIZE);
             gson.toJson(diagnosticEvent.value, writer);
             writer.flush();
-            // The send itself is not gated by the cooldown, but a diagnostic dispatched inside a
-            // window gets a null token, so its outcome cannot move delivery state even if it
-            // lands after the window has elapsed.
-            DeliveryCooldownTracker.WindowToken token = cooldown.beginDeliveryUnlessInCooldown();
             EventSender.Result result = eventsConfig.eventSender.sendDiagnosticEvent(
                 buffer.toByteArray(), eventsConfig.eventsUri);
-            handleDiagnosticResponse(result, token);
+            handleDiagnosticResponse(result);
             if (diagnosticEvent.initEvent) {
               didSendInitEvent.set(true);
             }

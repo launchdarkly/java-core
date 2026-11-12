@@ -207,13 +207,12 @@ public class DefaultEventProcessorCooldownTest extends BaseEventTest {
     try (DefaultEventProcessor ep = makeProcessorWithClock(baseConfig(es).contextDeduplicator(deduplicator))) {
       enterCooldown(ep, es, EventSender.Result.unexpectedFailure());
 
-      // An identify event is a context introduction just as an index event is; when an in-window
-      // discard destroys it, the deduplicator must forget the context so a later payload can
-      // introduce it again.
+      // An identify event is a context introduction just as an index event is. The context is
+      // introduced in-window (the window-open wipe cleared it), then discarded; the discard must
+      // forget it again so a later payload re-introduces it.
       ep.sendEvent(identifyEvent(user));
       ep.flushBlocking();
       es.expectNoRequests(100);
-      assertEquals(1, deduplicator.getFlushCount());
 
       // The post-window payload introduces the context afresh: a custom event for the context
       // comes with an index event rather than referencing a context the service never received.
@@ -228,7 +227,7 @@ public class DefaultEventProcessorCooldownTest extends BaseEventTest {
   }
 
   @Test
-  public void summaryOnlyInWindowDiscardKeepsAlreadyIntroducedContexts() throws Exception {
+  public void windowOpenForgetsEvenDeliveredIntroductions() throws Exception {
     MockEventSender es = new MockEventSender();
     RememberingDeduplicator deduplicator = new RememberingDeduplicator();
     try (DefaultEventProcessor ep = makeProcessorWithClock(baseConfig(es).contextDeduplicator(deduplicator))) {
@@ -238,19 +237,16 @@ public class DefaultEventProcessorCooldownTest extends BaseEventTest {
       es.awaitAnalytics();
       ep.waitUntilInactive();
 
-      // A summary-only batch discarded in-window destroys no context introduction, so the
-      // deduplicator must be left alone.
+      // Opening a window forgets every context key, including ones whose index events were
+      // delivered: the dispatcher cannot see which contexts the refused batch carried, and a
+      // redundant index event after the window is harmless.
       enterCooldown(ep, es, EventSender.Result.unexpectedFailure());
-      ep.sendEvent(featureEvent(user, FLAG_KEY).build());
-      ep.flushBlocking();
-      es.expectNoRequests(100);
-      assertEquals(0, deduplicator.getFlushCount());
 
-      // The post-window payload therefore carries no redundant index event.
       clock.advanceMillis(COOLDOWN_INITIAL_WINDOW_MILLIS + 1000);
-      ep.sendEvent(featureEvent(user, FLAG_KEY).build());
+      Event.FeatureRequest fe = featureEvent(user, FLAG_KEY).build();
+      ep.sendEvent(fe);
       ep.flushAsync();
-      assertThat(es.getEventsFromLastRequest(), contains(isSummaryEvent()));
+      assertThat(es.getEventsFromLastRequest(), contains(isIndexEvent(fe, userJson), isSummaryEvent()));
     }
   }
 
@@ -299,10 +295,10 @@ public class DefaultEventProcessorCooldownTest extends BaseEventTest {
   }
 
   @Test
-  public void diagnosticFailureOpensWindowForAnalyticsDelivery() throws Exception {
-    // The diagnostic delivery path reports unexpected failures into the cooldown, so an
-    // unexpected failure on a diagnostic payload opens the window too. (Diagnostic sends
-    // themselves are not gated by the window; see DefaultEventProcessorDiagnosticsTest.)
+  public void diagnosticFailureDoesNotOpenACooldownWindow() throws Exception {
+    // The cooldown governs analytics delivery only (EVTPROC section 1.8 scopes it to flush
+    // payloads). An unexpected failure on a diagnostic payload does not open a window, so
+    // analytics delivery is unaffected.
     LDValue fakePlatformData = LDValue.buildObject().put("cats", 2).build();
     DiagnosticStore diagnosticStore = new DiagnosticStore(
         new DiagnosticStore.SdkDiagnosticParams(SDK_KEY, "fake-sdk", "1.2.3", "fake-platform",
@@ -316,19 +312,20 @@ public class DefaultEventProcessorCooldownTest extends BaseEventTest {
       // tests, so a no-op task is a barrier for its response handling.
       sharedExecutor.submit(() -> {}).get();
 
-      // Analytics delivery is now in-window.
+      // No window opened: the next analytics flush is delivered rather than discarded.
       es.result = EventSender.Result.success(null);
-      ep.sendEvent(identifyEvent(user));
-      ep.flushBlocking();
-      es.expectNoRequests(100);
+      Event.Identify postEvent = identifyEvent(user);
+      ep.sendEvent(postEvent);
+      ep.flushAsync();
+      assertThat(es.getEventsFromLastRequest(), contains(isIdentifyEvent(postEvent, userJson)));
     }
   }
 
   @Test
-  public void diagnosticSuccessesDoNotResetTheLadderOrEndTheWindow() throws Exception {
-    // A diagnostic success is not the probe: only analytics deliveries prove the service is
-    // accepting analytics payloads again, so diagnostic successes neither end a window, nor log a
-    // resumption, nor count toward the reset threshold.
+  public void diagnosticOutcomesDoNotAffectAnOpenCooldownWindow() throws Exception {
+    // Diagnostic outcomes never move cooldown state: with an analytics window open, a diagnostic
+    // failure does not step the ladder, and a diagnostic success after the window elapses does
+    // not end it or log a resumption. Only analytics deliveries are the probe.
     LDValue fakePlatformData = LDValue.buildObject().put("cats", 2).build();
     DiagnosticStore diagnosticStore = new DiagnosticStore(
         new DiagnosticStore.SdkDiagnosticParams(SDK_KEY, "fake-sdk", "1.2.3", "fake-platform",
@@ -336,23 +333,29 @@ public class DefaultEventProcessorCooldownTest extends BaseEventTest {
     MockEventSender es = new MockEventSender();
     try (DefaultEventProcessor ep = makeProcessorWithClock(baseConfig(es).diagnosticStore(diagnosticStore))) {
       es.awaitDiagnostic(); // the startup diagnostic event succeeds
-      // The await returns when the payload is captured, which is before the diagnostic task has
-      // read the sender's result field; wait for the task to finish before changing the result,
-      // or the startup diagnostic can consume the failure and open the window itself.
+      // The await returns when the payload is captured, before the diagnostic task has read the
+      // result field; wait for the task to finish before changing the result.
       sharedExecutor.submit(() -> {}).get();
       enterCooldown(ep, es, EventSender.Result.unexpectedFailure());
       assertEquals(1, countLogLines(LDLogLevel.ERROR, "the next 300 seconds"));
 
-      // The window elapses; two diagnostic successes land before any analytics delivery.
+      // A diagnostic failure during the window must not step the ladder.
+      es.result = EventSender.Result.unexpectedFailure();
+      ep.postDiagnostic();
+      es.awaitDiagnostic();
+      sharedExecutor.submit(() -> {}).get();
+
+      // The window elapses; a diagnostic success must not end it or log a resumption.
       clock.advanceMillis(COOLDOWN_INITIAL_WINDOW_MILLIS + 1000);
-      for (int i = 0; i < 2; i++) {
-        ep.postDiagnostic();
-        es.awaitDiagnostic();
-        sharedExecutor.submit(() -> {}).get(); // barrier for the diagnostic response handling
-      }
+      es.result = EventSender.Result.success(null);
+      ep.postDiagnostic();
+      es.awaitDiagnostic();
+      sharedExecutor.submit(() -> {}).get();
       assertEquals(0, countLogLines(LDLogLevel.INFO, "resumed after cooldown"));
 
-      // The ladder did not reset: the next unexpected analytics failure opens the doubled window.
+      // The next analytics failure steps to the doubled window: the diagnostic failure did not
+      // advance the ladder (else this would be 1200), and the diagnostic success did not reset it
+      // (else this would be 300).
       es.result = EventSender.Result.unexpectedFailure();
       ep.sendEvent(identifyEvent(user));
       ep.flushAsync();
@@ -411,7 +414,8 @@ public class DefaultEventProcessorCooldownTest extends BaseEventTest {
     MockEventSender es = new MockEventSender();
     try (DefaultEventProcessor ep = makeProcessorWithClock(baseConfig(es).diagnosticStore(diagnosticStore))) {
       es.awaitDiagnostic(); // the startup diagnostic event
-      sharedExecutor.submit(() -> {}).get(); // see diagnosticSuccessesDoNotResetTheLadderOrEndTheWindow
+      // Barrier: let the startup diagnostic task finish before the first analytics flush.
+      sharedExecutor.submit(() -> {}).get();
 
       // A delivered batch records its size.
       ep.sendEvent(identifyEvent(user));
@@ -447,49 +451,6 @@ public class DefaultEventProcessorCooldownTest extends BaseEventTest {
       ep.sendEvent(secondEvent);
       ep.flushAsync();
       assertThat(es.getEventsFromLastRequest(), contains(isIdentifyEvent(secondEvent, userJson)));
-    }
-  }
-
-  @Test(timeout = 15000)
-  public void diagnosticStraddlingTheWindowEndCannotStepTheLadder() throws Exception {
-    // A diagnostic dispatched inside the window gets no live token, so even if it is still in
-    // flight when the window elapses, its unexpected failure cannot step the ladder or displace
-    // the analytics probe.
-    LDValue fakePlatformData = LDValue.buildObject().put("cats", 2).build();
-    DiagnosticStore diagnosticStore = new DiagnosticStore(
-        new DiagnosticStore.SdkDiagnosticParams(SDK_KEY, "fake-sdk", "1.2.3", "fake-platform",
-            fakePlatformData, null, null));
-    MockEventSender es = new MockEventSender();
-    try (DefaultEventProcessor ep = makeProcessorWithClock(baseConfig(es).diagnosticStore(diagnosticStore))) {
-      es.awaitDiagnostic(); // the startup diagnostic event succeeds
-      sharedExecutor.submit(() -> {}).get(); // see diagnosticSuccessesDoNotResetTheLadderOrEndTheWindow
-      enterCooldown(ep, es, EventSender.Result.unexpectedFailure());
-      assertEquals(1, countLogLines(LDLogLevel.ERROR, "the next 300 seconds"));
-
-      Object gate = new Object();
-      CountDownLatch inFlight = new CountDownLatch(1);
-      es.receivedCounter = inFlight;
-      es.waitSignal = gate;
-      es.result = EventSender.Result.unexpectedFailure();
-      ep.postDiagnostic();
-      assertTrue(inFlight.await(5, TimeUnit.SECONDS)); // the diagnostic send is parked in-flight
-      es.awaitDiagnostic(); // consume its capture, which was recorded before it parked
-
-      clock.advanceMillis(COOLDOWN_INITIAL_WINDOW_MILLIS + 1000); // the window elapses meanwhile
-      synchronized (gate) {
-        gate.notifyAll();
-      }
-      es.waitSignal = null;
-      sharedExecutor.submit(() -> {}).get(); // the diagnostic outcome has now been handled
-
-      // The analytics probe's failure steps the ladder exactly once, to 10 minutes: had the
-      // straddling diagnostic stepped it, this would be 20.
-      ep.sendEvent(identifyEvent(user));
-      ep.flushAsync();
-      es.awaitAnalytics();
-      ep.waitUntilInactive();
-      assertEquals(1, countLogLines(LDLogLevel.ERROR, "the next 600 seconds"));
-      assertEquals(0, countLogLines(LDLogLevel.ERROR, "the next 1200 seconds"));
     }
   }
 
@@ -535,11 +496,21 @@ public class DefaultEventProcessorCooldownTest extends BaseEventTest {
     try (DefaultEventProcessor ep = makeProcessorWithClock(baseConfig(es).contextDeduplicator(deduplicator))) {
       enterCooldown(ep, es, EventSender.Result.unexpectedFailure());
 
-      LDContext otherContext = LDContext.create("otherkey");
-      ep.sendEvent(customEvent(otherContext, "eventkey").build());
+      // A custom event for a context not in the cache (the window-open wipe emptied it) carries
+      // an index event; the in-window discard must forget that context again.
+      ep.sendEvent(customEvent(user, "eventkey").build());
       ep.flushBlocking();
       es.expectNoRequests(100);
-      assertEquals(1, deduplicator.getFlushCount());
+
+      // After the window, the context re-introduces rather than referencing one the service never
+      // received.
+      clock.advanceMillis(COOLDOWN_INITIAL_WINDOW_MILLIS + 1000);
+      Event.Custom postEvent = customEvent(user, "eventkey").build();
+      ep.sendEvent(postEvent);
+      ep.flushAsync();
+      assertThat(es.getEventsFromLastRequest(), contains(
+          isIndexEvent(postEvent, userJson),
+          isCustomEvent(postEvent, userJson)));
     }
   }
 }

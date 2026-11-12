@@ -192,17 +192,31 @@ public class DeliveryCooldownTrackerTest extends BaseTest {
   }
 
   @Test
-  public void staleOrdinaryFailureDoesNotBreakSuccessStreak() {
-    failPastWindow();
-    assertTrue(tracker.recordSuccess(tracker.beginDelivery())); // probe success ends the window
-    WindowToken staleToken = tracker.beginDelivery();
-    tracker.recordUnexpectedFailure(tracker.beginDelivery());
-    clock.advanceMillis(2 * COOLDOWN_INITIAL_WINDOW_MILLIS + 1000);
-    assertTrue(tracker.recordSuccess(tracker.beginDelivery()));
-    tracker.recordFailure(staleToken); // stale; must not reset the streak
-    tracker.recordSuccess(tracker.beginDelivery()); // second consecutive success resets the ladder
+  public void staleFailureBetweenSuccessesPreventsLadderReset() {
+    // The probe and a sibling are dispatched together in the boundary round; the probe succeeds,
+    // staling the sibling, and then the sibling's real failure lands. Success, failure, success:
+    // the successes were not consecutive, so the ladder must not reset.
+    failPastWindow(); // one failed probe on the ladder
+    WindowToken boundaryToken = tracker.beginDelivery();
+    assertTrue(tracker.recordSuccess(boundaryToken));
+    tracker.recordFailure(boundaryToken);
+    tracker.recordSuccess(tracker.beginDelivery());
 
-    assertEquals(COOLDOWN_INITIAL_WINDOW_MILLIS, tracker.recordUnexpectedFailure(tracker.beginDelivery()));
+    assertEquals(2 * COOLDOWN_INITIAL_WINDOW_MILLIS, tracker.recordUnexpectedFailure(tracker.beginDelivery()));
+  }
+
+  @Test
+  public void staleUnexpectedFailureBetweenSuccessesPreventsLadderReset() {
+    failPastWindow();
+    WindowToken boundaryToken = tracker.beginDelivery();
+    assertTrue(tracker.recordSuccess(boundaryToken));
+
+    // The stale sibling's unexpected failure breaks the streak but neither opens nor steps.
+    assertEquals(0, tracker.recordUnexpectedFailure(boundaryToken));
+    assertFalse(tracker.inCooldown());
+    tracker.recordSuccess(tracker.beginDelivery());
+
+    assertEquals(2 * COOLDOWN_INITIAL_WINDOW_MILLIS, tracker.recordUnexpectedFailure(tracker.beginDelivery()));
   }
 
   @Test
@@ -227,6 +241,13 @@ public class DeliveryCooldownTrackerTest extends BaseTest {
 
     // The boundary round is still open for the real probe.
     assertTrue(tracker.recordSuccess(tracker.beginDelivery()));
+
+    // Unstamped failures are not real delivery outcomes and must not break the streak either.
+    tracker.recordSuccess(tracker.beginDelivery()); // second consecutive success; resets the ladder
+    tracker.recordFailure(null);
+    assertEquals(0, tracker.recordUnexpectedFailure(null));
+    // The ladder reset held (two consecutive real successes), undisturbed by the null failures.
+    assertEquals(COOLDOWN_INITIAL_WINDOW_MILLIS, tracker.recordUnexpectedFailure(tracker.beginDelivery()));
   }
 
   @Test

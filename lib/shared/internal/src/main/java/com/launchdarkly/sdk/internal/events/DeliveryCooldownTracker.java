@@ -147,22 +147,13 @@ final class DeliveryCooldownTracker {
       return false;
     }
     if (inCooldown()) {
-      // Defensive: tokens are issued atomically with the cooldown check (a diagnostic dispatched
-      // in-window gets no token at all), and a pre-window token goes stale when the window opens,
-      // so no current caller gets here. The invariant stands on its own: an outcome arriving
-      // while a window is open must never move delivery state.
-      return false;
+      return false; // defensive: a current token cannot originate inside a window
     }
     boolean resumed = false;
     if (windowEndNanos != null) {
       windowEndNanos = null;
       resumed = true;
-      // The probe ends the window-boundary round: the tokens of its concurrently dispatched
-      // siblings go stale, so the boundary round cannot combine parallel deliveries into a
-      // reset. (A sibling unexpected failure goes stale with them; the next failed delivery of
-      // the new round opens the window instead, at most a cadence later.) Later rounds leave the
-      // epoch unchanged, so parallel deliveries of one such round each count toward the streak:
-      // the reset threshold counts successful deliveries, not rounds.
+      // The probe ends the window: the tokens previously given out go stale.
       epoch++;
     }
     consecutiveSuccesses++;
@@ -173,53 +164,56 @@ final class DeliveryCooldownTracker {
   }
 
   /**
-   * Records a delivery failure that was not unexpected. It breaks the consecutive-success streak
-   * but never opens or lengthens a window. Stale outcomes, and outcomes arriving while a window
-   * is open, update nothing.
+   * Records a delivery failure that was not unexpected. It breaks the consecutive-success streak,
+   * even on a stale token, but never opens or lengthens a window. Unstamped outcomes update
+   * nothing.
    *
    * @param token the token issued when this delivery was dispatched
    */
   synchronized void recordFailure(WindowToken token) {
+    if (token == null) {
+      return; // unstamped: not the outcome of a real delivery
+    }
+    // A real failure breaks the streak regardless of its era: the reset threshold counts
+    // consecutive successful deliveries, and a failure between two successes makes them
+    // non-consecutive no matter which round dispatched it.
+    consecutiveSuccesses = 0;
     if (!isCurrent(token)) {
       return;
     }
     if (inCooldown()) {
-      // Defensive; see recordSuccess.
-      return;
+      return; // defensive: a current token cannot originate inside a window
     }
     if (windowEndNanos != null) {
-      // A probe that fails recoverably still ends the window: clear it so a much later success is
-      // not misreported as the resumption, and close the boundary round (see recordSuccess) so the
-      // probe's concurrently dispatched siblings cannot combine into a reset. The accepted cost is
-      // that a sibling unexpected failure in the same round goes stale with them, deferring the
-      // next window by at most one cadence: the next round's failure opens it, with the ladder
-      // position preserved.
+      // A probe that fails recoverably still ends the window: clear it so a later success is not
+      // misreported as the resumption.
       windowEndNanos = null;
       epoch++;
     }
-    consecutiveSuccesses = 0;
   }
 
   /**
-   * Records a delivery failure classified as unexpected, opening a cooldown window. Stale
-   * outcomes update nothing: in particular, once one failure of a round has opened a window, its
-   * concurrently dispatched siblings cannot lengthen it or step the ladder again for the same
-   * incident. The window doubles from {@link #COOLDOWN_INITIAL_WINDOW_MILLIS} up to
-   * {@link #COOLDOWN_MAX_WINDOW_MILLIS} per failed probe.
+   * Records a delivery failure classified as unexpected. It opens a window that doubles from
+   * {@link #COOLDOWN_INITIAL_WINDOW_MILLIS} up to {@link #COOLDOWN_MAX_WINDOW_MILLIS} per failed
+   * probe. A stale token still breaks the consecutive-success streak but never opens or steps a
+   * window, so one incident's concurrent failures step the ladder only once. Unstamped outcomes
+   * update nothing.
    *
    * @param token the token issued when this delivery was dispatched
-   * @return the length in milliseconds of the newly opened window, or zero if the outcome was
-   *   stale and no window was opened
+   * @return the length in milliseconds of the newly opened window, or zero if no window was opened
    */
   synchronized long recordUnexpectedFailure(WindowToken token) {
+    if (token == null) {
+      return 0; // unstamped: not the outcome of a real delivery
+    }
+    // See recordFailure: a real failure breaks the streak regardless of its era.
+    consecutiveSuccesses = 0;
     if (!isCurrent(token)) {
       return 0;
     }
     if (inCooldown()) {
-      // Defensive; see recordSuccess.
-      return 0;
+      return 0; // defensive: a current token cannot originate inside a window
     }
-    consecutiveSuccesses = 0;
     attempts++;
     epoch++;
     warnedThisWindow = false;

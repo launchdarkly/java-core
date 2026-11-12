@@ -83,8 +83,9 @@ public interface EventSender extends Closeable {
     }
 
     /**
-     * Returns a result representing an ordinary delivery failure, such as a service outage, that
-     * does not affect the delivery schedule.
+     * Returns a result representing an ordinary delivery failure, such as a service outage or
+     * network error. Unlike {@link #unexpectedFailure()}, it does not cause event delivery to
+     * enter a cooldown window.
      *
      * @return the result
      */
