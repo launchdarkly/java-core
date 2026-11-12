@@ -4,7 +4,6 @@ import com.launchdarkly.sdk.server.datasources.Initializer;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.time.Instant;
 import java.util.List;
 
 /**
@@ -41,7 +40,7 @@ class SourceManager implements Closeable {
      * The time at which the fallback to FDv1 ends, or null if the SDK is not falling back to FDv1. Accessed only
      * under activeSourceLock.
      */
-    private Instant fdv1FallbackEndTime;
+    private MonotonicTime fdv1FallbackEndTime;
 
     public SourceManager(List<SynchronizerFactoryWithState> synchronizers, List<FDv2DataSource.DataSourceFactory<Initializer>> initializers) {
         this.synchronizers = synchronizers;
@@ -81,7 +80,7 @@ class SourceManager implements Closeable {
      *
      * @param endTime the time at which the fallback to FDv1 ends
      */
-    public void startFDv1Fallback(Instant endTime) {
+    public void startFDv1Fallback(MonotonicTime endTime) {
         synchronized (activeSourceLock) {
             fdv1FallbackEndTime = endTime;
             for (SynchronizerFactoryWithState factory : synchronizers) {
@@ -99,7 +98,7 @@ class SourceManager implements Closeable {
      */
     public void unparkExpiredSynchronizers() {
         synchronized (activeSourceLock) {
-            Instant now = Instant.now();
+            MonotonicTime now = MonotonicTime.now();
             for (SynchronizerFactoryWithState factory : synchronizers) {
                 factory.unparkIfExpired(now);
             }
@@ -111,7 +110,7 @@ class SourceManager implements Closeable {
      *
      * @return the end time, or null if the SDK is not falling back to FDv1
      */
-    public Instant getFDv1FallbackEndTime() {
+    public MonotonicTime getFDv1FallbackEndTime() {
         synchronized (activeSourceLock) {
             return fdv1FallbackEndTime;
         }
@@ -125,7 +124,7 @@ class SourceManager implements Closeable {
      */
     public boolean endFDv1FallbackIfExpired() {
         synchronized (activeSourceLock) {
-            if (fdv1FallbackEndTime == null || Instant.now().isBefore(fdv1FallbackEndTime)) {
+            if (fdv1FallbackEndTime == null || MonotonicTime.now().isBefore(fdv1FallbackEndTime)) {
                 return false;
             }
             fdv1FallbackEndTime = null;
@@ -259,7 +258,7 @@ class SourceManager implements Closeable {
         }
     }
 
-    public void parkCurrentSynchronizer(Instant unparkTime) {
+    public void parkCurrentSynchronizer(MonotonicTime unparkTime) {
         synchronized (activeSourceLock) {
             currentSynchronizerFactory.park(unparkTime);
         }
@@ -270,11 +269,11 @@ class SourceManager implements Closeable {
      *
      * @return the earliest unpark time, or null if no available synchronizer is parked
      */
-    public Instant getEarliestUnparkTime() {
+    public MonotonicTime getEarliestUnparkTime() {
         synchronized (activeSourceLock) {
-            Instant earliest = null;
+            MonotonicTime earliest = null;
             for (SynchronizerFactoryWithState factory : synchronizers) {
-                Instant unparkTime = factory.getUnparkTime();
+                MonotonicTime unparkTime = factory.getUnparkTime();
                 if (factory.getState() == SynchronizerFactoryWithState.State.Available
                     && unparkTime != null
                     && (earliest == null || unparkTime.isBefore(earliest))) {
