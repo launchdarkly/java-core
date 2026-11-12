@@ -862,37 +862,42 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
         } catch (InterruptedException e) {
           continue;
         }
-        EventSender.Result result;
         try {
-          ByteArrayOutputStream buffer = new ByteArrayOutputStream(INITIAL_OUTPUT_BUFFER_SIZE);
-          Writer writer = new BufferedWriter(new OutputStreamWriter(buffer, Charset.forName("UTF-8")), INITIAL_OUTPUT_BUFFER_SIZE);
-          int outputEventCount = formatter.writeOutputEvents(payload.events, payload.summaries, writer);
-          writer.flush();
-          result = eventsConfig.eventSender.sendAnalyticsEvents(
-              buffer.toByteArray(),
-              outputEventCount,
-              eventsConfig.eventsUri
-              );
-        } catch (Exception e) {
-          logger.error("Unexpected error in event processor: {}", LogValues.exceptionSummary(e));
-          logger.debug(LogValues.exceptionTrace(e));
-          // The batch was not delivered, and the delivery schedule must know that: an exception
-          // here counts as an ordinary failure, which breaks the consecutive-success streak
-          // without opening a cooldown window.
-          result = EventSender.Result.failure();
-        }
-        try {
-          responseListener.handleResponse(result, payload.token);
-        } catch (Exception e) {
-          // An exception here (such as a null result from a custom EventSender) must not kill
-          // this worker thread: the busy-worker count would stay elevated forever and close()
-          // would never return.
-          logger.error("Unexpected error in event processor: {}", LogValues.exceptionSummary(e));
-          logger.debug(LogValues.exceptionTrace(e));
-        }
-        synchronized (activeFlushWorkersCount) {
-          activeFlushWorkersCount.decrementAndGet();
-          activeFlushWorkersCount.notifyAll();
+          EventSender.Result result;
+          try {
+            ByteArrayOutputStream buffer = new ByteArrayOutputStream(INITIAL_OUTPUT_BUFFER_SIZE);
+            Writer writer = new BufferedWriter(new OutputStreamWriter(buffer, Charset.forName("UTF-8")), INITIAL_OUTPUT_BUFFER_SIZE);
+            int outputEventCount = formatter.writeOutputEvents(payload.events, payload.summaries, writer);
+            writer.flush();
+            result = eventsConfig.eventSender.sendAnalyticsEvents(
+                buffer.toByteArray(),
+                outputEventCount,
+                eventsConfig.eventsUri
+                );
+          } catch (Exception e) {
+            logger.error("Unexpected error in event processor: {}", LogValues.exceptionSummary(e));
+            logger.debug(LogValues.exceptionTrace(e));
+            // The batch was not delivered, and the delivery schedule must know that: an exception
+            // here counts as an ordinary failure, which breaks the consecutive-success streak
+            // without opening a cooldown window.
+            result = EventSender.Result.failure();
+          }
+          try {
+            responseListener.handleResponse(result, payload.token);
+          } catch (Exception e) {
+            // An exception here (such as a null result from a custom EventSender) must not kill
+            // this worker thread.
+            logger.error("Unexpected error in event processor: {}", LogValues.exceptionSummary(e));
+            logger.debug(LogValues.exceptionTrace(e));
+          }
+        } finally {
+          // The busy-worker count must always come back down, even if an Error (not an Exception)
+          // escaped the work above, or close() would wait forever in
+          // waitUntilAllFlushWorkersInactive. The Error still ends this worker thread.
+          synchronized (activeFlushWorkersCount) {
+            activeFlushWorkersCount.decrementAndGet();
+            activeFlushWorkersCount.notifyAll();
+          }
         }
       }
     }

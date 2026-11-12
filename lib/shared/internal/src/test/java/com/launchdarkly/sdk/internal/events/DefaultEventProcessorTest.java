@@ -279,7 +279,33 @@ public class DefaultEventProcessorTest extends BaseEventTest {
       es.awaitRequest();
     }
   }
-  
+
+  @Test(timeout = 15000)
+  public void errorFromEventSenderDoesNotWedgeClose() throws Exception {
+    // An Error (not an Exception) from the sender escapes the flush worker's catch blocks and
+    // ends that worker thread, but the busy-worker count must still be decremented so that
+    // close() does not wait on it forever in waitUntilAllFlushWorkersInactive.
+    EventSender throwingSender = new EventSender() {
+      @Override
+      public Result sendAnalyticsEvents(byte[] data, int eventCount, URI eventsBaseUri) {
+        throw new AssertionError("boom");
+      }
+
+      @Override
+      public Result sendDiagnosticEvent(byte[] data, URI eventsBaseUri) {
+        return Result.success(null);
+      }
+
+      @Override
+      public void close() throws IOException {}
+    };
+
+    DefaultEventProcessor ep = makeEventProcessor(baseConfig(throwingSender));
+    ep.sendEvent(identifyEvent(user));
+    ep.flushAsync();
+    ep.close(); // would block forever if the dead worker's busy count were never decremented
+  }
+
   @SuppressWarnings("unchecked")
   @Test
   public void eventsAreKeptInBufferIfAllFlushWorkersAreBusy() throws Exception {
