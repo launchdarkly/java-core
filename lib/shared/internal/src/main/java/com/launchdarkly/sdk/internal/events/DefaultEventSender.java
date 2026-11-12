@@ -221,7 +221,7 @@ public final class DefaultEventSender implements EventSender {
       } catch (IOException e) {
         // Transport-level failures are always worth one retry here, whatever their cause; the
         // request may simply have hit a transient network problem.
-        logger.warn("Error {} ({}): {}", errorContext, nextActionMessage, e.toString());
+        logger.warn("Error {} ({}): {}", errorContext, nextActionMessage, LogValues.exceptionSummary(e));
       }
     }
 

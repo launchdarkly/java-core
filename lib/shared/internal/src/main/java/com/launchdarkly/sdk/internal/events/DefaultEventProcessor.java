@@ -882,11 +882,15 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
             // without opening a cooldown window.
             result = EventSender.Result.failure();
           }
+          if (result == null) {
+            // A custom EventSender that returns no result reported no delivery, so treat it as an
+            // ordinary failure.
+            result = EventSender.Result.failure();
+          }
           try {
             responseListener.handleResponse(result, payload.token);
           } catch (Exception e) {
-            // An exception here (such as a null result from a custom EventSender) must not kill
-            // this worker thread.
+            // Any remaining throw from response handling must not kill this worker thread.
             logger.error("Unexpected error in event processor: {}", LogValues.exceptionSummary(e));
             logger.debug(LogValues.exceptionTrace(e));
           }

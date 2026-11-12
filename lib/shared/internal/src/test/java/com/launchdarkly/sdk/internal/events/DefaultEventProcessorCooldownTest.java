@@ -454,6 +454,47 @@ public class DefaultEventProcessorCooldownTest extends BaseEventTest {
     }
   }
 
+  @Test
+  public void nullResultBreaksTheSuccessStreak() throws Exception {
+    // A null result reports no delivery, like an exception from the sender, so it must restart
+    // the reset-threshold measurement and keep the ladder from resetting across it. (Go's result
+    // is a value type whose zero value is already an ordinary failure, so this matches Go.)
+    MockEventSender es = new MockEventSender();
+    try (DefaultEventProcessor ep = makeProcessorWithClock(baseConfig(es))) {
+      enterCooldown(ep, es, EventSender.Result.unexpectedFailure());
+      assertEquals(1, countLogLines(LDLogLevel.ERROR, "the next 300 seconds"));
+
+      // The probe succeeds: one credited success.
+      clock.advanceMillis(COOLDOWN_INITIAL_WINDOW_MILLIS + 1000);
+      ep.sendEvent(identifyEvent(user));
+      ep.flushAsync();
+      es.awaitAnalytics();
+      ep.waitUntilInactive();
+
+      // The next delivery returns null.
+      es.result = null;
+      ep.sendEvent(identifyEvent(user));
+      ep.flushAsync();
+      es.awaitAnalytics();
+      ep.waitUntilInactive();
+
+      // One more success: if the null had been ignored, this would be the second consecutive
+      // success and the ladder would reset to the initial delay.
+      es.result = EventSender.Result.success(null);
+      ep.sendEvent(identifyEvent(user));
+      ep.flushAsync();
+      es.awaitAnalytics();
+      ep.waitUntilInactive();
+
+      es.result = EventSender.Result.unexpectedFailure();
+      ep.sendEvent(identifyEvent(user));
+      ep.flushAsync();
+      es.awaitAnalytics();
+      ep.waitUntilInactive();
+      assertEquals(1, countLogLines(LDLogLevel.ERROR, "the next 600 seconds"));
+    }
+  }
+
   @Test(timeout = 15000)
   public void simultaneousFailuresAcrossAllWorkersStepTheLadderOnce() throws Exception {
     // Five deliveries are held in flight across the full worker pool and all fail unexpectedly at
