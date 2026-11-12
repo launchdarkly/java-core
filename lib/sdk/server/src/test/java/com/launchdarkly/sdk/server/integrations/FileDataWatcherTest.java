@@ -8,14 +8,17 @@ import com.launchdarkly.testhelpers.TempDir;
 
 import org.junit.Test;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeTrue;
 
 @SuppressWarnings("javadoc")
 public class FileDataWatcherTest {
@@ -31,6 +34,31 @@ public class FileDataWatcherTest {
         throw new AssertionError("timed out waiting for " + expected + " change signals, got " + counter.get());
       }
       Thread.sleep(10);
+    }
+  }
+
+  // Creates a symbolic link, or skips the test where the platform or the account cannot create one,
+  // as on Windows without the privilege.
+  private static void link(Path link, Path target) {
+    try {
+      Files.createSymbolicLink(link, target);
+    } catch (IOException | UnsupportedOperationException | SecurityException e) {
+      assumeTrue("symbolic links are not available: " + e, false);
+    }
+  }
+
+  // Points a link at a new target in one operation, as a ConfigMap update swaps its ..data link.
+  private static void swapLink(Path link, Path newTarget) throws IOException {
+    Path temporary = link.resolveSibling(link.getFileName() + "_tmp");
+    Files.createSymbolicLink(temporary, newTarget);
+    Files.move(temporary, link, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+  }
+
+  private static void deleteTree(Path directory) throws IOException {
+    try (java.util.stream.Stream<Path> paths = Files.walk(directory)) {
+      for (Path p : (Iterable<Path>) paths.sorted(java.util.Comparator.reverseOrder())::iterator) {
+        Files.delete(p);
+      }
     }
   }
 
@@ -113,6 +141,96 @@ public class FileDataWatcherTest {
         Files.write(dir.getPath().resolve("other.json"), "{}".getBytes());
         Thread.sleep(QUIET_MILLIS);
         assertEquals(1, changes.get());
+      }
+    }
+  }
+
+  @Test
+  public void configMapUpdateThatSwapsTheDataLinkSignalsChange() throws Exception {
+    // The layout of a mounted ConfigMap: the file is a link through ..data, which links to a
+    // versioned directory. An update writes a new directory, swaps ..data to it, and deletes the
+    // old one, so no event names the configured file.
+    LogCapture logCapture = Logs.capture();
+    LDLogger logger = LDLogger.withAdapter(logCapture, "");
+    try (TempDir dir = TempDir.create()) {
+      Path mount = dir.getPath();
+      Path v1 = Files.createDirectory(mount.resolve("..v1"));
+      Files.write(v1.resolve("a.json"), "{}".getBytes());
+      link(mount.resolve("..data"), mount.resolve("..v1").getFileName());
+      Path file = mount.resolve("a.json");
+      link(file, mount.resolve("..data").getFileName().resolve("a.json"));
+      AtomicInteger changes = new AtomicInteger();
+      try (FileDataWatcher watcher = FileDataWatcher.create(Collections.singletonList(file), DIRECTORY_RETRY, logger)) {
+        watcher.start(changes::incrementAndGet);
+        awaitAtLeast(changes, 1);
+        Thread.sleep(QUIET_MILLIS);
+
+        Path v2 = Files.createDirectory(mount.resolve("..v2"));
+        Files.write(v2.resolve("a.json"), "{\"flagValues\":{}}".getBytes());
+        swapLink(mount.resolve("..data"), v2.getFileName());
+        deleteTree(v1);
+        awaitAtLeast(changes, 2);
+        Thread.sleep(QUIET_MILLIS);
+
+        // The deleted version directory is not reported as a lost directory.
+        long warnings = logCapture.getMessages().stream().filter(m -> m.getLevel() == LDLogLevel.WARN).count();
+        assertEquals(0, warnings);
+      }
+    }
+  }
+
+  @Test
+  public void changeToALinkTargetInAnotherDirectorySignalsChange() throws Exception {
+    try (TempDir dir = TempDir.create()) {
+      Path configured = Files.createDirectory(dir.getPath().resolve("configured"));
+      Path other = Files.createDirectory(dir.getPath().resolve("other"));
+      Path target = other.resolve("a.json");
+      Files.write(target, "{}".getBytes());
+      Path file = configured.resolve("a.json");
+      link(file, target);
+      AtomicInteger changes = new AtomicInteger();
+      try (FileDataWatcher watcher = FileDataWatcher.create(Collections.singletonList(file), testLogger)) {
+        watcher.start(changes::incrementAndGet);
+        awaitAtLeast(changes, 1);
+        Thread.sleep(QUIET_MILLIS);
+
+        Files.write(target, "{\"flagValues\":{}}".getBytes());
+        awaitAtLeast(changes, 2);
+        Thread.sleep(QUIET_MILLIS);
+        int afterEdit = changes.get();
+
+        // An unrelated file next to the target costs no reload.
+        Files.write(other.resolve("unrelated.json"), "{}".getBytes());
+        Thread.sleep(QUIET_MILLIS);
+        assertEquals(afterEdit, changes.get());
+      }
+    }
+  }
+
+  @Test
+  public void linkPointedAtAFileInAnotherDirectoryIsFollowedThere() throws Exception {
+    try (TempDir dir = TempDir.create()) {
+      Path configured = Files.createDirectory(dir.getPath().resolve("configured"));
+      Path first = Files.createDirectory(dir.getPath().resolve("first"));
+      Path second = Files.createDirectory(dir.getPath().resolve("second"));
+      Files.write(first.resolve("a.json"), "{}".getBytes());
+      Files.write(second.resolve("a.json"), "{\"flagValues\":{}}".getBytes());
+      Path file = configured.resolve("a.json");
+      link(file, first.resolve("a.json"));
+      AtomicInteger changes = new AtomicInteger();
+      try (FileDataWatcher watcher = FileDataWatcher.create(Collections.singletonList(file), testLogger)) {
+        watcher.start(changes::incrementAndGet);
+        awaitAtLeast(changes, 1);
+        Thread.sleep(QUIET_MILLIS);
+
+        swapLink(file, second.resolve("a.json"));
+        awaitAtLeast(changes, 2);
+        Thread.sleep(QUIET_MILLIS);
+        int afterSwap = changes.get();
+
+        // The new target's directory is watched now.
+        Files.write(second.resolve("a.json"), "{\"flagValues\":{\"f\":true}}".getBytes());
+        awaitAtLeast(changes, afterSwap + 1);
       }
     }
   }
