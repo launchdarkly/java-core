@@ -94,7 +94,8 @@ public class DefaultFDv2RequestorTest extends BaseTest {
 
     @Test
     public void emptySelectorOmitsBasisOnNextPoll() throws Exception {
-        try (HttpServer server = HttpServer.start(Handlers.bodyJson(VALID_EVENTS_JSON));
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.header("Connection", "close"), Handlers.bodyJson(VALID_EVENTS_JSON)));
              DefaultFDv2Requestor requestor = makeRequestor(server)) {
             requestor.Poll(Selector.make(1, "initial")).get(5, TimeUnit.SECONDS);
             assertThat(server.getRecorder().requireRequest().getQuery(), containsString("basis=initial"));

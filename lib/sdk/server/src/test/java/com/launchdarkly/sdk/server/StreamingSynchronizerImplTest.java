@@ -71,7 +71,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
     @Test
     public void emptySelectorSendsNoBasis() throws Exception {
         String intent = makeEvent("server-intent",
-            "{\"payloads\":[{\"id\":\"current\",\"target\":1,\"intentCode\":\"xfer-full\"}]}");
+            "{\"payloads\":[{\"id\":\"current\",\"target\":1,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
         String transferred = makeEvent("payload-transferred", "{\"state\":\"current\",\"version\":1}");
         try (HttpServer server = HttpServer.start(Handlers.all(
                 Handlers.SSE.start(), Handlers.SSE.event(intent), Handlers.SSE.event(transferred),
