@@ -2,9 +2,9 @@
   "lib/sdk/server-ai": "0.3.0",
   "lib/java-server-sdk-otel": "0.2.0",
   "lib/java-server-sdk-redis-store": "3.2.0",
-  "lib/java-server-sdk-dynamodb-store": "5.0.0",
+  "lib/java-server-sdk-dynamodb-store": "5.0.1",
   "lib/shared/common": "2.5.0",
   "lib/shared/internal": "1.12.2",
   "lib/shared/test-helpers": "2.1.0",
-  "lib/sdk/server": "7.17.5"
+  "lib/sdk/server": "7.18.0"
 }

@@ -2,6 +2,20 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.18.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.5...launchdarkly-java-server-sdk-7.18.0) (2026-11-12)
+
+
+### Features
+
+* Apply RETRY to FDv2 synchronizer orchestration ([#252](https://github.com/launchdarkly/java-core/issues/252)) ([6a4aac5](https://github.com/launchdarkly/java-core/commit/6a4aac5ee5f9c2bed72c3676b05f0c0237a6ad86))
+
+
+### Bug Fixes
+
+* Include the big segments status on evaluation reasons when a flag fails to evaluate ([#258](https://github.com/launchdarkly/java-core/issues/258)) ([ce08ae8](https://github.com/launchdarkly/java-core/commit/ce08ae844539c1fbe66de4545d67df4c5a300589))
+* Make TestData valueForAll return its value when targeting is off ([#251](https://github.com/launchdarkly/java-core/issues/251)) ([db17ab9](https://github.com/launchdarkly/java-core/commit/db17ab99608282e959286897ef81a0e9263849fa))
+* Measure synchronizer deadlines with a monotonic clock ([#253](https://github.com/launchdarkly/java-core/issues/253)) ([3c7da2c](https://github.com/launchdarkly/java-core/commit/3c7da2c12d5ab03292ecfa4ad7a59f87d02de34f))
+
 ## [7.17.5](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.4...launchdarkly-java-server-sdk-7.17.5) (2026-11-03)
 
 
