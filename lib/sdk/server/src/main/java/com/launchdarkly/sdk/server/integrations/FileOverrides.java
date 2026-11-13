@@ -95,7 +95,9 @@ public abstract class FileOverrides {
    * {@link com.launchdarkly.sdk.server.LDClient#allFlagsState} with
    * {@link com.launchdarkly.sdk.server.FlagsStateOption#CLIENT_SIDE_ONLY} leaves it out, even when
    * the flag it overrides is available to them. To override such a flag, define it in
-   * {@code "flags"} with {@code "clientSide": true}.
+   * {@code "flags"} with {@code "clientSide": true}. A flag or segment is listed under its key: a
+   * {@code "key"} property inside the definition is optional, and the key it is listed under is the
+   * one that is used.
    * When multiple files are configured, their entries are combined in the configured order, and
    * the duplicate keys handling decides which file wins for a key that appears more than once.
    * <p>

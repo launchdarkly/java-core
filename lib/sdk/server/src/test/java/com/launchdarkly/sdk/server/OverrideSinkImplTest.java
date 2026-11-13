@@ -299,4 +299,22 @@ public class OverrideSinkImplTest {
     assertNull(layer.get(DataModel.FEATURES, "b"));
     assertRejectedSnapshotLogged("flag", "gone");
   }
+
+  @Test
+  public void snapshotThatListsAFlagUnderAnotherKeyIsRejected() throws Exception {
+    listen();
+    sink.setOverrides(flagsOnly(flagBuilder("a").version(1).build()));
+    assertEquals(keys("a"), awaitKeys(1));
+    ItemDescriptor before = layer.get(DataModel.FEATURES, "a");
+
+    sink.setOverrides(withItem(flagsOnly(flagBuilder("a").version(2).build()), DataModel.FEATURES, "b",
+        new ItemDescriptor(1, flagBuilder("c").version(1).build())));
+
+    assertSame(before, layer.get(DataModel.FEATURES, "a"));
+    assertNull(layer.get(DataModel.FEATURES, "b"));
+    assertNoMoreEvents();
+    assertTrue(logCapture.getMessageStrings().toString(), logCapture.getMessageStrings().contains(
+        "ERROR:Rejected an override snapshot because flag \"b\" has the key \"c\"; the key of each definition"
+        + " must be its key in the snapshot; the overrides in effect are unchanged"));
+  }
 }

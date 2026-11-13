@@ -2,6 +2,8 @@ package com.launchdarkly.sdk.server.integrations;
 
 import com.google.common.collect.ImmutableList;
 import com.launchdarkly.sdk.LDValue;
+import com.launchdarkly.sdk.LDValueType;
+import com.launchdarkly.sdk.ObjectBuilder;
 import com.launchdarkly.sdk.server.integrations.FileDataReloader.EmptiedFileException;
 import com.launchdarkly.sdk.server.integrations.FileDataSourceParsing.FileDataException;
 import com.launchdarkly.sdk.server.integrations.FileDataSourceParsing.FlagFactory;
@@ -427,7 +429,7 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
     try {
       if (document.flags != null) {
         for (Map.Entry<String, LDValue> e : document.flags.entrySet()) {
-          ItemDescriptor flag = notDeleted("flag", e.getKey(), FlagFactory.flagFromJson(e.getValue()));
+          ItemDescriptor flag = notDeleted("flag", e.getKey(), FlagFactory.flagFromJson(keyedBy(e.getKey(), e.getValue())));
           if (add(data, FEATURES, e.getKey(), flag)) {
             flagsAdded++;
           }
@@ -442,7 +444,8 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
       }
       if (document.segments != null) {
         for (Map.Entry<String, LDValue> e : document.segments.entrySet()) {
-          ItemDescriptor segment = notDeleted("segment", e.getKey(), FlagFactory.segmentFromJson(e.getValue()));
+          ItemDescriptor segment = notDeleted("segment", e.getKey(),
+              FlagFactory.segmentFromJson(keyedBy(e.getKey(), e.getValue())));
           if (add(data, SEGMENTS, e.getKey(), segment)) {
             segmentsAdded++;
           }
@@ -457,6 +460,25 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
       throw new FileDataException("file " + path + ": cannot parse flag or segment data", e);
     }
     return new int[] { flagsAdded, segmentsAdded };
+  }
+
+  // A flag or segment entry is keyed by the key it is listed under, as the other SDKs' override
+  // sources key it: a key property inside the entry is set to that key. Evaluation reads an entry by
+  // the key it is listed under, while the all flags state and events report the definition's own key,
+  // so an entry pasted under a new key with its old key property would otherwise be served under one
+  // key and reported under the other, and an entry without a key property would have no key. An entry
+  // that is not an object is left as it is, so that it fails to parse.
+  private static LDValue keyedBy(String key, LDValue entry) {
+    if (entry.getType() != LDValueType.OBJECT) {
+      return entry;
+    }
+    ObjectBuilder builder = LDValue.buildObject();
+    for (String property : entry.keys()) {
+      if (!property.equals("key")) {
+        builder.put(property, entry.get(property));
+      }
+    }
+    return builder.put("key", key).build();
   }
 
   // A definition marked as deleted deserializes to a deleted item placeholder. In an override file it

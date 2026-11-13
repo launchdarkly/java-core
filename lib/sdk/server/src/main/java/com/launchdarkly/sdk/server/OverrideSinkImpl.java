@@ -62,8 +62,9 @@ final class OverrideSinkImpl implements OverrideSink {
    * merged-view evaluation may have changed. Calls are serialized, so overlapping updates from a
    * source cannot interleave.
    * <p>
-   * A snapshot that contains a deleted item is rejected as a whole: the error is logged, the layer
-   * keeps its contents, and no listener is notified.
+   * A snapshot that contains a deleted item, or a flag or segment listed under a key other than its
+   * own, is rejected as a whole: the error is logged, the layer keeps its contents, and no listener
+   * is notified.
    */
   @Override
   public synchronized void setOverrides(Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data) {
@@ -73,7 +74,7 @@ final class OverrideSinkImpl implements OverrideSink {
     }
     try {
       apply(data);
-    } catch (OverrideLayer.DeletedItemException e) {
+    } catch (OverrideLayer.RejectedItemException e) {
       logger.error("Rejected an override snapshot because {}; the overrides in effect are unchanged",
           e.getMessage());
     }

@@ -9,6 +9,7 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -54,25 +55,52 @@ final class OverrideLayer implements DataModelDependencies.ExternalDependencies 
   private volatile DataModelDependencies.DependencyTracker dependencies = new DataModelDependencies.DependencyTracker();
 
   /**
-   * Thrown by {@link OverrideLayer#setAll(Iterable)} when the data contains a deleted item. The layer
-   * never holds one, so the data is rejected as a whole and the layer is unchanged.
+   * Thrown by {@link OverrideLayer#setAll(Iterable)} when the data contains an item that the layer
+   * cannot hold. The data is rejected as a whole and the layer is unchanged.
    */
-  static final class DeletedItemException extends IllegalArgumentException {
+  static class RejectedItemException extends IllegalArgumentException {
+    private static final long serialVersionUID = 1L;
+
+    RejectedItemException(String message) {
+      super(message);
+    }
+  }
+
+  /**
+   * Thrown when the data contains a deleted item. The layer never holds one.
+   */
+  static final class DeletedItemException extends RejectedItemException {
     private static final long serialVersionUID = 1L;
 
     DeletedItemException(DataKind kind, String key) {
       super(describeKind(kind) + " \"" + key + "\" is marked as deleted");
     }
+  }
 
-    private static String describeKind(DataKind kind) {
-      if (kind == DataModel.FEATURES) {
-        return "flag";
-      }
-      if (kind == DataModel.SEGMENTS) {
-        return "segment";
-      }
-      return "item of kind " + (kind == null ? "null" : kind.getName());
+  /**
+   * Thrown when the data lists a flag or segment under a key other than the definition's own key.
+   * Evaluation reads an entry by the key it is listed under, while the all flags state and events
+   * report the definition's key, so such an entry would be served under one key and reported under
+   * the other.
+   */
+  static final class MismatchedKeyException extends RejectedItemException {
+    private static final long serialVersionUID = 1L;
+
+    MismatchedKeyException(DataKind kind, String key, String definitionKey) {
+      super(describeKind(kind) + " \"" + key + "\" has the key "
+          + (definitionKey == null ? "null" : "\"" + definitionKey + "\"")
+          + "; the key of each definition must be its key in the snapshot");
     }
+  }
+
+  private static String describeKind(DataKind kind) {
+    if (kind == DataModel.FEATURES) {
+      return "flag";
+    }
+    if (kind == DataModel.SEGMENTS) {
+      return "segment";
+    }
+    return "item of kind " + (kind == null ? "null" : kind.getName());
   }
 
   /**
@@ -80,7 +108,8 @@ final class OverrideLayer implements DataModelDependencies.ExternalDependencies 
    *
    * @param data the complete set of entries, grouped by data kind
    * @return the previous and the new contents
-   * @throws DeletedItemException if the data contains a deleted item; the layer is unchanged
+   * @throws RejectedItemException if the data contains a deleted item, or a flag or segment listed
+   *     under a key other than its own; the layer is unchanged
    */
   Replacement setAll(Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data) {
     Map<DataKind, Map<String, ItemDescriptor>> collected = new HashMap<>();
@@ -99,6 +128,12 @@ final class OverrideLayer implements DataModelDependencies.ExternalDependencies 
           // it was.
           if (isDeleted(item.getValue())) {
             throw new DeletedItemException(kindEntry.getKey(), item.getKey());
+          }
+          Object entity = item.getValue() == null ? null : item.getValue().getItem();
+          if (entity instanceof DataModel.VersionedData
+              && !Objects.equals(((DataModel.VersionedData) entity).getKey(), item.getKey())) {
+            throw new MismatchedKeyException(kindEntry.getKey(), item.getKey(),
+                ((DataModel.VersionedData) entity).getKey());
           }
           ItemDescriptor copied = markedCopy(item.getValue());
           items.put(item.getKey(), copied);

@@ -230,4 +230,39 @@ public class OverrideLayerTest {
     assertEquals(items(new KindAndKey(SEGMENTS, "seg")), affectedFrom(layer, SEGMENTS, "seg"));
     assertEquals(items(new KindAndKey(SEGMENTS, "seg2"), new KindAndKey(FEATURES, "c")), affectedFrom(layer, SEGMENTS, "seg2"));
   }
+
+  private static void assertKeyRejected(OverrideLayer layer,
+      Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data, String expectedMessage) {
+    try {
+      layer.setAll(data);
+      fail("expected the replacement to be rejected");
+    } catch (OverrideLayer.MismatchedKeyException e) {
+      assertEquals(expectedMessage, e.getMessage());
+    }
+  }
+
+  @Test
+  public void replacementThatListsAnItemUnderAnotherKeyIsRejectedAndTheLayerIsUnchanged() {
+    OverrideLayer layer = new OverrideLayer();
+    layer.setAll(flagsOnly(flagBuilder("kept").version(1).build()));
+    ItemDescriptor before = layer.get(FEATURES, "kept");
+
+    Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> otherEntries =
+        flagsOnly(flagBuilder("kept").version(2).build(), flagBuilder("added").build());
+    assertKeyRejected(layer, withItem(otherEntries, FEATURES, "a",
+        new ItemDescriptor(1, flagBuilder("b").version(1).build())),
+        "flag \"a\" has the key \"b\"; the key of each definition must be its key in the snapshot");
+    assertKeyRejected(layer, withItem(otherEntries, SEGMENTS, "s",
+        new ItemDescriptor(1, segmentBuilder("t").version(1).build())),
+        "segment \"s\" has the key \"t\"; the key of each definition must be its key in the snapshot");
+    // A definition deserialized without a key property has none.
+    assertKeyRejected(layer, withItem(otherEntries, FEATURES, "a", FEATURES.deserialize("{\"version\":1}")),
+        "flag \"a\" has the key null; the key of each definition must be its key in the snapshot");
+
+    assertSame(before, layer.get(FEATURES, "kept"));
+    assertNull(layer.get(FEATURES, "added"));
+    assertNull(layer.get(FEATURES, "a"));
+    assertNull(layer.get(SEGMENTS, "s"));
+    assertEquals(1, layer.all(FEATURES).size());
+  }
 }

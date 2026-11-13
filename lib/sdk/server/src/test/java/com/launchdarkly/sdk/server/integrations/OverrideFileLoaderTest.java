@@ -1573,4 +1573,27 @@ public class OverrideFileLoaderTest {
       }
     }
   }
+
+  @Test
+  public void entryIsKeyedByTheKeyItIsListedUnder() throws Exception {
+    // A key property is optional, and one that names another key is replaced: evaluation reads the
+    // entry by the key it is listed under, so the definition must carry that key too.
+    try (TempDir dir = TempDir.create()) {
+      Path json = write(dir, "overrides.json", "{"
+          + "\"flags\":{\"no-key\":{\"on\":true,\"variations\":[true],\"fallthrough\":{\"variation\":0}},"
+          + "\"other-key\":{\"key\":\"pasted\",\"version\":4,\"on\":true,\"variations\":[true],\"fallthrough\":{\"variation\":0}}},"
+          + "\"segments\":{\"seg\":{\"key\":\"old-seg\",\"version\":2}}}");
+      Path yaml = write(dir, "overrides.yaml", "flags:\n  from-yaml:\n    key: elsewhere\n    on: true\n"
+          + "    variations: [true]\n    fallthrough:\n      variation: 0\n");
+      Map<DataKind, Map<String, ItemDescriptor>> data = toMap(loader(json, yaml).load(Duration.ZERO));
+
+      assertEquals(LDValue.of("no-key"), json(FEATURES, data.get(FEATURES).get("no-key")).get("key"));
+      LDValue pasted = json(FEATURES, data.get(FEATURES).get("other-key"));
+      assertEquals(LDValue.of("other-key"), pasted.get("key"));
+      assertEquals(LDValue.of(4), pasted.get("version"));
+      assertNull(data.get(FEATURES).get("pasted"));
+      assertEquals(LDValue.of("from-yaml"), json(FEATURES, data.get(FEATURES).get("from-yaml")).get("key"));
+      assertEquals(LDValue.of("seg"), json(SEGMENTS, data.get(SEGMENTS).get("seg")).get("key"));
+    }
+  }
 }
