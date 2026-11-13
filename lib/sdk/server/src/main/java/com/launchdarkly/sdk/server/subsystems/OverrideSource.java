@@ -16,7 +16,8 @@ import java.io.Closeable;
  * {@link com.launchdarkly.sdk.server.integrations.DataSystemBuilder#overrides(ComponentConfigurer)}.
  * The SDK closes the source when the client is closed. An exception thrown from {@link #close()} is
  * logged and does not stop the client from shutting down. A snapshot that the source supplies after
- * the client begins to close it is ignored.
+ * the client begins to close it is ignored. The SDK provides a file-based source; see
+ * {@link com.launchdarkly.sdk.server.integrations.FileOverrides}.
  * <p>
  * Flag overrides are currently experimental and subject to change.
  *
