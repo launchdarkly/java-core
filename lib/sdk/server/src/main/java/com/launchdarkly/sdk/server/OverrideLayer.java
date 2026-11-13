@@ -9,6 +9,7 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -19,6 +20,9 @@ import java.util.Set;
  * Each entry is a marked shallow copy of the entity that the source supplied. The copy shares its
  * nested collections with the source's entity, and the layer never writes to them. The source's
  * entity is never marked, so a source may retain the entities it supplied and supply them again.
+ * <p>
+ * The layer never holds a deleted item. Serving one would hide the LaunchDarkly data for its key,
+ * but an override only adds or replaces definitions, so a replacement that contains one is rejected.
  * <p>
  * This class is package-private and should not be used by application code.
  */
@@ -51,10 +55,61 @@ final class OverrideLayer implements DataModelDependencies.ExternalDependencies 
   private volatile DataModelDependencies.DependencyTracker dependencies = new DataModelDependencies.DependencyTracker();
 
   /**
+   * Thrown by {@link OverrideLayer#setAll(Iterable)} when the data contains an item that the layer
+   * cannot hold. The data is rejected as a whole and the layer is unchanged.
+   */
+  static class RejectedItemException extends IllegalArgumentException {
+    private static final long serialVersionUID = 1L;
+
+    RejectedItemException(String message) {
+      super(message);
+    }
+  }
+
+  /**
+   * Thrown when the data contains a deleted item. The layer never holds one.
+   */
+  static final class DeletedItemException extends RejectedItemException {
+    private static final long serialVersionUID = 1L;
+
+    DeletedItemException(DataKind kind, String key) {
+      super(describeKind(kind) + " \"" + key + "\" is marked as deleted");
+    }
+  }
+
+  /**
+   * Thrown when the data lists a flag or segment under a key other than the definition's own key.
+   * Evaluation reads an entry by the key it is listed under, while the all flags state and events
+   * report the definition's key, so such an entry would be served under one key and reported under
+   * the other.
+   */
+  static final class MismatchedKeyException extends RejectedItemException {
+    private static final long serialVersionUID = 1L;
+
+    MismatchedKeyException(DataKind kind, String key, String definitionKey) {
+      super(describeKind(kind) + " \"" + key + "\" has the key "
+          + (definitionKey == null ? "null" : "\"" + definitionKey + "\"")
+          + "; the key of each definition must be its key in the snapshot");
+    }
+  }
+
+  private static String describeKind(DataKind kind) {
+    if (kind == DataModel.FEATURES) {
+      return "flag";
+    }
+    if (kind == DataModel.SEGMENTS) {
+      return "segment";
+    }
+    return "item of kind " + (kind == null ? "null" : kind.getName());
+  }
+
+  /**
    * Atomically replaces the entire layer contents. A null or empty collection clears the layer.
    *
    * @param data the complete set of entries, grouped by data kind
    * @return the previous and the new contents
+   * @throws RejectedItemException if the data contains a deleted item, or a flag or segment listed
+   *     under a key other than its own; the layer is unchanged
    */
   Replacement setAll(Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data) {
     Map<DataKind, Map<String, ItemDescriptor>> collected = new HashMap<>();
@@ -69,6 +124,17 @@ final class OverrideLayer implements DataModelDependencies.ExternalDependencies 
           continue;
         }
         for (Map.Entry<String, ItemDescriptor> item : kindItems) {
+          // Nothing is swapped in until every entry is collected, so a rejection leaves the layer as
+          // it was.
+          if (isDeleted(item.getValue())) {
+            throw new DeletedItemException(kindEntry.getKey(), item.getKey());
+          }
+          Object entity = item.getValue() == null ? null : item.getValue().getItem();
+          if (entity instanceof DataModel.VersionedData
+              && !Objects.equals(((DataModel.VersionedData) entity).getKey(), item.getKey())) {
+            throw new MismatchedKeyException(kindEntry.getKey(), item.getKey(),
+                ((DataModel.VersionedData) entity).getKey());
+          }
           ItemDescriptor copied = markedCopy(item.getValue());
           items.put(item.getKey(), copied);
           tracker.updateDependenciesFrom(kindEntry.getKey(), item.getKey(), copied);
@@ -137,8 +203,20 @@ final class OverrideLayer implements DataModelDependencies.ExternalDependencies 
     return !nonEmpty;
   }
 
+  // Reports whether a descriptor is a deleted item: the placeholder with no item, which
+  // DataKind.deserialize produces for a definition marked as deleted, or a flag or segment that is
+  // marked as deleted.
+  private static boolean isDeleted(ItemDescriptor item) {
+    if (item == null) {
+      return false;
+    }
+    Object entity = item.getItem();
+    return entity == null
+        || (entity instanceof DataModel.VersionedData && ((DataModel.VersionedData) entity).isDeleted());
+  }
+
   // Returns a copy of the descriptor whose item carries the override marker. An item of another
-  // type, or a deleted item placeholder, is returned as is.
+  // type is returned as is.
   static ItemDescriptor markedCopy(ItemDescriptor item) {
     Object entity = item.getItem();
     if (entity instanceof FeatureFlag) {

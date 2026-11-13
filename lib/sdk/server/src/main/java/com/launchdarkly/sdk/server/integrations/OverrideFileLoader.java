@@ -2,6 +2,8 @@ package com.launchdarkly.sdk.server.integrations;
 
 import com.google.common.collect.ImmutableList;
 import com.launchdarkly.sdk.LDValue;
+import com.launchdarkly.sdk.LDValueType;
+import com.launchdarkly.sdk.ObjectBuilder;
 import com.launchdarkly.sdk.server.integrations.FileDataReloader.EmptiedFileException;
 import com.launchdarkly.sdk.server.integrations.FileDataSourceParsing.FileDataException;
 import com.launchdarkly.sdk.server.integrations.FileDataSourceParsing.FlagFactory;
@@ -40,8 +42,9 @@ import static com.launchdarkly.sdk.server.DataModel.SEGMENTS;
  * This loader is separate from the file data source's loader because the override source has
  * different rules: a configured file that does not exist contributes no entries, entries keep the
  * versions that the documents specify, a value-only entry becomes a flag that is on and serves the
- * value by fallthrough, the format of a file is chosen by its extension, and every failure to read or
- * parse a file is reported as a file data error. The file data source keeps its own behavior.
+ * value by fallthrough, the format of a file is chosen by its extension, a flag or segment entry that
+ * is marked as deleted fails the load, and every failure to read or parse a file is reported as a file
+ * data error. The file data source keeps its own behavior.
  * <p>
  * Whether a file with no content is valid depends on its format, like the rest of its content. A JSON
  * file with no content is not a JSON document, so it fails to parse. A YAML file with no content is a
@@ -426,7 +429,8 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
     try {
       if (document.flags != null) {
         for (Map.Entry<String, LDValue> e : document.flags.entrySet()) {
-          if (add(data, FEATURES, e.getKey(), FlagFactory.flagFromJson(e.getValue()))) {
+          ItemDescriptor flag = notDeleted("flag", e.getKey(), FlagFactory.flagFromJson(keyedBy(e.getKey(), e.getValue())));
+          if (add(data, FEATURES, e.getKey(), flag)) {
             flagsAdded++;
           }
         }
@@ -440,7 +444,9 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
       }
       if (document.segments != null) {
         for (Map.Entry<String, LDValue> e : document.segments.entrySet()) {
-          if (add(data, SEGMENTS, e.getKey(), FlagFactory.segmentFromJson(e.getValue()))) {
+          ItemDescriptor segment = notDeleted("segment", e.getKey(),
+              FlagFactory.segmentFromJson(keyedBy(e.getKey(), e.getValue())));
+          if (add(data, SEGMENTS, e.getKey(), segment)) {
             segmentsAdded++;
           }
         }
@@ -454,6 +460,37 @@ final class OverrideFileLoader implements FileDataReloader.Loader {
       throw new FileDataException("file " + path + ": cannot parse flag or segment data", e);
     }
     return new int[] { flagsAdded, segmentsAdded };
+  }
+
+  // A flag or segment entry is keyed by the key it is listed under, as the other SDKs' override
+  // sources key it: a key property inside the entry is set to that key. Evaluation reads an entry by
+  // the key it is listed under, while the all flags state and events report the definition's own key,
+  // so an entry pasted under a new key with its old key property would otherwise be served under one
+  // key and reported under the other, and an entry without a key property would have no key. An entry
+  // that is not an object is left as it is, so that it fails to parse.
+  private static LDValue keyedBy(String key, LDValue entry) {
+    if (entry.getType() != LDValueType.OBJECT) {
+      return entry;
+    }
+    ObjectBuilder builder = LDValue.buildObject();
+    for (String property : entry.keys()) {
+      if (!property.equals("key")) {
+        builder.put(property, entry.get(property));
+      }
+    }
+    return builder.put("key", key).build();
+  }
+
+  // A definition marked as deleted deserializes to a deleted item placeholder. In an override file it
+  // is a mistake, not a way to remove an override, which is done by removing the entry, so it fails the
+  // load like a file that cannot be parsed. It fails even when the duplicate keys handling would drop
+  // the entry, because the file still needs correcting. The file data source keeps accepting it.
+  private static ItemDescriptor notDeleted(String kind, String key, ItemDescriptor item) throws FileDataException {
+    if (item.getItem() == null) {
+      throw new FileDataException(kind + " \"" + key + "\" is marked as deleted; remove the entry to remove its override",
+          null);
+    }
+    return item;
   }
 
   /**

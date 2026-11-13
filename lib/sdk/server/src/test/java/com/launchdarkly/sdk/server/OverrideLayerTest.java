@@ -31,6 +31,7 @@ import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 @SuppressWarnings("javadoc")
 public class OverrideLayerTest {
@@ -119,13 +120,64 @@ public class OverrideLayerTest {
     assertTrue(layer.isEmpty());
   }
 
+  static Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> withItem(
+      Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data, DataKind kind, String key, ItemDescriptor item) {
+    List<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> result = new ArrayList<>();
+    for (Map.Entry<DataKind, KeyedItems<ItemDescriptor>> e : data) {
+      result.add(e);
+    }
+    result.add(new AbstractMap.SimpleEntry<>(kind,
+        new KeyedItems<>(Collections.singletonList(new AbstractMap.SimpleEntry<>(key, item)))));
+    return result;
+  }
+
+  private static void assertRejected(OverrideLayer layer,
+      Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data, String expectedMessage) {
+    try {
+      layer.setAll(data);
+      fail("expected the replacement to be rejected");
+    } catch (OverrideLayer.DeletedItemException e) {
+      assertEquals(expectedMessage, e.getMessage());
+    }
+  }
+
   @Test
-  public void deletedPlaceholderIsStoredAsIs() {
+  public void replacementThatContainsADeletedItemIsRejectedAndTheLayerIsUnchanged() {
     OverrideLayer layer = new OverrideLayer();
-    ItemDescriptor deleted = ItemDescriptor.deletedItem(5);
-    layer.setAll(Collections.singletonList(new AbstractMap.SimpleEntry<>(FEATURES,
-        new KeyedItems<>(Collections.singletonList(new AbstractMap.SimpleEntry<>("gone", deleted))))));
-    assertSame(deleted, layer.get(FEATURES, "gone"));
+    layer.setAll(flagsOnly(flagBuilder("kept").version(1).build()));
+    ItemDescriptor before = layer.get(FEATURES, "kept");
+
+    Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> otherEntries =
+        flagsOnly(flagBuilder("kept").version(2).build(), flagBuilder("added").build());
+    // The placeholder that DataKind.deserialize produces for a definition marked as deleted.
+    assertRejected(layer, withItem(otherEntries, FEATURES, "gone",
+        FEATURES.deserialize("{\"key\":\"gone\",\"version\":3,\"deleted\":true}")),
+        "flag \"gone\" is marked as deleted");
+    assertRejected(layer, withItem(otherEntries, SEGMENTS, "gone-segment",
+        SEGMENTS.deserialize("{\"key\":\"gone-segment\",\"version\":3,\"deleted\":true}")),
+        "segment \"gone-segment\" is marked as deleted");
+    // A model object that is marked as deleted.
+    assertRejected(layer, withItem(otherEntries, FEATURES, "gone",
+        new ItemDescriptor(3, flagBuilder("gone").version(3).deleted(true).build())),
+        "flag \"gone\" is marked as deleted");
+    assertRejected(layer, withItem(otherEntries, SEGMENTS, "gone-segment",
+        new ItemDescriptor(3, segmentBuilder("gone-segment").version(3).deleted(true).build())),
+        "segment \"gone-segment\" is marked as deleted");
+
+    assertSame(before, layer.get(FEATURES, "kept"));
+    assertNull(layer.get(FEATURES, "added"));
+    assertNull(layer.get(FEATURES, "gone"));
+    assertNull(layer.get(SEGMENTS, "gone-segment"));
+    assertEquals(1, layer.all(FEATURES).size());
+    assertTrue(layer.all(SEGMENTS).isEmpty());
+  }
+
+  @Test
+  public void definitionWithDeletedFalseIsStored() {
+    OverrideLayer layer = new OverrideLayer();
+    layer.setAll(withItem(flagsOnly(), FEATURES, "f",
+        FEATURES.deserialize("{\"key\":\"f\",\"version\":1,\"deleted\":false}")));
+    assertTrue(((FeatureFlag) layer.get(FEATURES, "f").getItem()).isOverride());
   }
 
   @Test
@@ -177,5 +229,40 @@ public class OverrideLayerTest {
 
     assertEquals(items(new KindAndKey(SEGMENTS, "seg")), affectedFrom(layer, SEGMENTS, "seg"));
     assertEquals(items(new KindAndKey(SEGMENTS, "seg2"), new KindAndKey(FEATURES, "c")), affectedFrom(layer, SEGMENTS, "seg2"));
+  }
+
+  private static void assertKeyRejected(OverrideLayer layer,
+      Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data, String expectedMessage) {
+    try {
+      layer.setAll(data);
+      fail("expected the replacement to be rejected");
+    } catch (OverrideLayer.MismatchedKeyException e) {
+      assertEquals(expectedMessage, e.getMessage());
+    }
+  }
+
+  @Test
+  public void replacementThatListsAnItemUnderAnotherKeyIsRejectedAndTheLayerIsUnchanged() {
+    OverrideLayer layer = new OverrideLayer();
+    layer.setAll(flagsOnly(flagBuilder("kept").version(1).build()));
+    ItemDescriptor before = layer.get(FEATURES, "kept");
+
+    Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> otherEntries =
+        flagsOnly(flagBuilder("kept").version(2).build(), flagBuilder("added").build());
+    assertKeyRejected(layer, withItem(otherEntries, FEATURES, "a",
+        new ItemDescriptor(1, flagBuilder("b").version(1).build())),
+        "flag \"a\" has the key \"b\"; the key of each definition must be its key in the snapshot");
+    assertKeyRejected(layer, withItem(otherEntries, SEGMENTS, "s",
+        new ItemDescriptor(1, segmentBuilder("t").version(1).build())),
+        "segment \"s\" has the key \"t\"; the key of each definition must be its key in the snapshot");
+    // A definition deserialized without a key property has none.
+    assertKeyRejected(layer, withItem(otherEntries, FEATURES, "a", FEATURES.deserialize("{\"version\":1}")),
+        "flag \"a\" has the key null; the key of each definition must be its key in the snapshot");
+
+    assertSame(before, layer.get(FEATURES, "kept"));
+    assertNull(layer.get(FEATURES, "added"));
+    assertNull(layer.get(FEATURES, "a"));
+    assertNull(layer.get(SEGMENTS, "s"));
+    assertEquals(1, layer.all(FEATURES).size());
   }
 }

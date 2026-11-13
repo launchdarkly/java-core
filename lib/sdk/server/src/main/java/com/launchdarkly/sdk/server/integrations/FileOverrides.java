@@ -95,7 +95,9 @@ public abstract class FileOverrides {
    * {@link com.launchdarkly.sdk.server.LDClient#allFlagsState} with
    * {@link com.launchdarkly.sdk.server.FlagsStateOption#CLIENT_SIDE_ONLY} leaves it out, even when
    * the flag it overrides is available to them. To override such a flag, define it in
-   * {@code "flags"} with {@code "clientSide": true}.
+   * {@code "flags"} with {@code "clientSide": true}. A flag or segment is listed under its key: a
+   * {@code "key"} property inside the definition is optional, and the key it is listed under is the
+   * one that is used.
    * When multiple files are configured, their entries are combined in the configured order, and
    * the duplicate keys handling decides which file wins for a key that appears more than once.
    * <p>
@@ -103,7 +105,8 @@ public abstract class FileOverrides {
    * override. A configured file that does not exist contributes no overrides, so deleting every file
    * removes them all. A file that exists but cannot be read or parsed makes the reload fail: the
    * overrides in effect stay, the source logs the failure, and it recovers on its own once the file
-   * can be read again.
+   * can be read again. A file that contains an entry marked as deleted fails to load in the same way;
+   * to remove an override, remove its entry or delete the file.
    * <p>
    * Files can be rewritten in place: if the source finds a file empty while it is being rewritten, it
    * keeps the overrides in effect until the new content is written. To remove a file's overrides,

@@ -32,6 +32,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -189,6 +190,27 @@ public class LDClientOverridesTest extends BaseTest {
         FeatureFlagsState clientSide = client.allFlagsState(CONTEXT, FlagsStateOption.CLIENT_SIDE_ONLY);
         assertTrue(clientSide.isValid());
         assertEquals(Collections.singletonMap("full-flag", LDValue.of(true)), clientSide.toValuesMap());
+      }
+    }
+  }
+
+  @Test
+  public void fileEntryIsServedAndReportedUnderTheKeyItIsListedUnder() throws Exception {
+    // One entry has no key property and one has the key of the entry it was copied from. Both are
+    // evaluated, and reported in the all flags state, under the keys they are listed under.
+    try (TempDir dir = TempDir.create()) {
+      Path file = dir.getPath().resolve("overrides.json");
+      Files.write(file, ("{\"flags\": {"
+          + "\"no-key\": {\"on\": true, \"variations\": [\"a\"], \"fallthrough\": {\"variation\": 0}},"
+          + "\"copied\": {\"key\": \"original\", \"on\": true, \"variations\": [\"b\"], \"fallthrough\": {\"variation\": 0}}"
+          + "}}").getBytes(StandardCharsets.UTF_8));
+      try (LDClient client = new LDClient(SDK_KEY, uninitializedConfig(FileOverrides.source().filePaths(file)))) {
+        assertEquals("a", client.stringVariation("no-key", CONTEXT, "default"));
+        assertEquals("b", client.stringVariation("copied", CONTEXT, "default"));
+        Map<String, LDValue> values = new HashMap<>();
+        values.put("no-key", LDValue.of("a"));
+        values.put("copied", LDValue.of("b"));
+        assertEquals(values, client.allFlagsState(CONTEXT).toValuesMap());
       }
     }
   }

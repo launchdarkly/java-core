@@ -36,6 +36,7 @@ import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -198,6 +199,74 @@ public class OverrideFileLoaderTest {
         assertThat(e.getMessage(), containsString("cannot parse flag or segment data"));
         assertThat(e.getCause(), instanceOf(SerializationException.class));
       }
+    }
+  }
+
+  private static void assertMarkedAsDeleted(OverrideFileLoader loader, Path file, String kind, String key)
+      throws Exception {
+    try {
+      loader.load(Duration.ZERO);
+      fail("expected exception");
+    } catch (FileDataException e) {
+      assertEquals("file " + file + ": " + kind + " \"" + key
+          + "\" is marked as deleted; remove the entry to remove its override", e.getMessage());
+      assertNull(e.getCause());
+    }
+  }
+
+  @Test
+  public void flagMarkedAsDeletedFailsTheLoad() throws Exception {
+    try (TempDir dir = TempDir.create()) {
+      Path good = write(dir, "good.json", "{\"flagValues\":{\"a\":1}}");
+      Path file = write(dir, "overrides.json", "{\"flagValues\":{\"b\":2},"
+          + "\"flags\":{\"f\":{\"key\":\"f\",\"version\":1,\"deleted\":true}}}");
+      assertMarkedAsDeleted(loader(good, file), file, "flag", "f");
+
+      Path yaml = write(dir, "overrides.yaml", "flags:\n  f:\n    key: f\n    version: 1\n    deleted: true\n");
+      assertMarkedAsDeleted(loader(yaml), yaml, "flag", "f");
+    }
+  }
+
+  @Test
+  public void segmentMarkedAsDeletedFailsTheLoad() throws Exception {
+    try (TempDir dir = TempDir.create()) {
+      Path file = write(dir, "overrides.json", "{\"flagValues\":{\"b\":2},"
+          + "\"segments\":{\"s\":{\"key\":\"s\",\"version\":1,\"deleted\":true}}}");
+      assertMarkedAsDeleted(loader(file), file, "segment", "s");
+
+      Path yaml = write(dir, "overrides.yaml", "segments:\n  s:\n    key: s\n    deleted: true\n");
+      assertMarkedAsDeleted(loader(yaml), yaml, "segment", "s");
+    }
+  }
+
+  @Test
+  public void entryMarkedAsDeletedFailsTheLoadEvenWhenItIsADroppedDuplicate() throws Exception {
+    // The duplicate keys handling would drop the entry, but the file still needs correcting.
+    try (TempDir dir = TempDir.create()) {
+      Path first = write(dir, "first.json", "{\"flags\":{\"f\":{\"key\":\"f\",\"version\":1}}}");
+      Path second = write(dir, "second.json", "{\"flags\":{\"f\":{\"key\":\"f\",\"version\":2,\"deleted\":true}}}");
+      assertMarkedAsDeleted(new OverrideFileLoader(Arrays.asList(first, second), FileData.DuplicateKeysHandling.IGNORE),
+          second, "flag", "f");
+    }
+  }
+
+  @Test
+  public void entriesWithDeletedFalseAreOrdinaryDefinitions() throws Exception {
+    try (TempDir dir = TempDir.create()) {
+      Path file = write(dir, "overrides.json",
+          "{\"flags\":{\"f\":{\"key\":\"f\",\"version\":4,\"on\":true,\"variations\":[\"x\"],"
+          + "\"fallthrough\":{\"variation\":0},\"deleted\":false}},"
+          + "\"segments\":{\"s\":{\"key\":\"s\",\"version\":5,\"deleted\":false}}}");
+      LoadResult result = loader(file).load(Duration.ZERO);
+
+      Map<DataKind, Map<String, ItemDescriptor>> data = toMap(result);
+      assertNotNull(data.get(FEATURES).get("f").getItem());
+      assertEquals(4, data.get(FEATURES).get("f").getVersion());
+      assertEquals(LDValue.buildArray().add("x").build(), json(FEATURES, data.get(FEATURES).get("f")).get("variations"));
+      assertNotNull(data.get(SEGMENTS).get("s").getItem());
+      assertEquals(5, data.get(SEGMENTS).get("s").getVersion());
+      assertEquals(1, result.getFlagCount());
+      assertEquals(1, result.getSegmentCount());
     }
   }
 
@@ -1502,6 +1571,29 @@ public class OverrideFileLoaderTest {
       } catch (FileDataException e) {
         assertThat(e.getMessage(), containsString(second + ": cannot parse JSON"));
       }
+    }
+  }
+
+  @Test
+  public void entryIsKeyedByTheKeyItIsListedUnder() throws Exception {
+    // A key property is optional, and one that names another key is replaced: evaluation reads the
+    // entry by the key it is listed under, so the definition must carry that key too.
+    try (TempDir dir = TempDir.create()) {
+      Path json = write(dir, "overrides.json", "{"
+          + "\"flags\":{\"no-key\":{\"on\":true,\"variations\":[true],\"fallthrough\":{\"variation\":0}},"
+          + "\"other-key\":{\"key\":\"pasted\",\"version\":4,\"on\":true,\"variations\":[true],\"fallthrough\":{\"variation\":0}}},"
+          + "\"segments\":{\"seg\":{\"key\":\"old-seg\",\"version\":2}}}");
+      Path yaml = write(dir, "overrides.yaml", "flags:\n  from-yaml:\n    key: elsewhere\n    on: true\n"
+          + "    variations: [true]\n    fallthrough:\n      variation: 0\n");
+      Map<DataKind, Map<String, ItemDescriptor>> data = toMap(loader(json, yaml).load(Duration.ZERO));
+
+      assertEquals(LDValue.of("no-key"), json(FEATURES, data.get(FEATURES).get("no-key")).get("key"));
+      LDValue pasted = json(FEATURES, data.get(FEATURES).get("other-key"));
+      assertEquals(LDValue.of("other-key"), pasted.get("key"));
+      assertEquals(LDValue.of(4), pasted.get("version"));
+      assertNull(data.get(FEATURES).get("pasted"));
+      assertEquals(LDValue.of("from-yaml"), json(FEATURES, data.get(FEATURES).get("from-yaml")).get("key"));
+      assertEquals(LDValue.of("seg"), json(SEGMENTS, data.get(SEGMENTS).get("seg")).get("key"));
     }
   }
 }

@@ -9,6 +9,7 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 import com.launchdarkly.testhelpers.JsonTestValue;
+import com.launchdarkly.testhelpers.TempFile;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -151,6 +152,22 @@ public class DataLoaderTest {
         jsonIncludes("{\"included\":[\"user1\"]}")); // value from first file
   }
   
+  @Test
+  public void entriesMarkedAsDeletedStillLoadAsDeletedItems() throws Exception {
+    // The file override source rejects such entries. The file data source keeps accepting them, as
+    // it always has; rejecting them here would be a breaking change.
+    try (TempFile f = TempFile.create()) {
+      f.setContents("{\"flags\":{\"gone\":{\"key\":\"gone\",\"deleted\":true}},"
+          + "\"segments\":{\"gone-segment\":{\"key\":\"gone-segment\",\"deleted\":true}}}");
+      DataLoader ds = new DataLoader(FileData.dataSource().filePaths(f.getPath()).sources);
+      int version = ds.load(builder);
+
+      Map<DataKind, Map<String, ItemDescriptor>> data = toDataMap(new FullDataSet<>(builder.build()));
+      assertThat(data.get(FEATURES).get("gone"), equalTo(ItemDescriptor.deletedItem(version)));
+      assertThat(data.get(SEGMENTS).get("gone-segment"), equalTo(ItemDescriptor.deletedItem(version)));
+    }
+  }
+
   @Test
   public void versionsAreIncrementedForEachLoad() throws Exception {
     DataLoader ds = new DataLoader(FileData.dataSource().filePaths(
