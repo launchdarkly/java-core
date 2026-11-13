@@ -700,8 +700,8 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
       }
     }
 
-    // The cooldown governs analytics delivery only (EVTPROC section 1.8 scopes it to flush
-    // payloads). A diagnostic delivery never touches cooldown state.
+    // The cooldown governs analytics (flush) delivery only. A diagnostic delivery never touches
+    // cooldown state.
     private void handleDiagnosticResponse(EventSender.Result result) {
       if (result.getTimeFromServer() != null) {
         lastKnownPastTime.set(result.getTimeFromServer().getTime());
@@ -874,12 +874,13 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
                 outputEventCount,
                 eventsConfig.eventsUri
                 );
-          } catch (Exception e) {
+          } catch (Throwable e) {
             logger.error("Unexpected error in event processor: {}", LogValues.exceptionSummary(e));
             logger.debug(LogValues.exceptionTrace(e));
-            // The batch was not delivered, and the delivery schedule must know that: an exception
+            // The batch was not delivered, and the delivery schedule must know that: a failure
             // here counts as an ordinary failure, which breaks the consecutive-success streak
-            // without opening a cooldown window.
+            // without opening a cooldown window. Catching Throwable rather than Exception keeps an
+            // Error (such as an OutOfMemoryError while serializing) from killing this worker.
             result = EventSender.Result.failure();
           }
           if (result == null) {
@@ -889,15 +890,17 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
           }
           try {
             responseListener.handleResponse(result, payload.token);
-          } catch (Exception e) {
-            // Any remaining throw from response handling must not kill this worker thread.
+          } catch (Throwable e) {
+            // Any remaining throw from response handling must not kill this worker thread, so this
+            // catches Throwable rather than Exception.
             logger.error("Unexpected error in event processor: {}", LogValues.exceptionSummary(e));
             logger.debug(LogValues.exceptionTrace(e));
           }
         } finally {
-          // The busy-worker count must always come back down, even if an Error (not an Exception)
-          // escaped the work above, or close() would wait forever in
-          // waitUntilAllFlushWorkersInactive. The Error still ends this worker thread.
+          // Restore the busy-worker count for this payload however the body exits, or a later
+          // close() flush would wait forever in waitUntilAllFlushWorkersInactive. The body catches
+          // Throwable, so no worker is lost to an Error; on Android, which runs a single worker, a
+          // lost worker would leave that close() flush with nobody to drain it.
           synchronized (activeFlushWorkersCount) {
             activeFlushWorkersCount.decrementAndGet();
             activeFlushWorkersCount.notifyAll();

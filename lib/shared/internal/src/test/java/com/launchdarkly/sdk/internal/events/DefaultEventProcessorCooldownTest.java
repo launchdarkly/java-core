@@ -296,9 +296,8 @@ public class DefaultEventProcessorCooldownTest extends BaseEventTest {
 
   @Test
   public void diagnosticFailureDoesNotOpenACooldownWindow() throws Exception {
-    // The cooldown governs analytics delivery only (EVTPROC section 1.8 scopes it to flush
-    // payloads). An unexpected failure on a diagnostic payload does not open a window, so
-    // analytics delivery is unaffected.
+    // The cooldown governs analytics (flush) delivery only. An unexpected failure on a diagnostic
+    // payload does not open a window, so analytics delivery is unaffected.
     LDValue fakePlatformData = LDValue.buildObject().put("cats", 2).build();
     DiagnosticStore diagnosticStore = new DiagnosticStore(
         new DiagnosticStore.SdkDiagnosticParams(SDK_KEY, "fake-sdk", "1.2.3", "fake-platform",

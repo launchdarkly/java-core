@@ -6,10 +6,11 @@ package com.launchdarkly.sdk.internal.events;
  * it.
  * <p>
  * Every delivery outcome is reported together with the {@link WindowToken} issued when that
- * delivery was dispatched. A token stops being current when a window opens or ends, so an outcome
- * from a delivery that was already in flight across that boundary updates nothing. This is what
- * confines ladder movement and the success streak to actual probes even with concurrent
- * deliveries straddling a window boundary.
+ * delivery was dispatched. A token stops being current when a window opens or ends, which confines
+ * window and ladder movement to actual probes even with concurrent deliveries straddling a window
+ * boundary. A stale outcome can still do one thing: a failure breaks the consecutive-success
+ * streak regardless of which round dispatched it, since a real failure makes the successes around
+ * it non-consecutive. A stale success, by contrast, counts for nothing.
  * <p>
  * The windows are not floored at the flush interval: delivery is attempted only when a flush
  * occurs (scheduled, manual, or at shutdown), and in-window flushes of any kind make no attempt,

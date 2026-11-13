@@ -250,7 +250,7 @@ public class DefaultEventSenderTest extends BaseEventTest {
   public void http413ErrorDropsPayloadWithoutDisablingDelivery() throws Exception {
     // A payload-too-large response is locally unrecoverable: the payload is dropped and not
     // retried, but it is not an unexpected failure, so delivery is not disabled and no cooldown
-    // window opens (EVTPROC 1.7.3.1).
+    // window opens.
     Handler errorResponse = Handlers.status(413);
 
     try (HttpServer server = HttpServer.start(errorResponse)) {
