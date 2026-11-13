@@ -246,6 +246,29 @@ public class DefaultEventSenderTest extends BaseEventTest {
     testUnrecoverableHttpError(403);
   }
 
+  @Test
+  public void http413ErrorDropsPayloadWithoutDisablingDelivery() throws Exception {
+    // A payload-too-large response is locally unrecoverable: the payload is dropped and not
+    // retried, but it is not an unexpected failure, so delivery is not disabled and no cooldown
+    // window opens (EVTPROC 1.7.3.1).
+    Handler errorResponse = Handlers.status(413);
+
+    try (HttpServer server = HttpServer.start(errorResponse)) {
+      try (EventSender es = makeEventSender()) {
+        EventSender.Result result = es.sendAnalyticsEvents(FAKE_DATA_BYTES, 1, server.getUri());
+
+        assertFalse(result.isSuccess());
+        assertFalse(result.isUnexpectedFailure());
+        assertFalse(result.isMustShutDown());
+      }
+
+      server.getRecorder().requireRequest();
+
+      // 413 is not retried.
+      server.getRecorder().requireNoRequests(Duration.ofMillis(100));
+    }
+  }
+
   // Cannot test our retry logic for 408, because OkHttp insists on doing its own retry on 408 so that
   // we never actually see that response status.
 //  @Test

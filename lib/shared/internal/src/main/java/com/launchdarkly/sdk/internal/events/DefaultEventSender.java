@@ -212,6 +212,11 @@ public final class DefaultEventSender implements EventSender {
         }
 
         String errorDesc = httpErrorDescription(response.code());
+        if (response.code() == 413) {
+          logger.warn("Error {} (the payload was too large; it was dropped and not retried): {}",
+              errorContext, errorDesc);
+          break;
+        }
         if (classifyHttpFailure(response.code()) == FailureClass.UNEXPECTED) {
           logger.error("Error {} (the payload will not be retried): {}", errorContext, errorDesc);
           unexpected = true;
