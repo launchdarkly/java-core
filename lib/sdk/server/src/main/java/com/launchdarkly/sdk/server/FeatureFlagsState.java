@@ -276,15 +276,19 @@ public final class FeatureFlagsState implements JsonSerializable {
     }
     
     Builder addFlag(DataModel.FeatureFlag flag, EvalResult eval) {
+      // A consumer of this state sends individual events according to the tracking fields. An
+      // override-affected evaluation produces no individual events, so the state turns them off
+      // for this flag. The flag, its value, its version, and its reason stay.
+      boolean overrideAffected = eval.isOverrideAffected();
       return add(
           flag.getKey(),
           eval.getValue(),
           eval.isNoVariation() ? null : eval.getVariationIndex(),
           eval.getReason(),
           flag.getVersion(),
-          flag.isTrackEvents() || eval.isForceReasonTracking(),
-          eval.isForceReasonTracking(),
-          flag.getDebugEventsUntilDate(),
+          !overrideAffected && (flag.isTrackEvents() || eval.isForceReasonTracking()),
+          !overrideAffected && eval.isForceReasonTracking(),
+          overrideAffected ? null : flag.getDebugEventsUntilDate(),
           eval.getPrerequisiteEvalRecords().stream()
               .filter(record -> record.prereqOfFlag.getKey() == flag.getKey())  // only include top level prereqs
               .map(record -> record.flag.getKey()) // map from prereq record to prereq key
