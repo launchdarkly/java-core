@@ -135,7 +135,11 @@ class InputValidatingEvaluator implements EvaluatorInterface {
             value.getType() != requireType) {
           logger.error("Feature flag \"{}\"; evaluation expected result as {}, but got {}", flagKey, defaultValue.getType(), value.getType());
           recorder.recordEvaluationError(featureFlag, context, defaultValue, ErrorKind.WRONG_TYPE);
-          return new EvalResultAndFlag(EvalResult.error(ErrorKind.WRONG_TYPE, defaultValue), featureFlag);
+          // The type mismatch replaces the reason. The evaluation read the same definitions, so the
+          // new reason keeps the override-affected marking.
+          return new EvalResultAndFlag(
+              EvalResult.error(ErrorKind.WRONG_TYPE, defaultValue).withOverrideAffected(result.isOverrideAffected()),
+              featureFlag);
         }
       }
 
@@ -151,7 +155,12 @@ class InputValidatingEvaluator implements EvaluatorInterface {
       } else {
         recorder.recordEvaluationError(featureFlag, context, defaultValue, ErrorKind.EXCEPTION);
       }
-      return new EvalResultAndFlag(EvalResult.of(defaultValue, NO_VARIATION, EvaluationReason.exception(e)), null);
+      // The flag's definition was read before the failure, so its own marker decides the marking of
+      // the error result.
+      boolean overrideAffected = featureFlag != null && featureFlag.isOverride();
+      return new EvalResultAndFlag(
+          EvalResult.of(defaultValue, NO_VARIATION, EvaluationReason.exception(e)).withOverrideAffected(overrideAffected),
+          null);
     }
   }
 
@@ -199,7 +208,10 @@ class InputValidatingEvaluator implements EvaluatorInterface {
         logger.error("Exception caught for feature flag \"{}\" when evaluating all flags: {}", flag.getKey(),
             LogValues.exceptionSummary(e));
         logger.debug(e.toString(), LogValues.exceptionTrace(e));
-        builder.addFlag(flag, EvalResult.of(LDValue.ofNull(), NO_VARIATION, EvaluationReason.exception(e)));
+        // The flag's definition was read before the failure, so its own marker decides the marking,
+        // and with it the state's event tracking fields for the flag.
+        builder.addFlag(flag, EvalResult.of(LDValue.ofNull(), NO_VARIATION, EvaluationReason.exception(e))
+            .withOverrideAffected(flag.isOverride()));
       }
     }
     return builder.build();
