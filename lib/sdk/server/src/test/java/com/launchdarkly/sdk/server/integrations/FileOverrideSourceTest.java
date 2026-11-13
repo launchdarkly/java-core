@@ -26,6 +26,7 @@ import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -48,6 +49,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeTrue;
 
 @SuppressWarnings("javadoc")
 public class FileOverrideSourceTest {
@@ -400,6 +402,48 @@ public class FileOverrideSourceTest {
   @Test
   public void watchingModeReloadsOnChange() throws Exception {
     reloadsOnChange(ChangeDetection.WATCHING);
+  }
+
+  // Lays out a mounted Kubernetes ConfigMap, whose file is a link through ..data to a versioned
+  // directory, and updates it the way the kubelet does: a new directory, a swap of ..data to it in
+  // one operation, and the removal of the old directory.
+  private void picksUpAConfigMapUpdate(ChangeDetection mode) throws Exception {
+    try (TempDir dir = TempDir.create()) {
+      Path mount = dir.getPath();
+      Path v1 = Files.createDirectory(mount.resolve("..v1"));
+      Files.write(v1.resolve("overrides.json"), docWith("flag", "first").getBytes());
+      Path file = mount.resolve("overrides.json");
+      try {
+        Files.createSymbolicLink(mount.resolve("..data"), v1.getFileName());
+        Files.createSymbolicLink(file, mount.resolve("..data").getFileName().resolve("overrides.json"));
+      } catch (IOException | UnsupportedOperationException | SecurityException e) {
+        assumeTrue("symbolic links are not available: " + e, false);
+      }
+      RecordingSink sink = new RecordingSink();
+      start(FileOverrides.source().filePaths(file).changeDetection(mode).pollInterval(Duration.ofSeconds(1)), sink);
+      assertEquals("first", flagValue(sink.await(), "flag"));
+      // Let the reload that the start of watching asks for finish, so that only the update can
+      // supply the next snapshot.
+      sink.assertNoSnapshot(500);
+
+      Path v2 = Files.createDirectory(mount.resolve("..v2"));
+      Files.write(v2.resolve("overrides.json"), docWith("flag", "second").getBytes());
+      Path swap = Files.createSymbolicLink(mount.resolve("..data_tmp"), v2.getFileName());
+      Files.move(swap, mount.resolve("..data"), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+      Files.delete(v1.resolve("overrides.json"));
+      Files.delete(v1);
+      assertEquals("second", flagValue(sink.await(), "flag"));
+    }
+  }
+
+  @Test
+  public void pollingModePicksUpAConfigMapUpdate() throws Exception {
+    picksUpAConfigMapUpdate(ChangeDetection.POLLING);
+  }
+
+  @Test
+  public void watchingModePicksUpAConfigMapUpdate() throws Exception {
+    picksUpAConfigMapUpdate(ChangeDetection.WATCHING);
   }
 
   @Test

@@ -30,7 +30,7 @@ import java.time.Duration;
  *
  * @see FileOverrideSourceBuilder
  * @see DataSystemBuilder#overrides(com.launchdarkly.sdk.server.subsystems.ComponentConfigurer)
- * @since 7.18.0
+ * @since 7.19.0
  */
 public abstract class FileOverrides {
   /**
@@ -52,6 +52,11 @@ public abstract class FileOverrides {
     /**
      * The source reloads in response to file system change notifications. It reacts faster than
      * polling. It depends on notifications, which some file systems do not deliver reliably.
+     * Watching follows changes to the configured files and to the files that configured symbolic
+     * links lead to, including the update of a mounted Kubernetes ConfigMap. It does not follow a
+     * deployment that points a configured directory, or a link further along the path, at another
+     * location, such as a {@code current} link to a release directory. Use {@link #POLLING} for
+     * such deployments.
      * Flag overrides are currently experimental and subject to change.
      */
     WATCHING
