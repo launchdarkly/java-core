@@ -69,6 +69,30 @@ public class StreamingSynchronizerImplTest extends BaseTest {
     }
 
     @Test
+    public void emptySelectorSendsNoBasis() throws Exception {
+        String intent = makeEvent("server-intent",
+            "{\"payloads\":[{\"id\":\"current\",\"target\":1,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
+        String transferred = makeEvent("payload-transferred", "{\"state\":\"current\",\"version\":1}");
+        try (HttpServer server = HttpServer.start(Handlers.all(
+                Handlers.SSE.start(), Handlers.SSE.event(intent), Handlers.SSE.event(transferred),
+                Handlers.SSE.leaveOpen()))) {
+            HttpProperties httpProperties = toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp());
+            StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                httpProperties, server.getUri(), "/stream", testLogger, mockSelectorSource(), executor,
+                null, Duration.ofMillis(100), StreamingSynchronizerImpl.RESET_THRESHOLD, Thread.NORM_PRIORITY, null);
+            try {
+                FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
+                assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
+                assertEquals(ChangeSetType.Full, result.getChangeSet().getType());
+                assertEquals(Selector.make(1, "current"), result.getChangeSet().getSelector());
+                assertNull(server.getRecorder().requireRequest().getQuery());
+            } finally {
+                synchronizer.close();
+            }
+        }
+    }
+
+    @Test
     public void receivesMultipleChangesets() throws Exception {
         String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");
         String payloadTransferred1 = makeEvent("payload-transferred", "{\"state\":\"(p:payload-1:100)\",\"version\":100}");
