@@ -71,6 +71,24 @@ public class FileSynchronizerReloadBehaviorTest {
     }
   }
 
+  // Returns the first STATUS result, starting from the given outstanding future and consuming the results
+  // before it. On Windows, a rewrite with Files.write produces two file system events, one after the
+  // truncation and one after the write, and the synchronizer reloads after each. The reload after the
+  // truncation can read the empty file, which the loader reads as an empty document and delivers as a
+  // change set, before the reload after the write reports the malformed content. On Linux the first
+  // result is the STATUS.
+  private static FDv2SourceResult awaitStatus(Synchronizer synchronizer, CompletableFuture<FDv2SourceResult> pending)
+      throws Exception {
+    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(CHANGE_TIMEOUT_SECONDS);
+    while (true) {
+      FDv2SourceResult result = pending.get(Math.max(deadline - System.nanoTime(), 0), TimeUnit.NANOSECONDS);
+      if (result.getResultType() == SourceResultType.STATUS) {
+        return result;
+      }
+      pending = synchronizer.next();
+    }
+  }
+
   private void awaitErrorMessages(int atLeast) throws Exception {
     long deadline = System.currentTimeMillis() + CHANGE_TIMEOUT_SECONDS * 1000;
     while (errorMessages().size() < atLeast) {
@@ -122,7 +140,7 @@ public class FileSynchronizerReloadBehaviorTest {
           CompletableFuture<FDv2SourceResult> next = synchronizer.next();
           Thread.sleep(200);
           file.setContents(MALFORMED);
-          FDv2SourceResult first = await(next);
+          FDv2SourceResult first = awaitStatus(synchronizer, next);
           assertThat(first.getResultType(), equalTo(SourceResultType.STATUS));
           assertThat(first.getStatus().getState(), equalTo(SourceSignal.INTERRUPTED));
           assertThat(first.getStatus().getErrorInfo().getKind(), equalTo(ErrorKind.INVALID_DATA));
@@ -131,7 +149,7 @@ public class FileSynchronizerReloadBehaviorTest {
 
           // The same malformed content again is the same failure. It is reported again, not deduplicated.
           file.setContents(MALFORMED);
-          FDv2SourceResult second = await(pending);
+          FDv2SourceResult second = awaitStatus(synchronizer, pending);
           assertThat(second.getResultType(), equalTo(SourceResultType.STATUS));
           assertThat(second.getStatus().getState(), equalTo(SourceSignal.INTERRUPTED));
           assertEquals(first.getStatus().getErrorInfo().getMessage(), second.getStatus().getErrorInfo().getMessage());
@@ -163,7 +181,7 @@ public class FileSynchronizerReloadBehaviorTest {
           CompletableFuture<FDv2SourceResult> next = synchronizer.next();
           Thread.sleep(200);
           file.setContents(MALFORMED);
-          assertThat(await(next).getStatus().getState(), equalTo(SourceSignal.INTERRUPTED));
+          assertThat(awaitStatus(synchronizer, next).getStatus().getState(), equalTo(SourceSignal.INTERRUPTED));
           CompletableFuture<FDv2SourceResult> later = settle(synchronizer);
           int errorsAfterFailure = errorMessages().size();
 
