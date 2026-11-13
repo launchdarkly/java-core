@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
@@ -228,18 +229,18 @@ public class DefaultEventProcessorTest extends BaseEventTest {
   }
   
   @Test
-  public void noMoreEventsAreProcessedAfterUnrecoverableError() throws Exception {
+  public void eventsAreNotSentWhileDeliveryIsCoolingDownAfterUnexpectedError() throws Exception {
+    // Delivery suppression after an unexpected error is a bounded cooldown window, not a
+    // permanent stop; the window-crossing behavior is covered in DefaultEventProcessorCooldownTest.
     MockEventSender es = new MockEventSender();
-    es.result = new EventSender.Result(false, true, null); // mustShutdown == true
-    
+    es.result = EventSender.Result.unexpectedFailure();
+
     try (DefaultEventProcessor ep = makeEventProcessor(baseConfig(es))) {
       ep.sendEvent(identifyEvent(user));
       ep.flushAsync();
       es.awaitRequest();
-      
-      // allow a little time for the event processor to pass the "must shut down" signal back from the sender
-      Thread.sleep(50);
-      
+      ep.waitUntilInactive(); // the failure result has now been handled
+
       ep.sendEvent(identifyEvent(user));
       ep.flushAsync();
       es.expectNoRequests(100);
@@ -279,7 +280,51 @@ public class DefaultEventProcessorTest extends BaseEventTest {
       es.awaitRequest();
     }
   }
-  
+
+  @Test(timeout = 15000)
+  public void errorFromEventSenderDoesNotWedgeClose() throws Exception {
+    // An Error (not an Exception) thrown by the sender must not kill the flush worker. The
+    // processor is given a single worker, as on Android: if that worker were lost, a later flush
+    // (including the one close() performs) would have nobody to drain it, and close() would wait
+    // on it forever in waitUntilAllFlushWorkersInactive.
+    AtomicInteger analyticsCalls = new AtomicInteger(0);
+    CountDownLatch firstAttempted = new CountDownLatch(1);
+    CountDownLatch secondDelivery = new CountDownLatch(1);
+    EventSender throwingSender = new EventSender() {
+      @Override
+      public Result sendAnalyticsEvents(byte[] data, int eventCount, URI eventsBaseUri) {
+        if (analyticsCalls.getAndIncrement() == 0) {
+          firstAttempted.countDown(); // the worker has taken the payload; the queue is now empty
+          throw new AssertionError("boom"); // an Error, which Exception-only catches would miss
+        }
+        secondDelivery.countDown();
+        return Result.success(null);
+      }
+
+      @Override
+      public Result sendDiagnosticEvent(byte[] data, URI eventsBaseUri) {
+        return Result.success(null);
+      }
+
+      @Override
+      public void close() throws IOException {}
+    };
+
+    try (DefaultEventProcessor ep = makeEventProcessor(baseConfig(throwingSender).eventSendingThreadPoolSize(1))) {
+      ep.sendEvent(identifyEvent(user));
+      ep.flushAsync(); // the sole worker throws an Error delivering this
+      // Wait until that payload has been taken and thrown on before the second flush, so the
+      // single-slot payload queue cannot cancel the second flush as a still-busy one.
+      assertTrue("the first delivery was never attempted", firstAttempted.await(5, TimeUnit.SECONDS));
+
+      // If that Error had ended the worker, this second delivery would never happen.
+      ep.sendEvent(identifyEvent(user));
+      ep.flushAsync();
+      assertTrue("the single flush worker did not survive the Error",
+          secondDelivery.await(5, TimeUnit.SECONDS));
+    } // close() here would block forever if the worker had been lost
+  }
+
   @SuppressWarnings("unchecked")
   @Test
   public void eventsAreKeptInBufferIfAllFlushWorkersAreBusy() throws Exception {
