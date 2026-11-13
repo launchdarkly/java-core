@@ -1,8 +1,3 @@
 streaming/fdv2/recoverable fallback to secondary synchronizer
 streaming/fdv2/recoverable fallback with recovery
 streaming/fdv2/permanent fallback with recovery
-# launchdarkly-java-sdk-internal's HttpErrors.classifyHttpFailure treats a 413 as an unexpected
-# failure (it has no locally-unrecoverable classification), so a 413 opens a cooldown window
-# instead of only dropping the oversized payload (SDK-3513 owns the fix and the removal of this
-# suppression).
-events/delivery cooldown/413 is dropped without disabling delivery
