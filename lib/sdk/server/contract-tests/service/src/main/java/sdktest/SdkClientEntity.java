@@ -30,6 +30,15 @@ import com.launchdarkly.sdk.server.integrations.ServiceEndpointsBuilder;
 import com.launchdarkly.sdk.server.integrations.StreamingDataSourceBuilder;
 import com.launchdarkly.sdk.server.integrations.PollingDataSourceBuilder;
 import com.launchdarkly.sdk.server.integrations.DataSystemBuilder;
+import com.launchdarkly.sdk.server.integrations.Consul;
+import com.launchdarkly.sdk.server.integrations.ConsulDataStoreBuilder;
+import com.launchdarkly.sdk.server.integrations.DynamoDb;
+import com.launchdarkly.sdk.server.integrations.DynamoDbStoreBuilder;
+import com.launchdarkly.sdk.server.integrations.PersistentDataStoreBuilder;
+import com.launchdarkly.sdk.server.integrations.Redis;
+import com.launchdarkly.sdk.server.integrations.RedisStoreBuilder;
+import com.launchdarkly.sdk.server.subsystems.DataSystemConfiguration;
+import com.launchdarkly.sdk.server.subsystems.PersistentDataStore;
 import com.launchdarkly.sdk.server.DataSystemComponents;
 import com.launchdarkly.sdk.server.integrations.FDv2PollingInitializerBuilder;
 import com.launchdarkly.sdk.server.integrations.FDv2PollingSynchronizerBuilder;
@@ -45,6 +54,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -77,7 +91,12 @@ import sdktest.Representations.RegisterFlagValueChangeListenerParams;
 import sdktest.Representations.UnregisterListenerParams;
 import sdktest.Representations.HookConfig;
 import sdktest.Representations.SdkConfigHookParams;
+import sdktest.Representations.PersistentCacheMode;
+import sdktest.Representations.PersistentStoreType;
 import sdktest.Representations.SdkConfigParams;
+import sdktest.Representations.SdkConfigPersistentDataStoreParams;
+import sdktest.Representations.SdkConfigPersistentStoreParams;
+import sdktest.Representations.StoreMode;
 import sdktest.Representations.SdkConfigDataSystemParams;
 import sdktest.Representations.SdkConfigDataInitializerParams;
 import sdktest.Representations.SdkConfigSynchronizerParams;
@@ -573,41 +592,20 @@ public class SdkClientEntity {
       builder.hooks(Components.hooks().setHooks(hookList));
     }
 
+    if (params.persistentDataStore != null) {
+      builder.dataStore(buildPersistentStore(params.persistentDataStore));
+    }
+
     if (params.dataSystem != null) {
       DataSystemBuilder dataSystemBuilder = Components.dataSystem().custom();
 
-      // TODO: enable this code in the future and determine which dependencies on persistent stores need to be added to contract test build process
-      // Configure persistent store if provided
-      // if (params.dataSystem.store != null && params.dataSystem.store.persistentDataStore != null) {
-      //   var storeConfig = params.dataSystem.store.persistentDataStore;
-      //   var storeType = storeConfig.store.type.toLowerCase();
-      //   ComponentConfigurer<DataStore> persistentStore = null;
-      //
-      //   switch (storeType) {
-      //     case "redis":
-      //       // Redis store configuration
-      //       break;
-      //     case "dynamodb":
-      //       // DynamoDB store configuration
-      //       break;
-      //     case "consul":
-      //       // Consul store configuration
-      //       break;
-      //   }
-      //
-      //   if (persistentStore != null) {
-      //     // Configure cache
-      //     var cacheMode = storeConfig.cache != null ? storeConfig.cache.mode.toLowerCase() : null;
-      //     // ... cache configuration ...
-      //
-      //     // Determine store mode
-      //     var storeMode = params.dataSystem.storeMode == 0
-      //         ? DataSystemConfiguration.DataStoreMode.READ_ONLY
-      //         : DataSystemConfiguration.DataStoreMode.READ_WRITE;
-      //
-      //     dataSystemBuilder.persistentStore(persistentStore, storeMode);
-      //   }
-      // }
+      if (params.dataSystem.store != null && params.dataSystem.store.persistentDataStore != null) {
+        DataSystemConfiguration.DataStoreMode storeMode =
+            params.dataSystem.storeMode != null && params.dataSystem.storeMode == StoreMode.READ_WRITE
+                ? DataSystemConfiguration.DataStoreMode.READ_WRITE
+                : DataSystemConfiguration.DataStoreMode.READ_ONLY;
+        dataSystemBuilder.persistentStore(buildPersistentStore(params.dataSystem.store.persistentDataStore), storeMode);
+      }
 
       // Configure initializers
       if (params.dataSystem.initializers != null && params.dataSystem.initializers.length > 0) {
@@ -668,6 +666,66 @@ public class SdkClientEntity {
     }
 
     return builder.build();
+  }
+
+  private static PersistentDataStoreBuilder buildPersistentStore(SdkConfigPersistentDataStoreParams params) {
+    SdkConfigPersistentStoreParams store = params.store;
+    PersistentDataStoreBuilder builder;
+    switch (store.type) {
+      case PersistentStoreType.REDIS: {
+        RedisStoreBuilder<PersistentDataStore> redis = Redis.dataStore().uri(URI.create(store.dsn));
+        if (store.prefix != null) {
+          redis.prefix(store.prefix);
+        }
+        builder = Components.persistentDataStore(redis);
+        break;
+      }
+      case PersistentStoreType.DYNAMODB: {
+        // The harness creates this table in its local DynamoDB.
+        DynamoDbStoreBuilder<PersistentDataStore> dynamo = DynamoDb.dataStore("sdk-contract-tests")
+            .endpoint(URI.create(store.dsn))
+            .region(Region.US_EAST_1)
+            .credentials(StaticCredentialsProvider.create(AwsBasicCredentials.create("dummy", "dummy")));
+        if (store.prefix != null) {
+          dynamo.prefix(store.prefix);
+        }
+        builder = Components.persistentDataStore(dynamo);
+        break;
+      }
+      case PersistentStoreType.CONSUL: {
+        // The harness sends the Consul agent address as host:port, without a scheme.
+        ConsulDataStoreBuilder consul;
+        try {
+          consul = Consul.dataStore().url(new URL("http://" + store.dsn));
+        } catch (MalformedURLException e) {
+          throw new IllegalArgumentException("invalid Consul address: " + store.dsn, e);
+        }
+        if (store.prefix != null) {
+          consul.prefix(store.prefix);
+        }
+        builder = Components.persistentDataStore(consul);
+        break;
+      }
+      default:
+        throw new IllegalArgumentException("unsupported persistent store type: " + store.type);
+    }
+
+    if (params.cache != null && params.cache.mode != null) {
+      switch (params.cache.mode) {
+        case PersistentCacheMode.OFF:
+          builder.noCaching();
+          break;
+        case PersistentCacheMode.TTL:
+          builder.cacheSeconds(params.cache.ttl);
+          break;
+        case PersistentCacheMode.INFINITE:
+          builder.cacheForever();
+          break;
+        default:
+          throw new IllegalArgumentException("unsupported persistent cache mode: " + params.cache.mode);
+      }
+    }
+    return builder;
   }
 
   private DataSourceBuilder<Synchronizer> createSynchronizer(
