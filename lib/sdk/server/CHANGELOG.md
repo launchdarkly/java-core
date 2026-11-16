@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.18.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.18.0...launchdarkly-java-server-sdk-7.18.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* Bump embedded commons-codec to 1.23.0 ([#263](https://github.com/launchdarkly/java-core/issues/263)) ([be5f5c5](https://github.com/launchdarkly/java-core/commit/be5f5c56b8721e093dc4e3fc6ab6c59cc3cb120b))
+
 ## [7.18.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.17.5...launchdarkly-java-server-sdk-7.18.0) (2026-11-12)
 
 
