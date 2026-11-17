@@ -3,6 +3,7 @@ package com.launchdarkly.sdk.server.integrations;
 import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.SerializedItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.PersistentDataStore;
@@ -59,7 +60,8 @@ import software.amazon.awssdk.services.dynamodb.paginators.QueryIterable;
 final class DynamoDbDataStoreImpl extends DynamoDbStoreImplBase implements PersistentDataStore {
   private static final String versionAttribute = "version";
   private static final String itemJsonAttribute = "item";
-  private static final String deletedItemPlaceholder = "null"; // DynamoDB doesn't allow empty strings
+  // Older versions of this store wrote this string for deleted items; we still read it as deleted.
+  private static final String deletedItemPlaceholder = "null";
 
   // We won't try to store items whose total size exceeds this. The DynamoDB documentation says
   // only "400KB", which probably means 400*1024, but to avoid any chance of trying to store a
@@ -244,7 +246,11 @@ final class DynamoDbDataStoreImpl extends DynamoDbStoreImplBase implements Persi
   }
   
   private Map<String, AttributeValue> marshalItem(DataKind kind, String key, SerializedItemDescriptor item) {
-    String json = item.isDeleted() ? deletedItemPlaceholder : item.getSerializedItem();
+    String json = item.getSerializedItem();
+    if (json == null) {
+      // Store the same tombstone JSON that the SDK serializes for deleted items, as the other stores do.
+      json = kind.serialize(ItemDescriptor.deletedItem(item.getVersion()));
+    }
     return mapOf(
         PARTITION_KEY, AttributeValue.builder().s(namespaceForKind(kind)).build(),
         SORT_KEY, AttributeValue.builder().s(key).build(),
