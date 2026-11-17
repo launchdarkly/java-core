@@ -1,14 +1,10 @@
 package com.launchdarkly.sdk.internal.fdv2.payloads;
 
-import com.google.gson.TypeAdapter;
-import com.google.gson.annotations.JsonAdapter;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
-import com.google.gson.stream.JsonWriter;
 import com.launchdarkly.sdk.json.SerializationException;
 
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.time.Duration;
 
 /**
@@ -16,24 +12,7 @@ import java.time.Duration;
  */
 public final class Goodbye {
   private final String reason;
-  @JsonAdapter(FallbackTTLAdapter.class)
   private final Duration protocolFallbackTTL;
-
-  private static final class FallbackTTLAdapter extends TypeAdapter<Duration> {
-    @Override
-    public void write(JsonWriter writer, Duration value) throws IOException {
-      writer.value(BigDecimal.valueOf(value.toMillis(), 3));
-    }
-
-    @Override
-    public Duration read(JsonReader reader) throws IOException {
-      if (reader.peek() == JsonToken.NUMBER) {
-        return Duration.ofMillis((long) (reader.nextDouble() * 1000));
-      }
-      reader.skipValue();
-      return Duration.ZERO;
-    }
-  }
   
   /**
    * Constructs a new Goodbye.
@@ -117,3 +96,4 @@ public final class Goodbye {
     }
   }
 }
+

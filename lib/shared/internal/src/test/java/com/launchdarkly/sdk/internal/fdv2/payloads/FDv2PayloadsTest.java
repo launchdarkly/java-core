@@ -39,8 +39,6 @@ public class FDv2PayloadsTest extends BaseInternalTest {
       Goodbye goodbye = Goodbye.parse(new JsonReader(new StringReader(json)));
       assertEquals(values[i], expected[i], goodbye.getProtocolFallbackTTL());
       assertEquals("fallback", goodbye.getReason());
-      Goodbye reserialized = Goodbye.parse(new JsonReader(new StringReader(gsonInstance().toJson(goodbye))));
-      assertEquals(expected[i], reserialized.getProtocolFallbackTTL());
     }
   }
 
