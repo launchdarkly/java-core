@@ -594,6 +594,11 @@ public class SdkClientEntity {
 
     if (params.persistentDataStore != null) {
       builder.dataStore(buildPersistentStore(params.persistentDataStore));
+      // With a store and no data source, the SDK reads only from the store.
+      if (params.streaming == null && params.polling == null && params.serviceEndpoints == null
+          && params.dataSystem == null) {
+        builder.dataSource(Components.externalUpdatesOnly());
+      }
     }
 
     if (params.dataSystem != null) {
