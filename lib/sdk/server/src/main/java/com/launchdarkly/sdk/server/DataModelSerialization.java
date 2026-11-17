@@ -184,7 +184,7 @@ abstract class DataModelSerialization {
       while (in.hasNext()) {
         switch (in.nextName()) {
         case "contextKind":
-          contextKind = ContextKind.of(in.nextString());
+          contextKind = readNullableContextKind(in);
           break;
         case "attribute":
           attrString = in.nextString();
@@ -205,7 +205,7 @@ abstract class DataModelSerialization {
           }
           break;
         case "negate":
-          negate = in.nextBoolean();
+          negate = readBooleanOrFalse(in);
           break;
         default:
            in.skipValue();
@@ -253,7 +253,7 @@ abstract class DataModelSerialization {
       while (in.hasNext()) {
         switch (in.nextName()) {
         case "contextKind":
-          contextKind = ContextKind.of(in.nextString());
+          contextKind = readNullableContextKind(in);
           break;
         case "variations":
           if (in.peek() == JsonToken.NULL) {
@@ -268,10 +268,10 @@ abstract class DataModelSerialization {
           }
           break;
         case "bucketBy":
-          bucketByString = in.nextString();
+          bucketByString = readNullableString(in);
           break;
         case "kind":
-          kind = RolloutKind.experiment.name().equals(in.nextString()) ? RolloutKind.experiment :
+          kind = RolloutKind.experiment.name().equals(readNullableString(in)) ? RolloutKind.experiment :
             RolloutKind.rollout;
           break;
         case "seed":
@@ -334,10 +334,10 @@ abstract class DataModelSerialization {
           weight = readNullableInt(in);
           break;
         case "rolloutContextKind":
-          rolloutContextKind = ContextKind.of(in.nextString());
+          rolloutContextKind = readNullableContextKind(in);
           break;
         case "bucketBy":
-          bucketByString = in.nextString();
+          bucketByString = readNullableString(in);
           break;
         default:
            in.skipValue();
@@ -355,6 +355,29 @@ abstract class DataModelSerialization {
       return null;
     }
     return in.nextInt();
+  }
+
+  static String readNullableString(JsonReader in) throws IOException {
+    if (in.peek() == JsonToken.NULL) {
+      in.skipValue();
+      return null;
+    }
+    return in.nextString();
+  }
+
+  // A null optional boolean has the same value as an omitted one, which is false.
+  static boolean readBooleanOrFalse(JsonReader in) throws IOException {
+    if (in.peek() == JsonToken.NULL) {
+      in.skipValue();
+      return false;
+    }
+    return in.nextBoolean();
+  }
+
+  // A null context kind stays null, as when it is omitted. The attribute is then a literal name.
+  static ContextKind readNullableContextKind(JsonReader in) throws IOException {
+    String kind = readNullableString(in);
+    return kind == null ? null : ContextKind.of(kind);
   }
   
   static AttributeRef attributeNameOrPath(String attrString, ContextKind contextKind) {
