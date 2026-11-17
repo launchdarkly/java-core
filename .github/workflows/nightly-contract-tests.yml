@@ -24,7 +24,7 @@ jobs:
     # staying well under the 6-hour default that would otherwise apply.
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.branch || github.ref }}
 
@@ -68,7 +68,7 @@ jobs:
 
       - name: Upload contract test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: contract-test-results
           path: junit/
@@ -76,7 +76,7 @@ jobs:
 
       - name: Upload contract test service log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: contract-test-service-log
           path: /tmp/sdk-test-service.log
@@ -91,7 +91,7 @@ jobs:
       - nightly-contract-tests
     steps:
       - name: Send Slack notification
-        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
+        uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v4.0.0
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           webhook-type: incoming-webhook
@@ -121,7 +121,7 @@ jobs:
     if: ${{ inputs.test_slack_notification == true || inputs.test_slack_notification == 'true' }}
     steps:
       - name: Send test Slack notification
-        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
+        uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v4.0.0
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           webhook-type: incoming-webhook
