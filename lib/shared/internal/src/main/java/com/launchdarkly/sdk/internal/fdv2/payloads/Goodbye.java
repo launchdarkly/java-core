@@ -97,11 +97,11 @@ public final class Goodbye {
           reason = reader.nextString();
           break;
         case "protocolFallbackTTL":
-          if (reader.peek() == JsonToken.NUMBER) {
-            protocolFallbackTTL = Duration.ofMillis((long) (reader.nextDouble() * 1000));
-          } else {
-            protocolFallbackTTL = reader.peek() == JsonToken.NULL ? null : Duration.ZERO;
+          if (reader.peek() == JsonToken.NULL) {
+            protocolFallbackTTL = null;
             reader.skipValue();
+          } else {
+            protocolFallbackTTL = new FallbackTTLAdapter().read(reader);
           }
           break;
         default:
