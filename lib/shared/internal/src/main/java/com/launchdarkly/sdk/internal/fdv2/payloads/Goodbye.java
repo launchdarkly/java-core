@@ -30,6 +30,7 @@ public final class Goodbye {
       if (reader.peek() == JsonToken.NUMBER) {
         return Duration.ofMillis((long) (reader.nextDouble() * 1000));
       }
+      // The spec treats a malformed TTL the same as 0: both use the default TTL.
       reader.skipValue();
       return Duration.ZERO;
     }
