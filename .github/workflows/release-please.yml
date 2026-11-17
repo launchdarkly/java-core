@@ -38,9 +38,9 @@ jobs:
       pull-requests: write
     if: ${{ needs.release-please.outputs.package-server-sdk-released == 'true'}}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.1.0
+      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.2.1
         name: Get secrets
         with:
           aws_assume_role: ${{ vars.AWS_ROLE_ARN }}
@@ -71,9 +71,9 @@ jobs:
       pull-requests: write
     if: ${{ needs.release-please.outputs.package-server-sdk-ai-released == 'true'}}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.1.0
+      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.2.1
         name: Get secrets
         with:
           aws_assume_role: ${{ vars.AWS_ROLE_ARN }}
@@ -104,9 +104,9 @@ jobs:
       pull-requests: write
     if: ${{ needs.release-please.outputs.package-server-sdk-otel-released == 'true'}}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.1.0
+      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.2.1
         name: Get secrets
         with:
           aws_assume_role: ${{ vars.AWS_ROLE_ARN }}
@@ -137,9 +137,9 @@ jobs:
       pull-requests: write
     if: ${{ needs.release-please.outputs.package-server-sdk-redis-store-released == 'true'}}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.1.0
+      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.2.1
         name: Get secrets
         with:
           aws_assume_role: ${{ vars.AWS_ROLE_ARN }}
@@ -170,9 +170,9 @@ jobs:
       pull-requests: write
     if: ${{ needs.release-please.outputs.package-server-sdk-dynamodb-store-released == 'true'}}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.1.0
+      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.2.1
         name: Get secrets
         with:
           aws_assume_role: ${{ vars.AWS_ROLE_ARN }}
@@ -203,9 +203,9 @@ jobs:
       pull-requests: write
     if: ${{ needs.release-please.outputs.package-sdk-internal-released == 'true'}}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.1.0
+      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.2.1
         name: Get secrets
         with:
           aws_assume_role: ${{ vars.AWS_ROLE_ARN }}
@@ -237,9 +237,9 @@ jobs:
       pull-requests: write
     if: ${{ needs.release-please.outputs.package-sdk-common-released == 'true'}}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.1.0
+      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.2.1
         name: Get secrets
         with:
           aws_assume_role: ${{ vars.AWS_ROLE_ARN }}
@@ -270,9 +270,9 @@ jobs:
       pull-requests: write
     if: ${{ needs.release-please.outputs.package-test-helpers-released == 'true'}}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.1.0
+      - uses: launchdarkly/gh-actions/actions/release-secrets@release-secrets-v1.2.1
         name: Get secrets
         with:
           aws_assume_role: ${{ vars.AWS_ROLE_ARN }}

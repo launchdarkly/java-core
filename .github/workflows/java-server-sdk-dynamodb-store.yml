@@ -17,7 +17,7 @@ jobs:
         java-version: [8, 11, 17, 19]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
 
       - name: Shared CI Steps
         uses: ./.github/actions/ci
@@ -31,18 +31,18 @@ jobs:
         java-version: [11, 17]
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
 
       # DynamoDB Local 2.6.0+ requires Java 17, so it gets its own JDK independent of the version under test.
       - name: Setup Java for DynamoDB Local
         id: dynamodb-java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: 'temurin'
           java-version: 17
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java-version }}
