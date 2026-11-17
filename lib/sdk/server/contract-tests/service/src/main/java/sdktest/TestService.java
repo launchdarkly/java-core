@@ -21,7 +21,8 @@ import sdktest.Representations.CreateInstanceParams;
 import sdktest.Representations.Status;
 
 public class TestService {
-  private static final int PORT = 8000;
+  // The PORT environment variable sets the port. The Makefile sets it from TEST_SERVICE_PORT.
+  private static final int PORT = System.getenv("PORT") != null ? Integer.parseInt(System.getenv("PORT")) : 8000;
   private static final String[] CAPABILITIES = new String[]{
     "all-flags-client-side-only",
     "all-flags-details-only-for-tracked-flags",
@@ -41,6 +42,9 @@ public class TestService {
     "http-proxy",
     "inline-context-all",
     "migrations",
+    "persistent-data-store-consul",
+    "persistent-data-store-dynamodb",
+    "persistent-data-store-redis",
     "optional-event-gzip",
     "secure-mode-hash",
     "server-side",

@@ -35,6 +35,7 @@ public abstract class Representations {
     SdkConfigProxyParams proxy;
     SdkConfigServiceEndpointParams serviceEndpoints;
     SdkConfigHookParams hooks;
+    SdkConfigPersistentDataStoreParams persistentDataStore;
     SdkConfigDataSystemParams dataSystem;
   }
   
