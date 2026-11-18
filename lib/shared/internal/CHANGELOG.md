@@ -2,6 +2,18 @@
 
 All notable changes to the project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [1.13.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.12.2...launchdarkly-java-sdk-internal-1.13.0) (2026-11-18)
+
+
+### Features
+
+* Parse protocolFallbackTTL from FDv2 goodbye ([#265](https://github.com/launchdarkly/java-core/issues/265)) ([72d0fe1](https://github.com/launchdarkly/java-core/commit/72d0fe1e6a6477f5ec0ec8e2cf0d75c4a16d469f))
+
+
+### Bug Fixes
+
+* Clear empty FDv2 selectors in shared protocol handling ([#261](https://github.com/launchdarkly/java-core/issues/261)) ([576b081](https://github.com/launchdarkly/java-core/commit/576b0814c84190b94252cb1b2c82d3a09ce5b8b3))
+
 ## [1.12.2](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.12.1...launchdarkly-java-sdk-internal-1.12.2) (2026-09-30)
 
 
