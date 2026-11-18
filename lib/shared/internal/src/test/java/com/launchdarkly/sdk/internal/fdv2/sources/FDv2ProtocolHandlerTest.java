@@ -1,6 +1,7 @@
 package com.launchdarkly.sdk.internal.fdv2.sources;
 
 import com.google.gson.JsonElement;
+import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.internal.BaseInternalTest;
 import com.launchdarkly.sdk.internal.fdv2.payloads.DeleteObject;
 import com.launchdarkly.sdk.internal.fdv2.payloads.Error;
@@ -11,6 +12,7 @@ import com.launchdarkly.sdk.internal.fdv2.payloads.IntentCode;
 import com.launchdarkly.sdk.internal.fdv2.payloads.PayloadTransferred;
 import com.launchdarkly.sdk.internal.fdv2.payloads.PutObject;
 import com.launchdarkly.sdk.internal.fdv2.payloads.ServerIntent;
+import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ProtocolHandler.FDv2ActionChangeset;
 
 import org.junit.Test;
 
@@ -673,6 +675,38 @@ public class FDv2ProtocolHandlerTest extends BaseInternalTest {
     assertFalse(changeset.getSelector().isEmpty());
     assertEquals("(p:test-payload-id:42)", changeset.getSelector().getState());
     assertEquals(42, changeset.getSelector().getVersion());
+  }
+
+  @Test
+  public void selectorlessFullTransfer_EmitsEmptySelector() {
+    for (boolean withObject : new boolean[] {false, true}) {
+      FDv2ProtocolHandler handler = new FDv2ProtocolHandler();
+      handler.handleEvent(createServerIntentEvent(IntentCode.TRANSFER_FULL, "initial", 1, ""));
+      FDv2ActionChangeset initial = (FDv2ActionChangeset) handler.handleEvent(
+          createPayloadTransferredEvent("initial", 1));
+      assertFalse(initial.getChangeset().getSelector().isEmpty());
+
+      handler.handleEvent(createServerIntentEvent(IntentCode.TRANSFER_FULL, "", 0, ""));
+      if (withObject) {
+        handler.handleEvent(createPutObjectEvent("flag", "flag-key", 1));
+      }
+      FDv2ActionChangeset action = (FDv2ActionChangeset) handler.handleEvent(
+          createPayloadTransferredEvent("", 0));
+
+      assertEquals(FDv2ChangeSet.FDv2ChangeSetType.FULL, action.getChangeset().getType());
+      assertEquals(Selector.EMPTY, action.getChangeset().getSelector());
+      assertEquals(withObject ? 1 : 0, action.getChangeset().getChanges().size());
+    }
+  }
+
+  @Test
+  public void payloadTransferred_NonEmptyStateWithZeroVersionPreservesSelector() {
+    FDv2ProtocolHandler handler = new FDv2ProtocolHandler();
+    handler.handleEvent(createServerIntentEvent(IntentCode.TRANSFER_FULL, "initial", 0, ""));
+    FDv2ActionChangeset action = (FDv2ActionChangeset) handler.handleEvent(
+        createPayloadTransferredEvent("initial", 0));
+
+    assertEquals(Selector.make(0, "initial"), action.getChangeset().getSelector());
   }
 
   /**

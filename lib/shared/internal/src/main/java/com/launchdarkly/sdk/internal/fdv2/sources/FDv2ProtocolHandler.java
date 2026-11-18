@@ -252,7 +252,7 @@ public final class FDv2ProtocolHandler {
     FDv2ChangeSet changeset = new FDv2ChangeSet(
         changeSetType,
         new ArrayList<>(changes),
-        Selector.make(payload.getVersion(), payload.getState()));
+        payload.getState().isEmpty() ? Selector.EMPTY : Selector.make(payload.getVersion(), payload.getState()));
     state = FDv2ProtocolState.CHANGES;
     changes.clear();
     return new FDv2ActionChangeset(changeset);
