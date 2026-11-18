@@ -16,6 +16,7 @@ import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ProtocolHandler.FDv2Action
 
 import org.junit.Test;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -342,6 +343,24 @@ public class FDv2ProtocolHandlerTest extends BaseInternalTest {
     assertTrue(action instanceof FDv2ProtocolHandler.FDv2ActionGoodbye);
     FDv2ProtocolHandler.FDv2ActionGoodbye goodbyeAction = (FDv2ProtocolHandler.FDv2ActionGoodbye) action;
     assertEquals("Server is shutting down", goodbyeAction.getReason());
+    assertNull(goodbyeAction.getProtocolFallbackTTL());
+    assertNull(new FDv2ProtocolHandler.FDv2ActionGoodbye("reason").getProtocolFallbackTTL());
+  }
+
+  @Test
+  public void goodbye_PassesThroughProtocolFallbackTTL() {
+    String[] values = {"60", "1.25", "\"invalid\"", "null"};
+    Duration[] expected = {Duration.ofSeconds(60), Duration.ofMillis(1250), Duration.ZERO, null};
+    for (int i = 0; i < values.length; i++) {
+      JsonElement data = gsonInstance().fromJson(
+          "{\"reason\":\"fallback\",\"protocolFallbackTTL\":" + values[i] + "}", JsonElement.class);
+      FDv2ProtocolHandler.IFDv2ProtocolAction action = new FDv2ProtocolHandler().handleEvent(
+          new FDv2Event(FDv2EventTypes.GOODBYE, data));
+      assertTrue(action instanceof FDv2ProtocolHandler.FDv2ActionGoodbye);
+      FDv2ProtocolHandler.FDv2ActionGoodbye goodbyeAction = (FDv2ProtocolHandler.FDv2ActionGoodbye) action;
+      assertEquals("fallback", goodbyeAction.getReason());
+      assertEquals(values[i], expected[i], goodbyeAction.getProtocolFallbackTTL());
+    }
   }
 
   // Requirement 3.3.9: Heartbeat Handling
@@ -1097,4 +1116,3 @@ public class FDv2ProtocolHandlerTest extends BaseInternalTest {
     assertEquals("f-new", changesetAction.getChangeset().getChanges().get(0).getKey());
   }
 }
-
