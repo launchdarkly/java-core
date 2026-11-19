@@ -10,7 +10,6 @@ import com.launchdarkly.sdk.internal.fdv2.payloads.PutObject;
 import com.launchdarkly.sdk.internal.fdv2.payloads.ServerIntent;
 import com.launchdarkly.sdk.json.SerializationException;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -137,15 +136,15 @@ public final class FDv2ProtocolHandler {
 
   public static final class FDv2ActionGoodbye implements IFDv2ProtocolAction {
     private final String reason;
-    private final Duration protocolFallbackTTL;
+    private final Long protocolFallbackTTLMillis;
 
     public FDv2ActionGoodbye(String reason) {
       this(reason, null);
     }
 
-    public FDv2ActionGoodbye(String reason, Duration protocolFallbackTTL) {
+    public FDv2ActionGoodbye(String reason, Long protocolFallbackTTLMillis) {
       this.reason = reason;
-      this.protocolFallbackTTL = protocolFallbackTTL;
+      this.protocolFallbackTTLMillis = protocolFallbackTTLMillis;
     }
 
     @Override
@@ -158,12 +157,12 @@ public final class FDv2ProtocolHandler {
     }
 
     /**
-     * Returns the fallback TTL, or null if absent. ZERO requests the default TTL.
+     * Returns the fallback TTL in milliseconds, or null if absent. 0 requests the default TTL.
      *
-     * @return the fallback TTL
+     * @return the fallback TTL in milliseconds
      */
-    public Duration getProtocolFallbackTTL() {
-      return protocolFallbackTTL;
+    public Long getProtocolFallbackTTLMillis() {
+      return protocolFallbackTTLMillis;
     }
   }
 
@@ -280,7 +279,7 @@ public final class FDv2ProtocolHandler {
   }
 
   private IFDv2ProtocolAction goodbye(Goodbye intent) {
-    return new FDv2ActionGoodbye(intent.getReason(), intent.getProtocolFallbackTTL());
+    return new FDv2ActionGoodbye(intent.getReason(), intent.getProtocolFallbackTTLMillis());
   }
 
   /**
@@ -356,4 +355,3 @@ public final class FDv2ProtocolHandler {
     state = FDv2ProtocolState.INACTIVE;
   }
 }
-
