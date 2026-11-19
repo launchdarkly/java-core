@@ -2,6 +2,7 @@ package com.launchdarkly.sdk.internal.fdv2.payloads;
 
 import com.google.gson.TypeAdapter;
 import com.google.gson.annotations.JsonAdapter;
+import com.google.gson.annotations.SerializedName;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 import com.google.gson.stream.JsonWriter;
@@ -9,30 +10,30 @@ import com.launchdarkly.sdk.json.SerializationException;
 
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.time.Duration;
 
 /**
  * Represents the goodbye event, which indicates that the server is about to disconnect.
  */
 public final class Goodbye {
   private final String reason;
+  @SerializedName("protocolFallbackTTL")
   @JsonAdapter(FallbackTTLAdapter.class)
-  private final Duration protocolFallbackTTL;
+  private final Long protocolFallbackTTLMillis;
 
-  private static final class FallbackTTLAdapter extends TypeAdapter<Duration> {
+  private static final class FallbackTTLAdapter extends TypeAdapter<Long> {
     @Override
-    public void write(JsonWriter writer, Duration value) throws IOException {
-      writer.value(BigDecimal.valueOf(value.toMillis(), 3));
+    public void write(JsonWriter writer, Long value) throws IOException {
+      writer.value(BigDecimal.valueOf(value, 3));
     }
 
     @Override
-    public Duration read(JsonReader reader) throws IOException {
+    public Long read(JsonReader reader) throws IOException {
       if (reader.peek() == JsonToken.NUMBER) {
-        return Duration.ofMillis((long) (reader.nextDouble() * 1000));
+        return (long) (reader.nextDouble() * 1000);
       }
       // The spec treats a malformed TTL the same as 0: both use the default TTL.
       reader.skipValue();
-      return Duration.ZERO;
+      return 0L;
     }
   }
   
@@ -49,11 +50,11 @@ public final class Goodbye {
    * Constructs a new Goodbye.
    *
    * @param reason reason for the disconnection
-   * @param protocolFallbackTTL fallback TTL, or null if absent; ZERO requests the default TTL
+   * @param protocolFallbackTTLMillis fallback TTL in milliseconds, or null if absent; 0 requests the default TTL
    */
-  public Goodbye(String reason, Duration protocolFallbackTTL) {
+  public Goodbye(String reason, Long protocolFallbackTTLMillis) {
     this.reason = reason;
-    this.protocolFallbackTTL = protocolFallbackTTL;
+    this.protocolFallbackTTLMillis = protocolFallbackTTLMillis;
   }
   
   /**
@@ -66,12 +67,12 @@ public final class Goodbye {
   }
 
   /**
-   * Returns the fallback TTL, or null if absent. ZERO requests the default TTL.
+   * Returns the fallback TTL in milliseconds, or null if absent. 0 requests the default TTL.
    *
-   * @return the fallback TTL
+   * @return the fallback TTL in milliseconds
    */
-  public Duration getProtocolFallbackTTL() {
-    return protocolFallbackTTL;
+  public Long getProtocolFallbackTTLMillis() {
+    return protocolFallbackTTLMillis;
   }
   
   /**
@@ -83,7 +84,7 @@ public final class Goodbye {
    */
   public static Goodbye parse(JsonReader reader) throws SerializationException {
     String reason = null;
-    Duration protocolFallbackTTL = null;
+    Long protocolFallbackTTLMillis = null;
     
     try {
       if (reader.peek() != JsonToken.BEGIN_OBJECT) {
@@ -99,10 +100,10 @@ public final class Goodbye {
           break;
         case "protocolFallbackTTL":
           if (reader.peek() == JsonToken.NULL) {
-            protocolFallbackTTL = null;
+            protocolFallbackTTLMillis = null;
             reader.skipValue();
           } else {
-            protocolFallbackTTL = new FallbackTTLAdapter().read(reader);
+            protocolFallbackTTLMillis = new FallbackTTLAdapter().read(reader);
           }
           break;
         default:
@@ -112,7 +113,7 @@ public final class Goodbye {
       }
       reader.endObject();
       
-      return new Goodbye(reason, protocolFallbackTTL);
+      return new Goodbye(reason, protocolFallbackTTLMillis);
     } catch (IOException | RuntimeException e) {
       throw new SerializationException(e);
     }
