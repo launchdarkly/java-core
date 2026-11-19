@@ -660,6 +660,101 @@ public class DataModelSerializationTest {
   }
 
   @Test
+  public void flagWithClientSideAvailabilityIsDeserializedAndSerialized() {
+    boolean[] values = { false, true };
+    for (boolean usingMobileKey: values) {
+      for (boolean usingEnvironmentId: values) {
+        LDValue flagJson = baseBuilder("flag-key")
+            .put("clientSide", usingEnvironmentId)
+            .put("clientSideAvailability", LDValue.buildObject()
+                .put("usingMobileKey", usingMobileKey)
+                .put("usingEnvironmentId", usingEnvironmentId)
+                .build())
+            .build();
+        assertFlagFromJson(flagJson, flag -> {
+          assertNotNull(flag.getClientSideAvailability());
+          assertEquals(usingMobileKey, flag.getClientSideAvailability().isUsingMobileKey());
+          assertEquals(usingEnvironmentId, flag.getClientSideAvailability().isUsingEnvironmentId());
+          assertEquals(usingEnvironmentId, flag.isClientSide());
+
+          LDValue json1 = LDValue.parse(FEATURES.serialize(new ItemDescriptor(flag.getVersion(), flag)));
+          assertJsonEquals(flagJson.get("clientSideAvailability").toJsonString(),
+              json1.get("clientSideAvailability").toJsonString());
+          assertEquals(LDValue.of(usingEnvironmentId), json1.get("clientSide"));
+        });
+      }
+    }
+  }
+
+  @Test
+  public void flagWithClientSideAvailabilityTakesClientSideFromUsingEnvironmentId() {
+    LDValue flagJson = baseBuilder("flag-key")
+        .put("clientSide", true)
+        .put("clientSideAvailability", LDValue.buildObject()
+            .put("usingMobileKey", true)
+            .put("usingEnvironmentId", false)
+            .build())
+        .build();
+    assertFlagFromJson(flagJson, flag -> {
+      // The object has precedence over the "clientSide" value that the flag JSON has.
+      assertFalse(flag.isClientSide());
+
+      LDValue json1 = LDValue.parse(FEATURES.serialize(new ItemDescriptor(flag.getVersion(), flag)));
+      assertEquals(LDValue.of(false), json1.get("clientSide"));
+      assertEquals(LDValue.of(false), json1.get("clientSideAvailability").get("usingEnvironmentId"));
+    });
+  }
+
+  @Test
+  public void flagWithClientSideAvailabilityMissingPropertyReadsItAsFalse() {
+    LDValue flagJson = baseBuilder("flag-key")
+        .put("clientSide", true)
+        .put("clientSideAvailability", LDValue.buildObject()
+            .put("usingEnvironmentId", true)
+            .build())
+        .build();
+    assertFlagFromJson(flagJson, flag -> {
+      assertNotNull(flag.getClientSideAvailability());
+      assertFalse(flag.getClientSideAvailability().isUsingMobileKey());
+      assertTrue(flag.getClientSideAvailability().isUsingEnvironmentId());
+
+      LDValue json1 = LDValue.parse(FEATURES.serialize(new ItemDescriptor(flag.getVersion(), flag)));
+      assertJsonEquals("{\"usingMobileKey\":false,\"usingEnvironmentId\":true}",
+          json1.get("clientSideAvailability").toJsonString());
+      assertEquals(LDValue.of(true), json1.get("clientSide"));
+    });
+  }
+
+  @Test
+  public void flagWithoutClientSideAvailabilityIsSerializedWithClientSideOnly() {
+    boolean[] values = { false, true };
+    for (boolean clientSide: values) {
+      LDValue absentJson = baseBuilder("flag-key").put("clientSide", clientSide).build();
+      LDValue nullJson = baseBuilder("flag-key").put("clientSide", clientSide)
+          .put("clientSideAvailability", LDValue.ofNull()).build();
+      for (LDValue flagJson: new LDValue[] { absentJson, nullJson }) {
+        assertFlagFromJson(flagJson, flag -> {
+          assertNull(flag.getClientSideAvailability());
+          assertEquals(clientSide, flag.isClientSide());
+
+          String json1 = FEATURES.serialize(new ItemDescriptor(flag.getVersion(), flag));
+          assertFalse(json1.contains("clientSideAvailability"));
+          assertTrue(json1.contains("\"clientSide\":" + clientSide));
+        });
+      }
+    }
+  }
+
+  @Test
+  public void flagWithClientSideAvailabilityFromBuilderIsSerialized() {
+    FeatureFlag flag = flagBuilder("flag-key").clientSideAvailability(false, true).build();
+    LDValue json = LDValue.parse(serialize(flag));
+    assertJsonEquals("{\"usingMobileKey\":false,\"usingEnvironmentId\":true}",
+        json.get("clientSideAvailability").toJsonString());
+    assertEquals(LDValue.of(true), json.get("clientSide"));
+  }
+
+  @Test
   public void parsingFullDataSetEmptyObject() throws Exception {
     String json = "{}";
     FullDataSet<ItemDescriptor> allData = new FullDataSet<>(parseFullDataSet(jsonReaderFrom(json)), true);

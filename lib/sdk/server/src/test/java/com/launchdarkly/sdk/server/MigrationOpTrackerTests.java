@@ -137,7 +137,7 @@ public class MigrationOpTrackerTests {
       "test-key",
       new DataModel.FeatureFlag("flag", 2, true, null,
         "salt", null, null, null, null, 0, null,
-        false, false, false, null, false,
+        false, null, false, false, null, false,
         5l, null, false),
       detail,
       MigrationStage.OFF,
