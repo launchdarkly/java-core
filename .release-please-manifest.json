@@ -4,7 +4,7 @@
   "lib/java-server-sdk-redis-store": "3.2.0",
   "lib/java-server-sdk-dynamodb-store": "5.0.1",
   "lib/shared/common": "2.5.0",
-  "lib/shared/internal": "1.13.0",
+  "lib/shared/internal": "1.13.1",
   "lib/shared/test-helpers": "2.1.0",
   "lib/sdk/server": "7.18.1"
 }
