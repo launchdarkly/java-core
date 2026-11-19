@@ -12,6 +12,7 @@ import com.launchdarkly.sdk.json.SerializationException;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -443,6 +444,7 @@ public class PollingInitializerImplTest extends BaseTest {
 
         okhttp3.Headers headers = new okhttp3.Headers.Builder()
             .add("x-ld-fd-fallback", "true")
+            .add("x-ld-fd-fallback-ttl", "30")
             .build();
 
         FDv2Requestor.FDv2PayloadResponse response = FDv2Requestor.FDv2PayloadResponse.success(
@@ -464,6 +466,7 @@ public class PollingInitializerImplTest extends BaseTest {
         assertNotNull(result);
         assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
         assertEquals(true, result.isFdv1Fallback());
+        assertEquals(Duration.ofSeconds(30), result.getFdv1FallbackTTL());
     }
 
     @Test

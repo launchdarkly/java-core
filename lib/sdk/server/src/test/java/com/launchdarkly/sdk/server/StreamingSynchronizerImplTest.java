@@ -357,6 +357,48 @@ public class StreamingSynchronizerImplTest extends BaseTest {
     }
 
     @Test
+    public void goodbyeFallbackTTL() throws Exception {
+        String[] fields = {"", ",\"protocolFallbackTTL\":0.05", ",\"protocolFallbackTTL\":\"invalid\"", ",\"protocolFallbackTTL\":null"};
+        Duration[] expected = {null, Duration.ofMillis(50), Duration.ZERO, null};
+        for (int i = 0; i < fields.length; i++) {
+            String event = makeEvent("goodbye", "{\"reason\":\"fallback\"" + fields[i] + "}");
+            try (HttpServer server = HttpServer.start(Handlers.all(
+                    Handlers.SSE.start(), Handlers.SSE.event(event), Handlers.SSE.leaveOpen()));
+                 StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                         toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp()),
+                         server.getUri(), "/stream", testLogger, mockSelectorSource(), executor, null,
+                         Duration.ofMillis(100), StreamingSynchronizerImpl.RESET_THRESHOLD, Thread.NORM_PRIORITY, null)) {
+                FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
+                assertEquals(SourceSignal.GOODBYE, result.getStatus().getState());
+                assertEquals(expected[i] != null, result.isFdv1Fallback());
+                assertEquals(expected[i], result.getFdv1FallbackTTL());
+            }
+        }
+    }
+
+    @Test
+    public void headerFallbackTTL() throws Exception {
+        String[] values = {"30", "invalid", "1.5"};
+        Duration[] expected = {Duration.ofSeconds(30), null, null};
+        for (int i = 0; i < values.length; i++) {
+            try (HttpServer server = HttpServer.start(Handlers.all(
+                    Handlers.header("x-ld-fd-fallback", "true"),
+                    Handlers.header("x-ld-fd-fallback-ttl", values[i]),
+                    Handlers.SSE.start(),
+                    Handlers.SSE.event(makeEvent("goodbye", "{\"reason\":\"fallback\"}")),
+                    Handlers.SSE.leaveOpen()));
+                 StreamingSynchronizerImpl synchronizer = new StreamingSynchronizerImpl(
+                         toHttpProperties(clientContext("sdk-key", baseConfig().build()).getHttp()),
+                         server.getUri(), "/stream", testLogger, mockSelectorSource(), executor, null,
+                         Duration.ofMillis(100), StreamingSynchronizerImpl.RESET_THRESHOLD, Thread.NORM_PRIORITY, null)) {
+                FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
+                assertTrue(result.isFdv1Fallback());
+                assertEquals(expected[i], result.getFdv1FallbackTTL());
+            }
+        }
+    }
+
+    @Test
     public void goodbyeEventInResponse() throws Exception {
         String goodbyeEvent = makeEvent("goodbye", "{\"reason\":\"service-unavailable\"}");
         String serverIntent = makeEvent("server-intent", "{\"payloads\":[{\"id\":\"payload-1\",\"target\":100,\"intentCode\":\"xfer-full\",\"reason\":\"payload-missing\"}]}");

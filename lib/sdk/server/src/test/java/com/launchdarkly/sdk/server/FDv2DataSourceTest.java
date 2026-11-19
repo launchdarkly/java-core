@@ -57,6 +57,62 @@ public class FDv2DataSourceTest extends BaseTest {
         resourcesToClose.clear();
     }
 
+    @Test
+    public void serverFallbackTTLIsUnjitteredAndInvalidValuesUseDefault() {
+        FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), ImmutableList.of(), null,
+                new MockDataSourceUpdateSink(), Thread.NORM_PRIORITY, logger);
+        resourcesToClose.add(dataSource);
+        for (Duration ttl : Arrays.asList(Duration.ofMillis(1), Duration.ofSeconds(30), Duration.ofHours(1))) {
+            assertEquals(ttl, dataSource.fallbackTTL(ttl));
+        }
+        for (Duration ttl : Arrays.asList(null, Duration.ZERO, Duration.ofSeconds(-1), Duration.ofSeconds(3601))) {
+            Duration actual = dataSource.fallbackTTL(ttl);
+            assertTrue(actual.compareTo(Duration.ofMinutes(30)) >= 0);
+            assertTrue(actual.compareTo(Duration.ofHours(1)) <= 0);
+        }
+    }
+
+    @Test
+    public void serverFallbackTTLControlsInitializerAndSynchronizerRecovery() throws Exception {
+        for (int scenario = 0; scenario < 6; scenario++) {
+            final int mode = scenario;
+            Duration ttl = Duration.ofMillis(50);
+            FDv2SourceResult directive = mode == 2
+                    ? FDv2SourceResult.goodbye("fallback", true, ttl, null)
+                    : mode == 3 ? FDv2SourceResult.terminalError(
+                            new DataSourceStatusProvider.ErrorInfo(DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE,
+                                    500, null, Instant.now()), true, ttl, null)
+                    : FDv2SourceResult.changeSet(makeChangeSet(mode != 1), true, ttl, null);
+            ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = mode < 4
+                    ? ImmutableList.of(() -> new MockInitializer(CompletableFuture.completedFuture(directive)))
+                    : ImmutableList.of();
+            AtomicInteger builds = new AtomicInteger();
+            BlockingQueue<Boolean> recovered = new LinkedBlockingQueue<>();
+            ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(() -> {
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                if (mode >= 4 && builds.incrementAndGet() == 1) {
+                    results.add(mode == 5 ? FDv2SourceResult.changeSet(makeChangeSet(true), true) : directive);
+                } else {
+                    recovered.offer(true);
+                }
+                return new MockQueuedSynchronizer(results);
+            });
+            FDv2DataSource.DataSourceFactory<Synchronizer> fallback = () -> {
+                BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
+                if (mode == 5) {
+                    results.add(FDv2SourceResult.changeSet(makeChangeSet(false), true, ttl, null));
+                }
+                return new MockQueuedSynchronizer(results);
+            };
+            try (FDv2DataSource dataSource = new FDv2DataSource(initializers, synchronizers, fallback,
+                    new MockDataSourceUpdateSink(), Thread.NORM_PRIORITY, logger)) {
+                dataSource.start();
+                assertNotNull("scenario " + mode + " should recover using the server TTL",
+                        recovered.poll(2, TimeUnit.SECONDS));
+            }
+        }
+    }
+
     private ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> makeChangeSet(boolean withSelector) {
         Selector selector = withSelector ? Selector.make(1, "test-state") : Selector.EMPTY;
         return new ChangeSet<>(
