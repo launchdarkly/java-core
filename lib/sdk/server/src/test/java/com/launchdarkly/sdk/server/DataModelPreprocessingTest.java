@@ -41,7 +41,7 @@ public class DataModelPreprocessingTest {
   
   private FeatureFlag flagFromClause(Clause c) {
     return new FeatureFlag("key", 0, false, null, null, null, null, rulesFromClause(c),
-        null, null, null, false, false, false, null, false, null, null, false);
+        null, null, null, false, null, false, false, null, false, null, null, false);
   }
   
   private List<Rule> rulesFromClause(Clause c) {
@@ -54,7 +54,7 @@ public class DataModelPreprocessingTest {
         ImmutableList.of(), null,
         0,
         ImmutableList.of(aValue, bValue),
-        false, false, false, null, false, null, null, false);
+        false, null, false, false, null, false, null, null, false);
     
     f.afterDeserialized();
     
@@ -69,7 +69,7 @@ public class DataModelPreprocessingTest {
         ImmutableList.of(), null,
         null,
         ImmutableList.of(aValue, bValue),
-        false, false, false, null, false, null, null, false);
+        false, null, false, false, null, false, null, null, false);
     
     f.afterDeserialized();
     
@@ -83,7 +83,7 @@ public class DataModelPreprocessingTest {
     FeatureFlag f = new FeatureFlag("key", 0, false, null, null, null, null,
         ImmutableList.of(), null, 0,
         ImmutableList.of(aValue, bValue),
-        false, false, false, null, false, null, null, false);
+        false, null, false, false, null, false, null, null, false);
     
     f.afterDeserialized();
     
@@ -109,7 +109,7 @@ public class DataModelPreprocessingTest {
         ImmutableList.of(new Target(null, ImmutableSet.of(), 1)),
         null, ImmutableList.of(), null, 0,
         ImmutableList.of(aValue, bValue),
-        false, false, false, null, false, null, null, false);
+        false, null, false, false, null, false, null, null, false);
     
     f.afterDeserialized();
     
@@ -126,7 +126,7 @@ public class DataModelPreprocessingTest {
         null, null, null,
         ImmutableList.of(), null, 0,
         ImmutableList.of(aValue, bValue),
-        false, false, false, null, false, null, null, false);
+        false, null, false, false, null, false, null, null, false);
     
     f.afterDeserialized();
     
@@ -150,7 +150,7 @@ public class DataModelPreprocessingTest {
         ImmutableList.of(new Rule("ruleid0", ImmutableList.of(), null, rollout, false)),
         null, null,
         ImmutableList.of(aValue, bValue),
-        false, false, false, null, false, null, null, false);
+        false, null, false, false, null, false, null, null, false);
 
     f.afterDeserialized();
 
@@ -177,7 +177,7 @@ public class DataModelPreprocessingTest {
         ImmutableList.of(new Rule("ruleid0", ImmutableList.of(), 0, null, false)),
         null, null,
         ImmutableList.of(aValue, bValue),
-        false, false, false, null, false, null, null, false);
+        false, null, false, false, null, false, null, null, false);
     
     f.afterDeserialized();
     

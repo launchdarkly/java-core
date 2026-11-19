@@ -137,6 +137,7 @@ public abstract class DataModel {
     private Integer offVariation; //optional
     private List<LDValue> variations;
     private boolean clientSide;
+    private ClientSideAvailability clientSideAvailability; // optional
     private boolean trackEvents;
     private boolean trackEventsFallthrough;
     private Long debugEventsUntilDate;
@@ -144,6 +145,30 @@ public abstract class DataModel {
     private Long samplingRatio;
     private Migration migration;
     private boolean excludeFromSummaries;
+
+    /**
+     * Tells which kinds of client-side SDK can use the flag. The flag has this object only if its JSON
+     * has a "clientSideAvailability" object.
+     */
+    static final class ClientSideAvailability {
+      private boolean usingMobileKey;
+      private boolean usingEnvironmentId;
+
+      ClientSideAvailability() {}
+
+      ClientSideAvailability(boolean usingMobileKey, boolean usingEnvironmentId) {
+        this.usingMobileKey = usingMobileKey;
+        this.usingEnvironmentId = usingEnvironmentId;
+      }
+
+      boolean isUsingMobileKey() {
+        return usingMobileKey;
+      }
+
+      boolean isUsingEnvironmentId() {
+        return usingEnvironmentId;
+      }
+    }
 
     /**
      * Container for migration specific flag data.
@@ -168,8 +193,9 @@ public abstract class DataModel {
 
     FeatureFlag(String key, int version, boolean on, List<Prerequisite> prerequisites, String salt, List<Target> targets,
         List<Target> contextTargets, List<Rule> rules, VariationOrRollout fallthrough, Integer offVariation,
-        List<LDValue> variations, boolean clientSide, boolean trackEvents, boolean trackEventsFallthrough,
-        Long debugEventsUntilDate, boolean deleted, Long samplingRatio, Migration migration, boolean excludeFromSummaries) {
+        List<LDValue> variations, boolean clientSide, ClientSideAvailability clientSideAvailability,
+        boolean trackEvents, boolean trackEventsFallthrough, Long debugEventsUntilDate, boolean deleted,
+        Long samplingRatio, Migration migration, boolean excludeFromSummaries) {
       this.key = key;
       this.version = version;
       this.on = on;
@@ -181,7 +207,9 @@ public abstract class DataModel {
       this.fallthrough = fallthrough;
       this.offVariation = offVariation;
       this.variations = variations;
-      this.clientSide = clientSide;
+      // If the flag has a "clientSideAvailability" object, "clientSide" has the value of "usingEnvironmentId".
+      this.clientSide = clientSideAvailability == null ? clientSide : clientSideAvailability.isUsingEnvironmentId();
+      this.clientSideAvailability = clientSideAvailability;
       this.trackEvents = trackEvents;
       this.trackEventsFallthrough = trackEventsFallthrough;
       this.debugEventsUntilDate = debugEventsUntilDate;
@@ -259,6 +287,11 @@ public abstract class DataModel {
       return clientSide;
     }
 
+    // Returns null if the JSON for the flag has no "clientSideAvailability" object.
+    ClientSideAvailability getClientSideAvailability() {
+      return clientSideAvailability;
+    }
+
     Long getSamplingRatio() { return samplingRatio; }
 
     Migration getMigration() { return migration; }
@@ -268,6 +301,12 @@ public abstract class DataModel {
     }
 
     public void afterDeserialized() {
+      // The "clientSideAvailability" object is in the newer schema. If the flag has the object, set
+      // "clientSide" to the value of "usingEnvironmentId". The SDK then writes the two properties
+      // with the same value, for SDKs that read only "clientSide".
+      if (clientSideAvailability != null) {
+        clientSide = clientSideAvailability.isUsingEnvironmentId();
+      }
       DataModelPreprocessing.preprocessFlag(this);
     }
   }
