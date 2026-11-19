@@ -2,6 +2,13 @@
 
 All notable changes to the project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [1.13.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.13.0...launchdarkly-java-sdk-internal-1.13.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* Remove java.time.Duration usage from FDv2 goodbye parsing ([#273](https://github.com/launchdarkly/java-core/issues/273)) ([171be16](https://github.com/launchdarkly/java-core/commit/171be16e2cbb97759c7de397b715d50dbbfec654))
+
 ## [1.13.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.12.2...launchdarkly-java-sdk-internal-1.13.0) (2026-11-18)
 
 
