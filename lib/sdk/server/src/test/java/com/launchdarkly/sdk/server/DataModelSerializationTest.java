@@ -11,6 +11,7 @@ import com.launchdarkly.sdk.server.DataModel.Clause;
 import com.launchdarkly.sdk.server.DataModel.FeatureFlag;
 import com.launchdarkly.sdk.server.DataModel.Operator;
 import com.launchdarkly.sdk.server.DataModel.Prerequisite;
+import com.launchdarkly.sdk.server.DataModel.Rollout;
 import com.launchdarkly.sdk.server.DataModel.RolloutKind;
 import com.launchdarkly.sdk.server.DataModel.Rule;
 import com.launchdarkly.sdk.server.DataModel.Segment;
@@ -575,6 +576,89 @@ public class DataModelSerializationTest {
         );
   }
   
+  @Test
+  public void explicitNullsForOptionalStringAndBooleanPropertiesAreTreatedAsOmitted() {
+    // Parse a flag with a null value for each optional string and boolean property.
+    LDValue flagJson = baseBuilder("flag-key")
+        .put("salt", LDValue.ofNull())
+        .put("trackEvents", LDValue.ofNull())
+        .put("trackEventsFallthrough", LDValue.ofNull())
+        .put("clientSide", LDValue.ofNull())
+        .put("deleted", LDValue.ofNull())
+        .put("samplingRatio", LDValue.ofNull())
+        .put("excludeFromSummaries", LDValue.ofNull())
+        .put("contextTargets", LDValue.arrayOf(
+            LDValue.buildObject().put("contextKind", LDValue.ofNull()).put("variation", 0)
+              .put("values", LDValue.arrayOf(LDValue.of("key1"))).build()
+            ))
+        .put("rules", LDValue.arrayOf(
+            LDValue.buildObject().put("id", LDValue.ofNull()).put("trackEvents", LDValue.ofNull())
+              .put("clauses", LDValue.arrayOf(
+                  LDValue.buildObject().put("contextKind", LDValue.ofNull()).put("attribute", "/attr1")
+                    .put("op", "in").put("values", LDValue.arrayOf(LDValue.of("a")))
+                    .put("negate", LDValue.ofNull()).build()
+                  ))
+              .put("rollout", LDValue.buildObject().put("kind", LDValue.ofNull())
+                  .put("contextKind", LDValue.ofNull()).put("bucketBy", LDValue.ofNull())
+                  .put("variations", LDValue.arrayOf(
+                      LDValue.buildObject().put("variation", 0).put("weight", 100000)
+                        .put("untracked", LDValue.ofNull()).build()
+                      )).build())
+              .build()
+            ))
+        .build();
+    // Each null property has the value it has when the property is omitted.
+    assertFlagFromJson(flagJson, flag -> {
+      assertNull(flag.getSalt());
+      assertFalse(flag.isTrackEvents());
+      assertFalse(flag.isTrackEventsFallthrough());
+      assertFalse(flag.isClientSide());
+      assertFalse(flag.isDeleted());
+      assertNull(flag.getSamplingRatio());
+      assertFalse(flag.isExcludeFromSummaries());
+      assertNull(flag.getContextTargets().get(0).getContextKind());
+
+      Rule rule = flag.getRules().get(0);
+      assertNull(rule.getId());
+      assertFalse(rule.isTrackEvents());
+
+      Clause clause = rule.getClauses().get(0);
+      assertNull(clause.getContextKind());
+      assertEquals(AttributeRef.fromLiteral("/attr1"), clause.getAttribute());
+      assertFalse(clause.isNegate());
+
+      Rollout rollout = rule.getRollout();
+      assertEquals(RolloutKind.rollout, rollout.getKind());
+      assertNull(rollout.getContextKind());
+      assertNull(rollout.getBucketBy());
+      assertFalse(rollout.getVariations().get(0).isUntracked());
+    });
+
+    // Parse a segment with a null value for each optional string and boolean property.
+    LDValue segmentJson = baseBuilder("segment-key")
+        .put("salt", LDValue.ofNull())
+        .put("unbounded", LDValue.ofNull())
+        .put("unboundedContextKind", LDValue.ofNull())
+        .put("deleted", LDValue.ofNull())
+        .put("rules", LDValue.arrayOf(
+            LDValue.buildObject().put("id", LDValue.ofNull())
+              .put("rolloutContextKind", LDValue.ofNull()).put("bucketBy", LDValue.ofNull())
+              .put("clauses", LDValue.arrayOf()).build()
+            ))
+        .build();
+    // Each null property has the value it has when the property is omitted.
+    assertSegmentFromJson(segmentJson, segment -> {
+      assertNull(segment.getSalt());
+      assertFalse(segment.isUnbounded());
+      assertNull(segment.getUnboundedContextKind());
+      assertFalse(segment.isDeleted());
+
+      SegmentRule rule = segment.getRules().get(0);
+      assertNull(rule.getRolloutContextKind());
+      assertNull(rule.getBucketBy());
+    });
+  }
+
   @Test
   public void parsingFullDataSetEmptyObject() throws Exception {
     String json = "{}";
