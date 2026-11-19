@@ -11,7 +11,7 @@ managed in the LaunchDarkly dashboard.
 
 ## Supported Java versions
 
-This library has a minimum Java version of 8.
+While this library requires Java 8 or later, you should use the latest patched version of a supported Java release.
 
 ## Getting started
 
