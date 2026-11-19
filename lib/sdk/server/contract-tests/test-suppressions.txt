@@ -1,1 +1,11 @@
 
+persistent data store/consul/daemon mode
+persistent data store/consul/uses custom prefix
+persistent data store/consul/uses default prefix
+persistent data store/dynamodb/daemon mode
+persistent data store/dynamodb/read-write/data source deletions respect versioning
+persistent data store/dynamodb/uses custom prefix
+persistent data store/dynamodb/uses default prefix
+persistent data store/redis/daemon mode
+persistent data store/redis/uses custom prefix
+persistent data store/redis/uses default prefix

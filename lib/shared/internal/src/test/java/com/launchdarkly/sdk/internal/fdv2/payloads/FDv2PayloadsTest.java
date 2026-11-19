@@ -16,6 +16,7 @@ import com.launchdarkly.sdk.json.SerializationException;
 import org.junit.Test;
 
 import java.io.StringReader;
+import java.time.Duration;
 import java.util.List;
 
 import static com.launchdarkly.sdk.internal.GsonHelpers.gsonInstance;
@@ -26,6 +27,29 @@ import static org.junit.Assert.assertTrue;
 
 @SuppressWarnings("javadoc")
 public class FDv2PayloadsTest extends BaseInternalTest {
+
+  @Test
+  public void goodbye_ParsesProtocolFallbackTTL() throws Exception {
+    String[] values = {"60", "1.25", "0", "-1", "3601", "\"invalid\"", "true", "{}", "[]", "null"};
+    Duration[] expected = {Duration.ofSeconds(60), Duration.ofMillis(1250), Duration.ZERO,
+        Duration.ofSeconds(-1), Duration.ofSeconds(3601), Duration.ZERO, Duration.ZERO,
+        Duration.ZERO, Duration.ZERO, null};
+    for (int i = 0; i < values.length; i++) {
+      String json = "{\"reason\":\"fallback\",\"protocolFallbackTTL\":" + values[i] + "}";
+      Goodbye goodbye = Goodbye.parse(new JsonReader(new StringReader(json)));
+      assertEquals(values[i], expected[i], goodbye.getProtocolFallbackTTL());
+      assertEquals("fallback", goodbye.getReason());
+      Goodbye reserialized = Goodbye.parse(new JsonReader(new StringReader(gsonInstance().toJson(goodbye))));
+      assertEquals(expected[i], reserialized.getProtocolFallbackTTL());
+    }
+  }
+
+  @Test
+  public void goodbye_WithoutProtocolFallbackTTL() throws Exception {
+    assertNull(Goodbye.parse(new JsonReader(new StringReader("{}"))).getProtocolFallbackTTL());
+    assertNull(new Goodbye("reason").getProtocolFallbackTTL());
+    assertEquals(Duration.ofSeconds(5), new Goodbye("reason", Duration.ofSeconds(5)).getProtocolFallbackTTL());
+  }
 
   @Test
   public void serverIntent_CanDeserializeAndReserialize() throws Exception {
@@ -874,4 +898,3 @@ public class FDv2PayloadsTest extends BaseInternalTest {
     assertEquals(100, transferred.getVersion());
   }
 }
-

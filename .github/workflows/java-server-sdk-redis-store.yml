@@ -18,7 +18,7 @@ jobs:
         jedis-version: [3.6.0, 7.1.0]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
 
       - name: Edit build.gradle to change Jedis version
         shell: bash
@@ -39,7 +39,7 @@ jobs:
         jedis-version: [3.6.0, 7.1.0]
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
 
       - run: |
           $ProgressPreference = "SilentlyContinue"
@@ -59,7 +59,7 @@ jobs:
             sed -i.bak -E 's/"jedis":[[:space:]]*"[0-9.]+"/"jedis": "${{ matrix.jedis-version }}"/' build.gradle
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: 'temurin'
           java-version: 8
