@@ -7,7 +7,7 @@ This project contains Java classes and interfaces that are shared between the La
 
 ## Supported Java versions
 
-This version of the library works with Java 8 and above, or Android.
+While this version of the library requires Java 8 or later (or Android), you should use the latest patched version of a supported Java release.
 
 ## Contributing
 
