@@ -2,6 +2,13 @@
 
 All notable changes to the project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [1.14.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.13.1...launchdarkly-java-sdk-internal-1.14.0) (2026-11-20)
+
+
+### Features
+
+* replace permanent event-delivery disable with a bounded cooldown ([#256](https://github.com/launchdarkly/java-core/issues/256)) ([f77bf78](https://github.com/launchdarkly/java-core/commit/f77bf78beab847d0ef116b5e77e5ac15b53531a8))
+
 ## [1.13.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-sdk-internal-1.13.0...launchdarkly-java-sdk-internal-1.13.1) (2026-11-19)
 
 
