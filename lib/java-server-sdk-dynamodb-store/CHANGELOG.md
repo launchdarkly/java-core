@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK DynamoDB integration will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [5.0.2](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-dynamodb-store-5.0.1...launchdarkly-java-server-sdk-dynamodb-store-5.0.2) (2026-11-20)
+
+
+### Bug Fixes
+
+* Write a JSON tombstone for deleted items in the DynamoDB store ([#269](https://github.com/launchdarkly/java-core/issues/269)) ([abc1767](https://github.com/launchdarkly/java-core/commit/abc176752e4993c23511e341a47669090d4d667d))
+
 ## [5.0.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-dynamodb-store-5.0.0...launchdarkly-java-server-sdk-dynamodb-store-5.0.1) (2026-11-12)
 
 
