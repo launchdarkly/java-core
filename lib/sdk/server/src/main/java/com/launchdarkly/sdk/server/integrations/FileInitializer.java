@@ -47,7 +47,7 @@ final class FileInitializer implements Initializer {
                     result.getStatus().getState() == SourceSignal.INTERRUPTED) {
                 return FDv2SourceResult.terminalError(
                         result.getStatus().getErrorInfo(),
-                        result.isFdv1Fallback()
+                        result.getFdv1Fallback()
                 );
             }
             return result;

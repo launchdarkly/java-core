@@ -88,7 +88,7 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
                                 e.getCause() != null ? e.getCause().toString() : e.toString(),
                                 Instant.now()
                         );
-                        resultQueue.put(FDv2SourceResult.interrupted(errorInfo, false));
+                        resultQueue.put(FDv2SourceResult.interrupted(errorInfo, null));
                     } catch (CancellationException e) {
                         // Start future was canceled (during close) - exit cleanly
                     } catch (InterruptedException e) {
@@ -159,7 +159,7 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
                             environmentId,
                             allData.shouldPersist()
                         );
-            resultQueue.put(FDv2SourceResult.changeSet(changeSet, false));
+            resultQueue.put(FDv2SourceResult.changeSet(changeSet, null));
             return true;
         }
 
@@ -181,7 +181,7 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
                             environmentId,
                             true // default to true as this adapter is used for adapting FDv1 data sources which are always persistent
                         );
-            resultQueue.put(FDv2SourceResult.changeSet(changeSet, false));
+            resultQueue.put(FDv2SourceResult.changeSet(changeSet, null));
             return true;
         }
 
@@ -200,15 +200,15 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
                     if (newError != null
                         && newError.getKind() == DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE
                         && HttpErrors.classifyHttpFailure(newError.getStatusCode()) == FailureClass.UNEXPECTED) {
-                        resultQueue.put(FDv2SourceResult.terminalError(newError, false));
+                        resultQueue.put(FDv2SourceResult.terminalError(newError, null));
                     } else {
-                        resultQueue.put(FDv2SourceResult.interrupted(newError, false));
+                        resultQueue.put(FDv2SourceResult.interrupted(newError, null));
                     }
                     break;
                 case OFF:
                     consecutiveSuccessfulResults = 0;
                     if (newError != null) {
-                        resultQueue.put(FDv2SourceResult.terminalError(newError, false));
+                        resultQueue.put(FDv2SourceResult.terminalError(newError, null));
                     } else {
                         resultQueue.put(FDv2SourceResult.shutdown());
                     }
@@ -224,7 +224,7 @@ class DataSourceSynchronizerAdapter implements Synchronizer {
                                         Collections.emptyList(),
                                         environmentId,
                                         /* shouldPersist= */ true);
-                        resultQueue.put(FDv2SourceResult.changeSet(noChanges, false).withResetThresholdMet());
+                        resultQueue.put(FDv2SourceResult.changeSet(noChanges, null).withResetThresholdMet());
                     }
                     break;
                 case INITIALIZING:

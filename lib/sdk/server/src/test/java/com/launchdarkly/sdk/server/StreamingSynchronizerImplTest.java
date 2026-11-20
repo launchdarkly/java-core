@@ -371,7 +371,11 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                 FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
                 assertEquals(SourceSignal.GOODBYE, result.getStatus().getState());
                 assertEquals(expected[i] != null, result.isFdv1Fallback());
-                assertEquals(expected[i], result.getFdv1FallbackTTL());
+                if (expected[i] == null) {
+                    assertNull(result.getFdv1Fallback());
+                } else {
+                    assertEquals(expected[i], result.getFdv1Fallback().getTtl());
+                }
             }
         }
     }
@@ -393,7 +397,7 @@ public class StreamingSynchronizerImplTest extends BaseTest {
                          Duration.ofMillis(100), StreamingSynchronizerImpl.RESET_THRESHOLD, Thread.NORM_PRIORITY, null)) {
                 FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
                 assertTrue(result.isFdv1Fallback());
-                assertEquals(expected[i], result.getFdv1FallbackTTL());
+                assertEquals(expected[i], result.getFdv1Fallback().getTtl());
             }
         }
     }

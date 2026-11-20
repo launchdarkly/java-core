@@ -466,7 +466,7 @@ public class PollingInitializerImplTest extends BaseTest {
         assertNotNull(result);
         assertEquals(SourceResultType.CHANGE_SET, result.getResultType());
         assertEquals(true, result.isFdv1Fallback());
-        assertEquals(Duration.ofSeconds(30), result.getFdv1FallbackTTL());
+        assertEquals(Duration.ofSeconds(30), result.getFdv1Fallback().getTtl());
     }
 
     @Test

@@ -5,6 +5,7 @@ import com.launchdarkly.logging.LDLogger;
 import com.launchdarkly.logging.LogValues;
 import com.launchdarkly.sdk.fdv2.SourceSignal;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
+import com.launchdarkly.sdk.server.datasources.FDv1Fallback;
 import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
@@ -182,8 +183,8 @@ class FDv2DataSource implements DataSource {
             }
 
             // If an initializer signalled FDv1 fallback, fall back to FDv1 before any synchronizer runs.
-            if (initializerOutcome.fallbackToFDv1) {
-                fallBackToFDv1(fallbackTTL(initializerOutcome.fallbackTTL), initializerOutcome.errorInfo);
+            if (initializerOutcome.fallback != null) {
+                fallBackToFDv1(fallbackTTL(initializerOutcome.fallback), initializerOutcome.errorInfo);
             }
 
             if (!sourceManager.hasFDv2Synchronizers() && !sourceManager.hasAvailableSynchronizers()) {
@@ -245,7 +246,7 @@ class FDv2DataSource implements DataSource {
                                 dataSourceUpdates.updateStatus(DataSourceStatusProvider.State.VALID, null);
                                 startFuture.complete(true);
                                 if (result.isFdv1Fallback()) {
-                                    return InitializerOutcome.fallbackToFDv1(null, result.getFdv1FallbackTTL());
+                                    return InitializerOutcome.fallbackToFDv1(null, result.getFdv1Fallback());
                                 }
                                 return InitializerOutcome.completed();
                             }
@@ -281,7 +282,7 @@ class FDv2DataSource implements DataSource {
                     // to the FDv1 fallback synchronizer; the eventual VALID status will come
                     // from the FDv1 synchronizer once it serves a full payload.
                     if (result.isFdv1Fallback()) {
-                        return InitializerOutcome.fallbackToFDv1(fallbackErrorInfo, result.getFdv1FallbackTTL());
+                        return InitializerOutcome.fallbackToFDv1(fallbackErrorInfo, result.getFdv1Fallback());
                     }
                 }
             } catch (ExecutionException | InterruptedException | CancellationException e) {
@@ -318,22 +319,20 @@ class FDv2DataSource implements DataSource {
      * server-directed FDv1 fallback before the synchronizer phase begins.
      */
     private static final class InitializerOutcome {
-        final boolean fallbackToFDv1;
-        final Duration fallbackTTL;
+        final FDv1Fallback fallback;
         final DataSourceStatusProvider.ErrorInfo errorInfo;
 
-        private InitializerOutcome(boolean fallbackToFDv1, DataSourceStatusProvider.ErrorInfo errorInfo, Duration fallbackTTL) {
-            this.fallbackTTL = fallbackTTL;
-            this.fallbackToFDv1 = fallbackToFDv1;
+        private InitializerOutcome(FDv1Fallback fallback, DataSourceStatusProvider.ErrorInfo errorInfo) {
+            this.fallback = fallback;
             this.errorInfo = errorInfo;
         }
 
         static InitializerOutcome completed() {
-            return new InitializerOutcome(false, null, null);
+            return new InitializerOutcome(null, null);
         }
 
-        static InitializerOutcome fallbackToFDv1(DataSourceStatusProvider.ErrorInfo errorInfo, Duration fallbackTTL) {
-            return new InitializerOutcome(true, errorInfo, fallbackTTL);
+        static InitializerOutcome fallbackToFDv1(DataSourceStatusProvider.ErrorInfo errorInfo, FDv1Fallback fallback) {
+            return new InitializerOutcome(fallback, errorInfo);
         }
     }
 
@@ -460,13 +459,13 @@ class FDv2DataSource implements DataSource {
                                 if (result.isFdv1Fallback()) {
                                     if (sourceManager.isCurrentSynchronizerFDv1Fallback()) {
                                         // A directive during the FDv1 fallback replaces its TTL, and FDv1 keeps running.
-                                        Duration fallbackTTL = fallbackTTL(result.getFdv1FallbackTTL());
+                                        Duration fallbackTTL = fallbackTTL(result.getFdv1Fallback());
                                         sourceManager.startFDv1Fallback(MonotonicTime.now().plus(fallbackTTL));
                                         logger.info("Retrying the configured synchronizers in {}s.", fallbackTTL.getSeconds());
                                     } else {
                                         // A directive to fall back to FDv1 ends the run of an FDv2 synchronizer.
                                         fallBackToFDv1(
-                                                fallbackTTL(result.getFdv1FallbackTTL()),
+                                                fallbackTTL(result.getFdv1Fallback()),
                                                 result.getStatus() != null ? result.getStatus().getErrorInfo() : null);
                                         // The directive takes over, so there is no failover delay after a park.
                                         parked = false;
@@ -621,7 +620,8 @@ class FDv2DataSource implements DataSource {
         return earliest;
     }
 
-    Duration fallbackTTL(Duration serverTTL) {
+    Duration fallbackTTL(FDv1Fallback fallback) {
+        Duration serverTTL = fallback.getTtl();
         return serverTTL != null && serverTTL.compareTo(Duration.ZERO) > 0
                 && serverTTL.compareTo(Duration.ofHours(1)) <= 0
                 ? serverTTL : jittered(defaultFDv1FallbackTTL);

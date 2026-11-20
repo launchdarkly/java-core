@@ -7,6 +7,7 @@ import com.launchdarkly.eventsource.FaultEvent;
 import com.launchdarkly.eventsource.HttpConnectStrategy;
 import com.launchdarkly.eventsource.MessageEvent;
 import com.launchdarkly.eventsource.RetryDelayStrategy;
+import com.launchdarkly.eventsource.ResponseHeaders;
 import com.launchdarkly.eventsource.StreamClosedByCallerException;
 import com.launchdarkly.eventsource.StreamEvent;
 import com.launchdarkly.eventsource.StreamException;
@@ -23,6 +24,7 @@ import com.launchdarkly.sdk.internal.http.HttpErrors;
 import com.launchdarkly.sdk.internal.http.HttpHelpers;
 import com.launchdarkly.sdk.internal.http.HttpProperties;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
+import com.launchdarkly.sdk.server.datasources.FDv1Fallback;
 import com.launchdarkly.sdk.server.datasources.SelectorSource;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
@@ -220,7 +222,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                         Instant.now()
                 );
                 // This synchronizer cannot recover, so the failure is terminal. The data system will start a new one.
-                shutdownFuture.complete(FDv2SourceResult.terminalError(errorInfo, getFallback(e), getFallbackTTL(e), null));
+                shutdownFuture.complete(FDv2SourceResult.terminalError(errorInfo, getFallback(e)));
             } finally {
                 eventSource.close();
             }
@@ -312,7 +314,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                     Collections.emptyList(),
                     /* environmentId= */ null,
                     /* shouldPersist= */ true);
-            resultQueue.put(FDv2SourceResult.changeSet(noChanges, /* fdv1Fallback= */ false).withResetThresholdMet());
+            resultQueue.put(FDv2SourceResult.changeSet(noChanges, /* fdv1Fallback= */ null).withResetThresholdMet());
         }
     }
 
@@ -369,7 +371,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                     recordStreamInit(false);
                     // Reset to 0 after successful init to prevent duplicate recordings until next restart
                     streamStarted = 0;
-                    result = FDv2SourceResult.changeSet(converted, getFallback(event), getFallbackTTL(event), null);
+                    result = FDv2SourceResult.changeSet(converted, getFallback(event));
                     startResetThresholdTimerIfNeeded();
                 } catch (Exception e) {
                     logger.error("Failed to convert FDv2 changeset: {}", LogValues.exceptionSummary(e));
@@ -380,7 +382,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                             e.toString(),
                             Instant.now()
                     );
-                    result = FDv2SourceResult.interrupted(conversionError, getFallback(event), getFallbackTTL(event), null);
+                    result = FDv2SourceResult.interrupted(conversionError, getFallback(event));
                     restartStream(true);
                 }
                 break;
@@ -397,8 +399,8 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 String reason = goodbye.getReason();
                 Long ttlMillis = goodbye.getProtocolFallbackTTLMillis();
                 logger.info("Goodbye was received from the LaunchDarkly connection with reason: '{}'.", reason);
-                result = FDv2SourceResult.goodbye(reason, getFallback(event) || ttlMillis != null,
-                        ttlMillis == null ? getFallbackTTL(event) : Duration.ofMillis(ttlMillis), null);
+                result = FDv2SourceResult.goodbye(reason,
+                        ttlMillis == null ? getFallback(event) : new FDv1Fallback(Duration.ofMillis(ttlMillis)));
                 // We drop this current connection and attempt to restart the stream.
                 restartStream(false);  // Not a failure - deliberate server-initiated restart
                 break;
@@ -422,7 +424,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                         "Internal error during FDv2 event processing",
                         Instant.now()
                 );
-                result = FDv2SourceResult.interrupted(internalError, getFallback(event), getFallbackTTL(event), null);
+                result = FDv2SourceResult.interrupted(internalError, getFallback(event));
                 if(kind == DataSourceStatusProvider.ErrorKind.INVALID_DATA) {
                     restartStream(true);
                 } else {
@@ -449,7 +451,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 e.toString(),
                 Instant.now()
         );
-        resultQueue.put(FDv2SourceResult.interrupted(errorInfo, getFallback(event), getFallbackTTL(event), null));
+        resultQueue.put(FDv2SourceResult.interrupted(errorInfo, getFallback(event)));
         restartStream(true);
     }
 
@@ -488,11 +490,11 @@ class StreamingSynchronizerImpl implements Synchronizer {
                     "will retry");
 
             if (failureClass == FailureClass.UNEXPECTED) {
-                shutdownFuture.complete(FDv2SourceResult.terminalError(errorInfo, getFallback(e), getFallbackTTL(e), null));
+                shutdownFuture.complete(FDv2SourceResult.terminalError(errorInfo, getFallback(e)));
                 return false;
             } else {
                 // Queue as INTERRUPTED to indicate temporary failure
-                resultQueue.put(FDv2SourceResult.interrupted(errorInfo, getFallback(e), getFallbackTTL(e), null));
+                resultQueue.put(FDv2SourceResult.interrupted(errorInfo, getFallback(e)));
                 streamStarted = System.currentTimeMillis();
                 return true; // allow reconnect
             }
@@ -508,10 +510,10 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 Instant.now()
         );
         if (HttpErrors.classifyTransportFailure(e) == FailureClass.UNEXPECTED) {
-            shutdownFuture.complete(FDv2SourceResult.terminalError(errorInfo, getFallback(e), getFallbackTTL(e), null));
+            shutdownFuture.complete(FDv2SourceResult.terminalError(errorInfo, getFallback(e)));
             return false;
         }
-        resultQueue.put(FDv2SourceResult.interrupted(errorInfo, getFallback(e), getFallbackTTL(e), null));
+        resultQueue.put(FDv2SourceResult.interrupted(errorInfo, getFallback(e)));
         streamStarted = System.currentTimeMillis();
         return true; // allow reconnect
     }
@@ -540,36 +542,21 @@ class StreamingSynchronizerImpl implements Synchronizer {
         }
     }
 
-    private static Duration getFallbackTTL(Exception ex) {
+    private static FDv1Fallback getFallback(Exception ex) {
         return ex instanceof StreamHttpErrorException
-                ? HeaderConstants.parseFallbackTTL(((StreamHttpErrorException) ex).getHeaders()
-                    .value(HeaderConstants.FDV1_FALLBACK_TTL.getHeaderName())) : null;
+                ? getFallback(((StreamHttpErrorException) ex).getHeaders()) : null;
     }
 
-    private static Duration getFallbackTTL(StreamEvent event) {
-        String headerName = HeaderConstants.FDV1_FALLBACK_TTL.getHeaderName();
-        String value = event instanceof FaultEvent ? ((FaultEvent) event).getHeaders().value(headerName)
-                : event instanceof MessageEvent ? ((MessageEvent) event).getHeaders().value(headerName) : null;
-        return HeaderConstants.parseFallbackTTL(value);
-    }
-
-    private static boolean getFallback(Exception ex) {
-        if(ex instanceof StreamHttpErrorException) {
-            String headerValue = ((StreamHttpErrorException) ex).getHeaders()
-              .value(HeaderConstants.FDV1_FALLBACK.getHeaderName());
-            return headerValue != null && headerValue.equalsIgnoreCase("true");
+    private static FDv1Fallback getFallback(StreamEvent event) {
+        if (event instanceof FaultEvent) {
+            return getFallback(((FaultEvent) event).getHeaders());
         }
-        return false;
+        return event instanceof MessageEvent ? getFallback(((MessageEvent) event).getHeaders()) : null;
     }
 
-    private static boolean getFallback(StreamEvent event) {
-        String headerName = HeaderConstants.FDV1_FALLBACK.getHeaderName();
-        String headerValue = null;
-        if(event instanceof FaultEvent) {
-            headerValue = ((FaultEvent) event).getHeaders().value(headerName);
-        } else if (event instanceof MessageEvent) {
-            headerValue = ((MessageEvent) event).getHeaders().value(headerName);
-        }
-        return headerValue != null && headerValue.equalsIgnoreCase("true");
+    private static FDv1Fallback getFallback(ResponseHeaders headers) {
+        return HeaderConstants.getFallback(
+                headers.value(HeaderConstants.FDV1_FALLBACK.getHeaderName()),
+                headers.value(HeaderConstants.FDV1_FALLBACK_TTL.getHeaderName()));
     }
 }

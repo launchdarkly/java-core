@@ -74,12 +74,12 @@ class FileDataSourceBase {
                 Instant.now()
             );
             // For initializers, file errors are terminal. For synchronizers, they are recoverable.
-            return FDv2SourceResult.interrupted(errorInfo, false);
+            return FDv2SourceResult.interrupted(errorInfo, null);
         }
 
         Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>> data = builder.build();
         ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet = buildChangeSet(data);
-        return FDv2SourceResult.changeSet(changeSet, false);
+        return FDv2SourceResult.changeSet(changeSet, null);
     }
 
     /**

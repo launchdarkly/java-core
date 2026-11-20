@@ -1,5 +1,7 @@
 package com.launchdarkly.sdk.server;
 
+import com.launchdarkly.sdk.server.datasources.FDv1Fallback;
+
 import java.time.Duration;
 
 enum HeaderConstants {
@@ -13,12 +15,17 @@ enum HeaderConstants {
     this.headerName = headerName;
   }
 
-  static Duration parseFallbackTTL(String value) {
-    try {
-      return value == null ? null : Duration.ofSeconds(Long.parseLong(value));
-    } catch (NumberFormatException e) {
+  static FDv1Fallback getFallback(String directive, String value) {
+    if (!"true".equalsIgnoreCase(directive)) {
       return null;
     }
+    Duration ttl = null;
+    try {
+      ttl = value == null ? null : Duration.ofSeconds(Long.parseLong(value));
+    } catch (NumberFormatException e) {
+      ttl = null;
+    }
+    return new FDv1Fallback(ttl);
   }
 
   public String getHeaderName() {

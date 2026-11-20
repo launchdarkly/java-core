@@ -6,6 +6,7 @@ import com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event;
 import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ProtocolHandler;
 import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
+import com.launchdarkly.sdk.server.datasources.FDv1Fallback;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.fdv2.ChangeSet;
 import com.launchdarkly.sdk.fdv2.ChangeSetType;
@@ -37,13 +38,14 @@ class PollingBase {
         requestor.close();
     }
 
-    private static boolean getFallback(FDv2Requestor.FDv2PayloadResponse response) {
+    private static FDv1Fallback getFallback(FDv2Requestor.FDv2PayloadResponse response) {
         if (response != null && response.getHeaders() != null) {
-            String headerValue = response.getHeaders().get(HeaderConstants.FDV1_FALLBACK.getHeaderName());
-            return headerValue != null && headerValue.equalsIgnoreCase("true");
+            return HeaderConstants.getFallback(
+                    response.getHeaders().get(HeaderConstants.FDV1_FALLBACK.getHeaderName()),
+                    response.getHeaders().get(HeaderConstants.FDV1_FALLBACK_TTL.getHeaderName()));
         }
 
-        return false;
+        return null;
     }
 
     private static String getEnvironmentId(FDv2Requestor.FDv2PayloadResponse response) {
@@ -55,10 +57,7 @@ class PollingBase {
 
     protected CompletableFuture<FDv2SourceResult> poll(Selector selector, boolean oneShot) {
         return requestor.Poll(selector).handle(((pollingResponse, ex) -> {
-            boolean fdv1Fallback = getFallback(pollingResponse);
-            Duration fallbackTTL = pollingResponse != null && pollingResponse.getHeaders() != null
-                    ? HeaderConstants.parseFallbackTTL(pollingResponse.getHeaders().get(HeaderConstants.FDV1_FALLBACK_TTL.getHeaderName()))
-                    : null;
+            FDv1Fallback fdv1Fallback = getFallback(pollingResponse);
             String environmentId = getEnvironmentId(pollingResponse);
             if (ex != null) {
                 if (ex instanceof IOException) {
@@ -72,8 +71,8 @@ class PollingBase {
                     );
                     boolean recoverable = classifyTransportFailure(e) == FailureClass.NORMAL;
                     return oneShot || !recoverable
-                        ? FDv2SourceResult.terminalError(info, fdv1Fallback, fallbackTTL, null)
-                        : FDv2SourceResult.interrupted(info, fdv1Fallback, fallbackTTL, null);
+                        ? FDv2SourceResult.terminalError(info, fdv1Fallback)
+                        : FDv2SourceResult.interrupted(info, fdv1Fallback);
                 } else if (ex instanceof SerializationException) {
                     SerializationException e = (SerializationException) ex;
                     logger.error("Polling request received malformed data: {}", e.toString());
@@ -83,7 +82,7 @@ class PollingBase {
                             e.toString(),
                             new Date().toInstant()
                     );
-                    return oneShot ? FDv2SourceResult.terminalError(info, fdv1Fallback, fallbackTTL, null) : FDv2SourceResult.interrupted(info, fdv1Fallback, fallbackTTL, null);
+                    return oneShot ? FDv2SourceResult.terminalError(info, fdv1Fallback) : FDv2SourceResult.interrupted(info, fdv1Fallback);
                 }
                 String msg = ex.toString();
                 logger.error("Polling request failed with an unknown error: {}", msg);
@@ -93,7 +92,7 @@ class PollingBase {
                         msg,
                         new Date().toInstant()
                 );
-                return oneShot ? FDv2SourceResult.terminalError(info, fdv1Fallback, fallbackTTL, null) : FDv2SourceResult.interrupted(info, fdv1Fallback, fallbackTTL, null);
+                return oneShot ? FDv2SourceResult.terminalError(info, fdv1Fallback) : FDv2SourceResult.interrupted(info, fdv1Fallback);
             }
             // If we get a 304, then that means nothing has changed.
             if (pollingResponse.getStatusCode() == 304) {
@@ -105,7 +104,7 @@ class PollingBase {
                                 true // Polling data from LaunchDarkly should be persisted
                         ),
                         // Headers would have been processed from the initial response.
-                        false);
+                        null);
             }
             if(!pollingResponse.isSuccess()) {
                     int statusCode = pollingResponse.getStatusCode();
@@ -114,9 +113,9 @@ class PollingBase {
                     logger.error("Polling request failed with HTTP error: {}", statusCode);
                     // For a one-shot request all errors are terminal.
                     if (oneShot) {
-                        return FDv2SourceResult.terminalError(errorInfo, fdv1Fallback, fallbackTTL, null);
+                        return FDv2SourceResult.terminalError(errorInfo, fdv1Fallback);
                     } else {
-                        return recoverable ? FDv2SourceResult.interrupted(errorInfo, fdv1Fallback, fallbackTTL, null) : FDv2SourceResult.terminalError(errorInfo, fdv1Fallback, fallbackTTL, null);
+                        return recoverable ? FDv2SourceResult.interrupted(errorInfo, fdv1Fallback) : FDv2SourceResult.terminalError(errorInfo, fdv1Fallback);
                     }
             }
             FDv2ProtocolHandler handler = new FDv2ProtocolHandler();
@@ -132,7 +131,7 @@ class PollingBase {
                                     environmentId,
                                     true // Polling data from LaunchDarkly should be persisted
                             );
-                            return FDv2SourceResult.changeSet(converted, fdv1Fallback, fallbackTTL, null);
+                            return FDv2SourceResult.changeSet(converted, fdv1Fallback);
                         } catch (Exception e) {
                             // Whatever exception happened here means we couldn't handle the data. So we are going to
                             // treat that as invalid data.
@@ -142,7 +141,7 @@ class PollingBase {
                                     e.toString(),
                                     new Date().toInstant()
                             );
-                            return oneShot ? FDv2SourceResult.terminalError(info, fdv1Fallback, fallbackTTL, null) : FDv2SourceResult.interrupted(info, fdv1Fallback, fallbackTTL, null);
+                            return oneShot ? FDv2SourceResult.terminalError(info, fdv1Fallback) : FDv2SourceResult.interrupted(info, fdv1Fallback);
                         }
                     case ERROR: {
                         FDv2ProtocolHandler.FDv2ActionError error = ((FDv2ProtocolHandler.FDv2ActionError) res);
@@ -151,15 +150,15 @@ class PollingBase {
                                 0,
                                 error.getReason(),
                                 new Date().toInstant());
-                        return oneShot ? FDv2SourceResult.terminalError(info, fdv1Fallback, fallbackTTL, null) : FDv2SourceResult.interrupted(info, fdv1Fallback, fallbackTTL, null);
+                        return oneShot ? FDv2SourceResult.terminalError(info, fdv1Fallback) : FDv2SourceResult.interrupted(info, fdv1Fallback);
                     }
                     case GOODBYE:
                         FDv2ProtocolHandler.FDv2ActionGoodbye goodbye = (FDv2ProtocolHandler.FDv2ActionGoodbye) res;
                         String reason = goodbye.getReason();
                         Long ttlMillis = goodbye.getProtocolFallbackTTLMillis();
                         logger.info("Goodbye was received from the LaunchDarkly connection with reason: '{}'.", reason);
-                        return FDv2SourceResult.goodbye(reason, fdv1Fallback || ttlMillis != null,
-                                ttlMillis == null ? fallbackTTL : Duration.ofMillis(ttlMillis), null);
+                        return FDv2SourceResult.goodbye(reason,
+                                ttlMillis == null ? fdv1Fallback : new FDv1Fallback(Duration.ofMillis(ttlMillis)));
                     case NONE:
                         break;
                     case INTERNAL_ERROR: {
@@ -180,7 +179,7 @@ class PollingBase {
                                 0,
                                 "Internal error occurred during polling",
                                 new Date().toInstant());
-                        return oneShot ? FDv2SourceResult.terminalError(info, fdv1Fallback, fallbackTTL, null) : FDv2SourceResult.interrupted(info, fdv1Fallback, fallbackTTL, null);
+                        return oneShot ? FDv2SourceResult.terminalError(info, fdv1Fallback) : FDv2SourceResult.interrupted(info, fdv1Fallback);
                     }
                 }
             }
@@ -191,7 +190,7 @@ class PollingBase {
                     "Unexpected end of polling response",
                     new Date().toInstant()
             );
-            return oneShot ? FDv2SourceResult.terminalError(info, fdv1Fallback, fallbackTTL, null) : FDv2SourceResult.interrupted(info, fdv1Fallback, fallbackTTL, null);
+            return oneShot ? FDv2SourceResult.terminalError(info, fdv1Fallback) : FDv2SourceResult.interrupted(info, fdv1Fallback);
         }));
     }
 }

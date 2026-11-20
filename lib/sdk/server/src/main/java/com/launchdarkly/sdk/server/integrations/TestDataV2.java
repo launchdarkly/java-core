@@ -129,7 +129,7 @@ public final class TestDataV2 implements DataSourceBuilder<Synchronizer> {
       currentBuilders.remove(key);
     }
 
-    pushToSynchronizers(FDv2SourceResult.changeSet(makePartialChangeSet(key, tombstoneItem), false));
+    pushToSynchronizers(FDv2SourceResult.changeSet(makePartialChangeSet(key, tombstoneItem), null));
 
     return this;
   }
@@ -163,7 +163,7 @@ public final class TestDataV2 implements DataSourceBuilder<Synchronizer> {
       currentBuilders.put(key, clonedBuilder);
     }
 
-    pushToSynchronizers(FDv2SourceResult.changeSet(makePartialChangeSet(key, newItem), false));
+    pushToSynchronizers(FDv2SourceResult.changeSet(makePartialChangeSet(key, newItem), null));
 
     return this;
   }
@@ -187,13 +187,13 @@ public final class TestDataV2 implements DataSourceBuilder<Synchronizer> {
     switch (newState) {
       case OFF:
         statusResult = newError != null
-            ? FDv2SourceResult.terminalError(newError, false)
+            ? FDv2SourceResult.terminalError(newError, null)
             : FDv2SourceResult.shutdown();
         break;
       case INTERRUPTED:
         statusResult = FDv2SourceResult.interrupted(
             newError != null ? newError : new DataSourceStatusProvider.ErrorInfo(DataSourceStatusProvider.ErrorKind.UNKNOWN, 0, null, Instant.now()),
-            false);
+            null);
         break;
       case VALID:
       case INITIALIZING:
@@ -314,7 +314,7 @@ public final class TestDataV2 implements DataSourceBuilder<Synchronizer> {
       if (!initialSent.getAndSet(true)) {
         // Send full changeset first, before any partial changesets that
         // accumulated from update()/delete() calls made before next() was first called.
-        resultQueue.put(FDv2SourceResult.changeSet(makeFullChangeSet(), false));
+        resultQueue.put(FDv2SourceResult.changeSet(makeFullChangeSet(), null));
       }
       return CompletableFuture.anyOf(shutdownFuture, resultQueue.take())
           .thenApply(r -> (FDv2SourceResult) r);

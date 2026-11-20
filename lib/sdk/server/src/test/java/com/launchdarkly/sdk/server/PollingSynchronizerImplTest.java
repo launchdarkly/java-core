@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -97,8 +98,8 @@ public class PollingSynchronizerImplTest extends BaseTest {
                     requestor, testLogger, mockSelectorSource(), executor, Duration.ofHours(1))) {
                 FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
                 assertTrue(result.isFdv1Fallback());
-                assertEquals(expected[i], result.getFdv1FallbackTTL());
-                assertEquals(expected[i], result.withResetThresholdMet().withCompletion(v -> null).getFdv1FallbackTTL());
+                assertEquals(expected[i], result.getFdv1Fallback().getTtl());
+                assertEquals(expected[i], result.withResetThresholdMet().withCompletion(v -> null).getFdv1Fallback().getTtl());
             } finally {
                 executor.shutdownNow();
             }
@@ -122,7 +123,11 @@ public class PollingSynchronizerImplTest extends BaseTest {
                 FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
                 assertEquals(SourceSignal.GOODBYE, result.getStatus().getState());
                 assertEquals(expected[i] != null, result.isFdv1Fallback());
-                assertEquals(expected[i], result.getFdv1FallbackTTL());
+                if (expected[i] == null) {
+                    assertNull(result.getFdv1Fallback());
+                } else {
+                    assertEquals(expected[i], result.getFdv1Fallback().getTtl());
+                }
             } finally {
                 executor.shutdownNow();
             }

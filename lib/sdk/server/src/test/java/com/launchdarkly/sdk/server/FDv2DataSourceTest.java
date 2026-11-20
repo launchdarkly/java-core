@@ -8,6 +8,7 @@ import com.launchdarkly.logging.Logs;
 import com.launchdarkly.sdk.internal.collections.IterableAsyncQueue;
 import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
+import com.launchdarkly.sdk.server.datasources.FDv1Fallback;
 import com.launchdarkly.sdk.server.datasources.Initializer;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
@@ -58,15 +59,44 @@ public class FDv2DataSourceTest extends BaseTest {
     }
 
     @Test
+    public void fallbackDirectiveSurvivesResultCopies() {
+        for (Duration ttl : Arrays.asList(null, Duration.ZERO, Duration.ofSeconds(30))) {
+            FDv1Fallback fallback = new FDv1Fallback(ttl);
+            assertEquals(ttl, fallback.getTtl());
+            FDv2SourceResult[] results = {
+                FDv2SourceResult.changeSet(makeChangeSet(true), fallback),
+                FDv2SourceResult.goodbye("fallback", fallback),
+                FDv2SourceResult.interrupted(null, fallback),
+                FDv2SourceResult.terminalError(null, fallback)
+            };
+            for (FDv2SourceResult result : results) {
+                AtomicBoolean completed = new AtomicBoolean();
+                try (FDv2SourceResult copy = result.withResetThresholdMet().withCompletion(v -> {
+                    completed.set(true);
+                    return null;
+                })) {
+                    assertTrue(copy.isFdv1Fallback());
+                    assertSame(fallback, copy.getFdv1Fallback());
+                }
+                assertTrue(completed.get());
+            }
+        }
+        FDv2SourceResult result = FDv2SourceResult.goodbye("no directive", null);
+        assertFalse(result.isFdv1Fallback());
+        assertNull(result.withResetThresholdMet().withCompletion(v -> null).getFdv1Fallback());
+        assertNull(FDv2SourceResult.shutdown().getFdv1Fallback());
+    }
+
+    @Test
     public void serverFallbackTTLIsUnjitteredAndInvalidValuesUseDefault() {
         FDv2DataSource dataSource = new FDv2DataSource(ImmutableList.of(), ImmutableList.of(), null,
                 new MockDataSourceUpdateSink(), Thread.NORM_PRIORITY, logger);
         resourcesToClose.add(dataSource);
         for (Duration ttl : Arrays.asList(Duration.ofMillis(1), Duration.ofSeconds(30), Duration.ofHours(1))) {
-            assertEquals(ttl, dataSource.fallbackTTL(ttl));
+            assertEquals(ttl, dataSource.fallbackTTL(new FDv1Fallback(ttl)));
         }
         for (Duration ttl : Arrays.asList(null, Duration.ZERO, Duration.ofSeconds(-1), Duration.ofSeconds(3601))) {
-            Duration actual = dataSource.fallbackTTL(ttl);
+            Duration actual = dataSource.fallbackTTL(new FDv1Fallback(ttl));
             assertTrue(actual.compareTo(Duration.ofMinutes(30)) >= 0);
             assertTrue(actual.compareTo(Duration.ofHours(1)) <= 0);
         }
@@ -78,11 +108,11 @@ public class FDv2DataSourceTest extends BaseTest {
             final int mode = scenario;
             Duration ttl = Duration.ofMillis(50);
             FDv2SourceResult directive = mode == 2
-                    ? FDv2SourceResult.goodbye("fallback", true, ttl, null)
+                    ? FDv2SourceResult.goodbye("fallback", new FDv1Fallback(ttl), null)
                     : mode == 3 ? FDv2SourceResult.terminalError(
                             new DataSourceStatusProvider.ErrorInfo(DataSourceStatusProvider.ErrorKind.ERROR_RESPONSE,
-                                    500, null, Instant.now()), true, ttl, null)
-                    : FDv2SourceResult.changeSet(makeChangeSet(mode != 1), true, ttl, null);
+                                    500, null, Instant.now()), new FDv1Fallback(ttl), null)
+                    : FDv2SourceResult.changeSet(makeChangeSet(mode != 1), new FDv1Fallback(ttl), null);
             ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = mode < 4
                     ? ImmutableList.of(() -> new MockInitializer(CompletableFuture.completedFuture(directive)))
                     : ImmutableList.of();
@@ -91,7 +121,7 @@ public class FDv2DataSourceTest extends BaseTest {
             ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(() -> {
                 BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
                 if (mode >= 4 && builds.incrementAndGet() == 1) {
-                    results.add(mode == 5 ? FDv2SourceResult.changeSet(makeChangeSet(true), true) : directive);
+                    results.add(mode == 5 ? FDv2SourceResult.changeSet(makeChangeSet(true), new FDv1Fallback(null)) : directive);
                 } else {
                     recovered.offer(true);
                 }
@@ -100,7 +130,7 @@ public class FDv2DataSourceTest extends BaseTest {
             FDv2DataSource.DataSourceFactory<Synchronizer> fallback = () -> {
                 BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
                 if (mode == 5) {
-                    results.add(FDv2SourceResult.changeSet(makeChangeSet(false), true, ttl, null));
+                    results.add(FDv2SourceResult.changeSet(makeChangeSet(false), new FDv1Fallback(ttl), null));
                 }
                 return new MockQueuedSynchronizer(results);
             };
@@ -132,7 +162,7 @@ public class FDv2DataSourceTest extends BaseTest {
                 null,
                 Instant.now()
             ),
-            false
+            null
         );
     }
 
@@ -144,7 +174,7 @@ public class FDv2DataSourceTest extends BaseTest {
                 null,
                 Instant.now()
             ),
-            false
+            null
         );
     }
 
@@ -160,7 +190,7 @@ public class FDv2DataSourceTest extends BaseTest {
         firstInitializerFuture.completeExceptionally(new RuntimeException("First initializer failed"));
 
         CompletableFuture<FDv2SourceResult> secondInitializerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(true), false)
+            FDv2SourceResult.changeSet(makeChangeSet(true), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
@@ -203,7 +233,7 @@ public class FDv2DataSourceTest extends BaseTest {
         firstInitializerFuture.completeExceptionally(new RuntimeException("First initializer failed"));
 
         CompletableFuture<FDv2SourceResult> secondInitializerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(false), false)
+            FDv2SourceResult.changeSet(makeChangeSet(false), null)
         );
 
         BlockingQueue<Boolean> synchronizerCalledQueue = new LinkedBlockingQueue<>();
@@ -213,7 +243,7 @@ public class FDv2DataSourceTest extends BaseTest {
         );
 
         CompletableFuture<FDv2SourceResult> synchronizerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(false), false)
+            FDv2SourceResult.changeSet(makeChangeSet(false), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
@@ -260,7 +290,7 @@ public class FDv2DataSourceTest extends BaseTest {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> firstInitializerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(true), false)
+            FDv2SourceResult.changeSet(makeChangeSet(true), null)
         );
 
         AtomicBoolean secondInitializerCalled = new AtomicBoolean(false);
@@ -270,7 +300,7 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> {
                 secondInitializerCalled.set(true);
                 return new MockInitializer(CompletableFuture.completedFuture(
-                    FDv2SourceResult.changeSet(makeChangeSet(true), false)
+                    FDv2SourceResult.changeSet(makeChangeSet(true), null)
                 ));
             }
         );
@@ -317,7 +347,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         BlockingQueue<Boolean> synchronizerCalledQueue = new LinkedBlockingQueue<>();
         CompletableFuture<FDv2SourceResult> synchronizerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(false), false)
+            FDv2SourceResult.changeSet(makeChangeSet(false), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
@@ -410,7 +440,7 @@ public class FDv2DataSourceTest extends BaseTest {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(true), false)
+            FDv2SourceResult.changeSet(makeChangeSet(true), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
@@ -452,7 +482,7 @@ public class FDv2DataSourceTest extends BaseTest {
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
         CompletableFuture<FDv2SourceResult> synchronizerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(false), false)
+            FDv2SourceResult.changeSet(makeChangeSet(false), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
@@ -483,7 +513,7 @@ public class FDv2DataSourceTest extends BaseTest {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(false), false)
+            FDv2SourceResult.changeSet(makeChangeSet(false), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
@@ -491,7 +521,7 @@ public class FDv2DataSourceTest extends BaseTest {
         );
 
         CompletableFuture<FDv2SourceResult> synchronizerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(false), false)
+            FDv2SourceResult.changeSet(makeChangeSet(false), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
@@ -557,7 +587,7 @@ public class FDv2DataSourceTest extends BaseTest {
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
         CompletableFuture<FDv2SourceResult> synchronizerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(false), true) // FDv1 fallback flag
+            FDv2SourceResult.changeSet(makeChangeSet(false), new FDv1Fallback(null)) // FDv1 fallback flag
         );
 
         AtomicBoolean synchronizerCalled = new AtomicBoolean(false);
@@ -593,13 +623,13 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // First synchronizer sends INTERRUPTED, triggering fallback after timeout
         BlockingQueue<FDv2SourceResult> firstSyncResults = new LinkedBlockingQueue<>();
-        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
         firstSyncResults.add(makeInterruptedResult());
         // Keep it alive so fallback timeout triggers
 
         // The second synchronizer works fine, sends data
         BlockingQueue<FDv2SourceResult> secondSyncResults = new LinkedBlockingQueue<>();
-        secondSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        secondSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
         // Keep alive for recovery
 
         AtomicInteger firstSyncCallCount = new AtomicInteger(0);
@@ -668,7 +698,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // Synchronizer that sends INTERRUPTED to trigger fallback
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
         syncResults.add(makeInterruptedResult());
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
@@ -707,12 +737,12 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // First synchronizer sends terminal error
         BlockingQueue<FDv2SourceResult> firstSyncResults = new LinkedBlockingQueue<>();
-        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
         firstSyncResults.add(makeTerminalErrorResult());
 
         // The second synchronizer works fine
         BlockingQueue<FDv2SourceResult> secondSyncResults = new LinkedBlockingQueue<>();
-        secondSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        secondSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         BlockingQueue<Integer> synchronizerCallQueue = new LinkedBlockingQueue<>();
 
@@ -775,7 +805,7 @@ public class FDv2DataSourceTest extends BaseTest {
         BlockingQueue<FDv2SourceResult> firstInstanceResults = new LinkedBlockingQueue<>();
         firstInstanceResults.add(makeTerminalErrorResult());
         BlockingQueue<FDv2SourceResult> secondInstanceResults = new LinkedBlockingQueue<>();
-        secondInstanceResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+        secondInstanceResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), null));
         AtomicInteger buildCount = new AtomicInteger();
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
@@ -814,7 +844,7 @@ public class FDv2DataSourceTest extends BaseTest {
                     throw new RuntimeException("next-boom");
                 }, "throwing-sync")
                 : new MockSynchronizer(
-                    CompletableFuture.completedFuture(FDv2SourceResult.changeSet(makeChangeSet(true), false)),
+                    CompletableFuture.completedFuture(FDv2SourceResult.changeSet(makeChangeSet(true), null)),
                     "throwing-sync")
         );
 
@@ -857,7 +887,7 @@ public class FDv2DataSourceTest extends BaseTest {
                 }
                 // The second instance delivers data.
                 return new MockSynchronizer(
-                    CompletableFuture.completedFuture(FDv2SourceResult.changeSet(makeChangeSet(true), false)));
+                    CompletableFuture.completedFuture(FDv2SourceResult.changeSet(makeChangeSet(true), null)));
             }
         );
 
@@ -891,7 +921,7 @@ public class FDv2DataSourceTest extends BaseTest {
                 }
                 // The second build delivers data.
                 return new MockSynchronizer(
-                    CompletableFuture.completedFuture(FDv2SourceResult.changeSet(makeChangeSet(true), false)));
+                    CompletableFuture.completedFuture(FDv2SourceResult.changeSet(makeChangeSet(true), null)));
             }
         );
 
@@ -924,7 +954,7 @@ public class FDv2DataSourceTest extends BaseTest {
                 BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
                 if (buildCount.incrementAndGet() == 3) {
                     // The third instance reports that it met its reset threshold before it fails.
-                    results.add(FDv2SourceResult.changeSet(makeChangeSet(true), false).withResetThresholdMet());
+                    results.add(FDv2SourceResult.changeSet(makeChangeSet(true), null).withResetThresholdMet());
                 }
                 // Every instance fails with a terminal error.
                 results.add(makeTerminalErrorResult());
@@ -987,7 +1017,7 @@ public class FDv2DataSourceTest extends BaseTest {
         // to the instance of the secondary synchronizer that was already running.
         dataSource.start();
         executor.schedule(
-            () -> secondaryResults.put(FDv2SourceResult.changeSet(makeChangeSet(true), false)),
+            () -> secondaryResults.put(FDv2SourceResult.changeSet(makeChangeSet(true), null)),
             60,
             TimeUnit.MILLISECONDS);
 
@@ -1002,7 +1032,7 @@ public class FDv2DataSourceTest extends BaseTest {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
         AtomicInteger primaryBuildCount = new AtomicInteger();
         IterableAsyncQueue<FDv2SourceResult> secondaryResults = new IterableAsyncQueue<>();
-        secondaryResults.put(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+        secondaryResults.put(FDv2SourceResult.changeSet(makeChangeSet(true), null));
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             // The primary synchronizer fails, so it is parked briefly.
@@ -1029,7 +1059,7 @@ public class FDv2DataSourceTest extends BaseTest {
         // Start the data system, and send another change set after the primary synchronizer unparks.
         dataSource.start();
         executor.schedule(
-            () -> secondaryResults.put(FDv2SourceResult.changeSet(makeChangeSet(true), false)),
+            () -> secondaryResults.put(FDv2SourceResult.changeSet(makeChangeSet(true), null)),
             100,
             TimeUnit.MILLISECONDS);
 
@@ -1051,7 +1081,7 @@ public class FDv2DataSourceTest extends BaseTest {
                 BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
                 results.add(primaryBuildCount.incrementAndGet() == 1
                     ? makeTerminalErrorResult()
-                    : FDv2SourceResult.changeSet(makeChangeSet(true), false));
+                    : FDv2SourceResult.changeSet(makeChangeSet(true), null));
                 return new MockQueuedSynchronizer(results);
             },
             // The secondary synchronizer reports that it is interrupted.
@@ -1114,11 +1144,11 @@ public class FDv2DataSourceTest extends BaseTest {
         // Start the data system, send a change set after the fallback is met, and another after the unpark.
         dataSource.start();
         executor.schedule(
-            () -> secondaryResults.put(FDv2SourceResult.changeSet(makeChangeSet(true), false)),
+            () -> secondaryResults.put(FDv2SourceResult.changeSet(makeChangeSet(true), null)),
             50,
             TimeUnit.MILLISECONDS);
         executor.schedule(
-            () -> secondaryResults.put(FDv2SourceResult.changeSet(makeChangeSet(true), false)),
+            () -> secondaryResults.put(FDv2SourceResult.changeSet(makeChangeSet(true), null)),
             210,
             TimeUnit.MILLISECONDS);
 
@@ -1140,14 +1170,14 @@ public class FDv2DataSourceTest extends BaseTest {
                 BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
                 results.add(primaryBuildCount.incrementAndGet() == 1
                     ? makeTerminalErrorResult()
-                    : FDv2SourceResult.changeSet(makeChangeSet(true), false));
+                    : FDv2SourceResult.changeSet(makeChangeSet(true), null));
                 return new MockQueuedSynchronizer(results);
             },
             // The secondary synchronizer delivers data and stays healthy.
             () -> {
                 secondaryBuildCount.incrementAndGet();
                 BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
-                results.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+                results.add(FDv2SourceResult.changeSet(makeChangeSet(true), null));
                 return new MockQueuedSynchronizer(results);
             }
         );
@@ -1202,7 +1232,7 @@ public class FDv2DataSourceTest extends BaseTest {
         long start = System.nanoTime();
         dataSource.start();
         executor.schedule(
-            () -> primaryResults.put(FDv2SourceResult.changeSet(makeChangeSet(true), false)),
+            () -> primaryResults.put(FDv2SourceResult.changeSet(makeChangeSet(true), null)),
             50,
             TimeUnit.MILLISECONDS);
         executor.schedule(() -> primaryResults.put(makeInterruptedResult()), 90, TimeUnit.MILLISECONDS);
@@ -1226,7 +1256,7 @@ public class FDv2DataSourceTest extends BaseTest {
                 BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
                 results.add(buildCount.incrementAndGet() == 1
                     ? FDv2SourceResult.shutdown()
-                    : FDv2SourceResult.changeSet(makeChangeSet(true), false));
+                    : FDv2SourceResult.changeSet(makeChangeSet(true), null));
                 return new MockQueuedSynchronizer(results);
             }
         );
@@ -1359,12 +1389,12 @@ public class FDv2DataSourceTest extends BaseTest {
         // First synchronizer that we'll close and try to trigger
         AtomicReference<MockQueuedSynchronizer> firstSyncRef = new AtomicReference<>();
         BlockingQueue<FDv2SourceResult> firstSyncResults = new LinkedBlockingQueue<>();
-        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
         firstSyncResults.add(makeTerminalErrorResult());
 
         // Second synchronizer
         BlockingQueue<FDv2SourceResult> secondSyncResults = new LinkedBlockingQueue<>();
-        secondSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        secondSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             () -> {
@@ -1394,7 +1424,7 @@ public class FDv2DataSourceTest extends BaseTest {
         // Try to send more data from the first (now closed) synchronizer
         MockQueuedSynchronizer firstSync = firstSyncRef.get();
         if (firstSync != null) {
-            firstSync.addResult(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+            firstSync.addResult(FDv2SourceResult.changeSet(makeChangeSet(false), null));
         }
 
         // Wait to ensure closed synchronizer's results aren't processed
@@ -1420,7 +1450,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // Synchronizer that never completes
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             () -> new MockQueuedSynchronizer(syncResults)
@@ -1488,11 +1518,11 @@ public class FDv2DataSourceTest extends BaseTest {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(true), false)
+            FDv2SourceResult.changeSet(makeChangeSet(true), null)
         );
 
         CompletableFuture<FDv2SourceResult> synchronizerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(false), false)
+            FDv2SourceResult.changeSet(makeChangeSet(false), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
@@ -1524,7 +1554,7 @@ public class FDv2DataSourceTest extends BaseTest {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
@@ -1553,7 +1583,7 @@ public class FDv2DataSourceTest extends BaseTest {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
@@ -1586,7 +1616,7 @@ public class FDv2DataSourceTest extends BaseTest {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
@@ -1625,7 +1655,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
         for (int i = 0; i < 10; i++) {
-            syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+            syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
         }
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
@@ -1664,7 +1694,7 @@ public class FDv2DataSourceTest extends BaseTest {
         badFuture.completeExceptionally(new RuntimeException("Execution exception"));
 
         CompletableFuture<FDv2SourceResult> goodFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(true), false)
+            FDv2SourceResult.changeSet(makeChangeSet(true), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
@@ -1696,7 +1726,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         AtomicBoolean firstCalled = new AtomicBoolean(false);
         CompletableFuture<FDv2SourceResult> goodFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(true), false)
+            FDv2SourceResult.changeSet(makeChangeSet(true), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
@@ -1736,7 +1766,7 @@ public class FDv2DataSourceTest extends BaseTest {
         cancelledFuture.cancel(true);
 
         CompletableFuture<FDv2SourceResult> goodFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(true), false)
+            FDv2SourceResult.changeSet(makeChangeSet(true), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
@@ -1772,7 +1802,7 @@ public class FDv2DataSourceTest extends BaseTest {
         badFuture.completeExceptionally(new RuntimeException("Execution exception"));
 
         CompletableFuture<FDv2SourceResult> goodFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(false), false)
+            FDv2SourceResult.changeSet(makeChangeSet(false), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
@@ -1804,7 +1834,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         AtomicBoolean firstCalled = new AtomicBoolean(false);
         CompletableFuture<FDv2SourceResult> goodFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(false), false)
+            FDv2SourceResult.changeSet(makeChangeSet(false), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
@@ -1844,7 +1874,7 @@ public class FDv2DataSourceTest extends BaseTest {
         cancelledFuture.cancel(true);
 
         CompletableFuture<FDv2SourceResult> goodFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(false), false)
+            FDv2SourceResult.changeSet(makeChangeSet(false), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
@@ -1897,7 +1927,7 @@ public class FDv2DataSourceTest extends BaseTest {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(true), false)
+            FDv2SourceResult.changeSet(makeChangeSet(true), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
@@ -1928,7 +1958,7 @@ public class FDv2DataSourceTest extends BaseTest {
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         AtomicBoolean synchronizerClosed = new AtomicBoolean(false);
 
@@ -1963,7 +1993,7 @@ public class FDv2DataSourceTest extends BaseTest {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(true), false)
+            FDv2SourceResult.changeSet(makeChangeSet(true), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
@@ -2043,7 +2073,7 @@ public class FDv2DataSourceTest extends BaseTest {
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             () -> {
                 BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
-                results.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+                results.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
                 return new MockQueuedSynchronizer(results);
             }
         );
@@ -2138,7 +2168,7 @@ public class FDv2DataSourceTest extends BaseTest {
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
         syncResults.add(makeInterruptedResult());
         // Don't add more, so it waits on condition
 
@@ -2172,7 +2202,7 @@ public class FDv2DataSourceTest extends BaseTest {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(true), false)
+            FDv2SourceResult.changeSet(makeChangeSet(true), null)
         );
 
         AtomicBoolean shutdownDetected = new AtomicBoolean(false);
@@ -2212,11 +2242,11 @@ public class FDv2DataSourceTest extends BaseTest {
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
         BlockingQueue<FDv2SourceResult> firstSyncResults = new LinkedBlockingQueue<>();
-        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
         firstSyncResults.add(makeTerminalErrorResult());
 
         BlockingQueue<FDv2SourceResult> secondSyncResults = new LinkedBlockingQueue<>();
-        secondSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        secondSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         AtomicBoolean firstSyncClosed = new AtomicBoolean(false);
 
@@ -2335,7 +2365,7 @@ public class FDv2DataSourceTest extends BaseTest {
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         AtomicBoolean syncClosed = new AtomicBoolean(false);
 
@@ -2379,7 +2409,7 @@ public class FDv2DataSourceTest extends BaseTest {
                 try {
                     return slowResult.get(2, TimeUnit.SECONDS);
                 } catch (Exception e) {
-                    return FDv2SourceResult.changeSet(makeChangeSet(true), false);
+                    return FDv2SourceResult.changeSet(makeChangeSet(true), null);
                 }
             })
         );
@@ -2403,7 +2433,7 @@ public class FDv2DataSourceTest extends BaseTest {
         dataSource.close();
 
         // Complete the future so initializer can finish
-        slowResult.complete(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+        slowResult.complete(FDv2SourceResult.changeSet(makeChangeSet(true), null));
 
         // Wait for the start method to complete
         startFuture.get(2, TimeUnit.SECONDS);
@@ -2427,11 +2457,11 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // Second: works
         BlockingQueue<FDv2SourceResult> secondSyncResults = new LinkedBlockingQueue<>();
-        secondSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        secondSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         // Third: works
         BlockingQueue<FDv2SourceResult> thirdSyncResults = new LinkedBlockingQueue<>();
-        thirdSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        thirdSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         AtomicInteger firstCallCount = new AtomicInteger(0);
         AtomicInteger secondCallCount = new AtomicInteger(0);
@@ -2476,12 +2506,12 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // First synchronizer: send data, then INTERRUPTED
         BlockingQueue<FDv2SourceResult> firstSyncResults = new LinkedBlockingQueue<>();
-        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
         firstSyncResults.add(makeInterruptedResult());
 
         // Second synchronizer: send data
         BlockingQueue<FDv2SourceResult> secondSyncResults = new LinkedBlockingQueue<>();
-        secondSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        secondSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         AtomicInteger firstCallCount = new AtomicInteger(0);
         AtomicInteger secondCallCount = new AtomicInteger(0);
@@ -2525,12 +2555,12 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // First: send INTERRUPTED to trigger fallback
         BlockingQueue<FDv2SourceResult> firstSyncResults = new LinkedBlockingQueue<>();
-        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        firstSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
         firstSyncResults.add(makeInterruptedResult());
 
         // Second: works
         BlockingQueue<FDv2SourceResult> secondSyncResults = new LinkedBlockingQueue<>();
-        secondSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        secondSyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         BlockingQueue<Boolean> secondCalledQueue = new LinkedBlockingQueue<>();
 
@@ -2571,9 +2601,9 @@ public class FDv2DataSourceTest extends BaseTest {
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
         syncResults.add(makeInterruptedResult());
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             () -> new MockQueuedSynchronizer(syncResults)
@@ -2603,8 +2633,8 @@ public class FDv2DataSourceTest extends BaseTest {
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             () -> new MockQueuedSynchronizer(syncResults)
@@ -2636,7 +2666,7 @@ public class FDv2DataSourceTest extends BaseTest {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(true), false)
+            FDv2SourceResult.changeSet(makeChangeSet(true), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
@@ -2668,9 +2698,9 @@ public class FDv2DataSourceTest extends BaseTest {
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             () -> new MockQueuedSynchronizer(syncResults)
@@ -2699,7 +2729,7 @@ public class FDv2DataSourceTest extends BaseTest {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> firstInitializerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(true), false)
+            FDv2SourceResult.changeSet(makeChangeSet(true), null)
         );
 
         BlockingQueue<Boolean> secondInitializerCalledQueue = new LinkedBlockingQueue<>();
@@ -2709,7 +2739,7 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> {
                 secondInitializerCalledQueue.offer(true);
                 return new MockInitializer(CompletableFuture.completedFuture(
-                    FDv2SourceResult.changeSet(makeChangeSet(false), false)
+                    FDv2SourceResult.changeSet(makeChangeSet(false), null)
                 ));
             }
         );
@@ -2739,7 +2769,7 @@ public class FDv2DataSourceTest extends BaseTest {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(false), false)
+            FDv2SourceResult.changeSet(makeChangeSet(false), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
@@ -2779,7 +2809,7 @@ public class FDv2DataSourceTest extends BaseTest {
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
         CompletableFuture<FDv2SourceResult> synchronizerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(false), false)
+            FDv2SourceResult.changeSet(makeChangeSet(false), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
@@ -2812,9 +2842,9 @@ public class FDv2DataSourceTest extends BaseTest {
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-        syncResults.add(FDv2SourceResult.goodbye("server-requested", false));
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
+        syncResults.add(FDv2SourceResult.goodbye("server-requested", null));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             () -> new MockQueuedSynchronizer(syncResults)
@@ -2846,7 +2876,7 @@ public class FDv2DataSourceTest extends BaseTest {
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
         syncResults.add(FDv2SourceResult.shutdown());
 
         AtomicBoolean secondSynchronizerCalled = new AtomicBoolean(false);
@@ -2885,7 +2915,7 @@ public class FDv2DataSourceTest extends BaseTest {
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
 
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), true)); // FDv1 fallback
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), new FDv1Fallback(null))); // FDv1 fallback
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             () -> new MockQueuedSynchronizer(syncResults)
@@ -2919,7 +2949,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         AtomicBoolean synchronizerCalled = new AtomicBoolean(false);
         CompletableFuture<FDv2SourceResult> synchronizerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(false), false)
+            FDv2SourceResult.changeSet(makeChangeSet(false), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
@@ -2955,7 +2985,7 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> {
                 runCount.incrementAndGet();
                 return new MockInitializer(CompletableFuture.completedFuture(
-                    FDv2SourceResult.changeSet(makeChangeSet(true), false)
+                    FDv2SourceResult.changeSet(makeChangeSet(true), null)
                 ));
             }
         );
@@ -2990,7 +3020,7 @@ public class FDv2DataSourceTest extends BaseTest {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of();
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
@@ -3026,7 +3056,7 @@ public class FDv2DataSourceTest extends BaseTest {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initializerFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(false), false)
+            FDv2SourceResult.changeSet(makeChangeSet(false), null)
         );
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
@@ -3074,7 +3104,7 @@ public class FDv2DataSourceTest extends BaseTest {
                 "Unauthorized",
                 Instant.now()
             ),
-            false
+            null
         ));
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
@@ -3116,9 +3146,9 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // Synchronizer that sends multiple changesets
         BlockingQueue<FDv2SourceResult> syncResults = new LinkedBlockingQueue<>();
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
+        syncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             () -> new MockQueuedSynchronizer(syncResults)
@@ -3159,7 +3189,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // The first instance sends a changeset and then a terminal error. Later instances send nothing.
         BlockingQueue<FDv2SourceResult> firstInstanceResults = new LinkedBlockingQueue<>();
-        firstInstanceResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        firstInstanceResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
         firstInstanceResults.add(FDv2SourceResult.terminalError(
             new DataSourceStatusProvider.ErrorInfo(
                 DataSourceStatusProvider.ErrorKind.NETWORK_ERROR,
@@ -3167,7 +3197,7 @@ public class FDv2DataSourceTest extends BaseTest {
                 "Server error",
                 Instant.now()
             ),
-            false
+            null
         ));
         AtomicInteger buildCount = new AtomicInteger();
         BlockingQueue<Integer> builds = new LinkedBlockingQueue<>();
@@ -3225,8 +3255,8 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // First synchronizer sends a result with FDv1 fallback flag set
         BlockingQueue<FDv2SourceResult> fdv2SyncResults = new LinkedBlockingQueue<>();
-        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), true)); // FDv1 fallback triggered
+        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
+        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), new FDv1Fallback(null))); // FDv1 fallback triggered
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             () -> new MockQueuedSynchronizer(fdv2SyncResults)
@@ -3234,7 +3264,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // Create FDv1 fallback synchronizer
         BlockingQueue<FDv2SourceResult> fdv1SyncResults = new LinkedBlockingQueue<>();
-        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         BlockingQueue<Boolean> fdv1CalledQueue = new LinkedBlockingQueue<>();
         FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
@@ -3282,7 +3312,7 @@ public class FDv2DataSourceTest extends BaseTest {
                 results.add(FDv2SourceResult.interrupted(
                     new DataSourceStatusProvider.ErrorInfo(
                         DataSourceStatusProvider.ErrorKind.NETWORK_ERROR, 500, null, Instant.now()),
-                    true));
+                    new FDv1Fallback(null)));
                 return new MockQueuedSynchronizer(results);
             }
         );
@@ -3292,7 +3322,7 @@ public class FDv2DataSourceTest extends BaseTest {
             BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
             results.add(fdv1BuildCount.incrementAndGet() == 1
                 ? makeTerminalErrorResult()
-                : FDv2SourceResult.changeSet(makeChangeSet(true), false));
+                : FDv2SourceResult.changeSet(makeChangeSet(true), null));
             return new MockQueuedSynchronizer(results);
         };
 
@@ -3323,8 +3353,8 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // Synchronizer sends normal results without FDv1 fallback flag
         BlockingQueue<FDv2SourceResult> fdv2SyncResults = new LinkedBlockingQueue<>();
-        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
+        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             () -> new MockQueuedSynchronizer(fdv2SyncResults)
@@ -3372,7 +3402,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // First synchronizer sends data, then INTERRUPTED with fallback flag
         BlockingQueue<FDv2SourceResult> fdv2SyncResults = new LinkedBlockingQueue<>();
-        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
         fdv2SyncResults.add(FDv2SourceResult.interrupted(
             new DataSourceStatusProvider.ErrorInfo(
                 DataSourceStatusProvider.ErrorKind.NETWORK_ERROR,
@@ -3380,7 +3410,7 @@ public class FDv2DataSourceTest extends BaseTest {
                 "Network error",
                 Instant.now()
             ),
-            true // FDv1 fallback flag
+            new FDv1Fallback(null)
         ));
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
@@ -3389,7 +3419,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // Create FDv1 fallback synchronizer that sends data
         BlockingQueue<FDv2SourceResult> fdv1SyncResults = new LinkedBlockingQueue<>();
-        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         BlockingQueue<Boolean> fdv1CalledQueue = new LinkedBlockingQueue<>();
         FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
@@ -3439,10 +3469,10 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> {
                 BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
                 if (firstSyncBuildCount.incrementAndGet() == 1) {
-                    results.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-                    results.add(FDv2SourceResult.changeSet(makeChangeSet(false), true));
+                    results.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
+                    results.add(FDv2SourceResult.changeSet(makeChangeSet(false), new FDv1Fallback(null)));
                 } else {
-                    results.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+                    results.add(FDv2SourceResult.changeSet(makeChangeSet(true), null));
                 }
                 return new MockQueuedSynchronizer(results);
             },
@@ -3486,7 +3516,7 @@ public class FDv2DataSourceTest extends BaseTest {
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             () -> {
                 BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
-                results.add(FDv2SourceResult.changeSet(makeChangeSet(true), true));
+                results.add(FDv2SourceResult.changeSet(makeChangeSet(true), new FDv1Fallback(null)));
                 return new MockQueuedSynchronizer(results) {
                     @Override
                     public void close() {
@@ -3525,7 +3555,7 @@ public class FDv2DataSourceTest extends BaseTest {
             // The first instance sends a payload with the directive. The second sends a payload.
             () -> {
                 BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
-                results.add(FDv2SourceResult.changeSet(makeChangeSet(true), fdv2BuildCount.incrementAndGet() == 1));
+                results.add(FDv2SourceResult.changeSet(makeChangeSet(true), fdv2BuildCount.incrementAndGet() == 1 ? new FDv1Fallback(null) : null));
                 return new MockQueuedSynchronizer(results);
             }
         );
@@ -3533,7 +3563,7 @@ public class FDv2DataSourceTest extends BaseTest {
         // The FDv1 fallback synchronizer sends a payload, and records when it is closed.
         FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
             BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
-            results.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+            results.add(FDv2SourceResult.changeSet(makeChangeSet(true), null));
             return new MockQueuedSynchronizer(results) {
                 @Override
                 public void close() {
@@ -3577,9 +3607,9 @@ public class FDv2DataSourceTest extends BaseTest {
                     results.add(FDv2SourceResult.interrupted(
                         new DataSourceStatusProvider.ErrorInfo(
                             DataSourceStatusProvider.ErrorKind.NETWORK_ERROR, 500, null, Instant.now()),
-                        true));
+                        new FDv1Fallback(null)));
                 } else {
-                    results.add(FDv2SourceResult.changeSet(makeChangeSet(true), true));
+                    results.add(FDv2SourceResult.changeSet(makeChangeSet(true), new FDv1Fallback(null)));
                 }
                 return new MockQueuedSynchronizer(results);
             }
@@ -3642,7 +3672,7 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> {
                 BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
                 if (fdv2BuildCount.incrementAndGet() == 1) {
-                    results.add(FDv2SourceResult.changeSet(makeChangeSet(true), true));
+                    results.add(FDv2SourceResult.changeSet(makeChangeSet(true), new FDv1Fallback(null)));
                 } else {
                     fdv2RestartTimes.offer(System.nanoTime());
                 }
@@ -3678,7 +3708,7 @@ public class FDv2DataSourceTest extends BaseTest {
         dataSource.start();
         for (int delay = 50; delay <= 300; delay += 50) {
             executor.schedule(
-                () -> fdv1Results.put(FDv2SourceResult.changeSet(makeChangeSet(false), true)),
+                () -> fdv1Results.put(FDv2SourceResult.changeSet(makeChangeSet(false), new FDv1Fallback(null))),
                 delay,
                 TimeUnit.MILLISECONDS);
         }
@@ -3703,7 +3733,7 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> {
                 fdv2BuildCount.incrementAndGet();
                 BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
-                results.add(FDv2SourceResult.changeSet(makeChangeSet(true), true));
+                results.add(FDv2SourceResult.changeSet(makeChangeSet(true), new FDv1Fallback(null)));
                 return new MockQueuedSynchronizer(results);
             }
         );
@@ -3712,7 +3742,7 @@ public class FDv2DataSourceTest extends BaseTest {
         FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
             fdv1BuildCount.incrementAndGet();
             BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
-            results.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+            results.add(FDv2SourceResult.changeSet(makeChangeSet(true), null));
             return new MockQueuedSynchronizer(results);
         };
 
@@ -3743,8 +3773,8 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // First synchronizer sends result with FDv1 fallback flag
         BlockingQueue<FDv2SourceResult> fdv2SyncResults = new LinkedBlockingQueue<>();
-        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), true)); // FDv1 fallback
+        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
+        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), new FDv1Fallback(null))); // FDv1 fallback
 
         // Second synchronizer that should not be called after fallback
         BlockingQueue<Boolean> secondSyncCalledQueue = new LinkedBlockingQueue<>();
@@ -3759,7 +3789,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // Create FDv1 fallback synchronizer
         BlockingQueue<FDv2SourceResult> fdv1SyncResults = new LinkedBlockingQueue<>();
-        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         BlockingQueue<Boolean> fdv1CalledQueue = new LinkedBlockingQueue<>();
         FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
@@ -3803,8 +3833,8 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // Synchronizer sends multiple results with FDv1 fallback flags
         BlockingQueue<FDv2SourceResult> fdv2SyncResults = new LinkedBlockingQueue<>();
-        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), true)); // First fallback
+        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
+        fdv2SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), new FDv1Fallback(null))); // First fallback
 
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             () -> new MockQueuedSynchronizer(fdv2SyncResults)
@@ -3812,8 +3842,8 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // Create FDv1 fallback synchronizer that also sends a fallback flag
         BlockingQueue<FDv2SourceResult> fdv1SyncResults = new LinkedBlockingQueue<>();
-        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
-        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), true)); // Second fallback attempt
+        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
+        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), new FDv1Fallback(null))); // Second fallback attempt
 
         BlockingQueue<Boolean> fdv1CalledQueue = new LinkedBlockingQueue<>();
         FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
@@ -3862,7 +3892,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // Initializer returns a payload with a selector AND the FDv1 fallback signal.
         CompletableFuture<FDv2SourceResult> initFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(true), true)
+            FDv2SourceResult.changeSet(makeChangeSet(true), new FDv1Fallback(null))
         );
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
             () -> new MockInitializer(initFuture)
@@ -3877,7 +3907,7 @@ public class FDv2DataSourceTest extends BaseTest {
         );
 
         BlockingQueue<FDv2SourceResult> fdv1SyncResults = new LinkedBlockingQueue<>();
-        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         BlockingQueue<Boolean> fdv1CalledQueue = new LinkedBlockingQueue<>();
         FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
@@ -3930,7 +3960,7 @@ public class FDv2DataSourceTest extends BaseTest {
                     "fallback requested",
                     Instant.now()
                 ),
-                true
+                new FDv1Fallback(null)
             )
         );
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
@@ -3946,7 +3976,7 @@ public class FDv2DataSourceTest extends BaseTest {
         );
 
         BlockingQueue<FDv2SourceResult> fdv1SyncResults = new LinkedBlockingQueue<>();
-        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), false));
+        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(false), null));
 
         BlockingQueue<Boolean> fdv1CalledQueue = new LinkedBlockingQueue<>();
         FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
@@ -3994,7 +4024,7 @@ public class FDv2DataSourceTest extends BaseTest {
             Instant.now()
         );
         CompletableFuture<FDv2SourceResult> initFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.terminalError(initError, true)
+            FDv2SourceResult.terminalError(initError, new FDv1Fallback(null))
         );
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
             () -> new MockInitializer(initFuture)
@@ -4005,7 +4035,7 @@ public class FDv2DataSourceTest extends BaseTest {
             () -> {
                 syncBuildCount.incrementAndGet();
                 BlockingQueue<FDv2SourceResult> results = new LinkedBlockingQueue<>();
-                results.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+                results.add(FDv2SourceResult.changeSet(makeChangeSet(true), null));
                 return new MockQueuedSynchronizer(results);
             }
         );
@@ -4041,7 +4071,7 @@ public class FDv2DataSourceTest extends BaseTest {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
 
         CompletableFuture<FDv2SourceResult> initFuture = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(false), true)
+            FDv2SourceResult.changeSet(makeChangeSet(false), new FDv1Fallback(null))
         );
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
             () -> new MockInitializer(initFuture)
@@ -4051,7 +4081,7 @@ public class FDv2DataSourceTest extends BaseTest {
 
         // The FDv1 synchronizer serves a full payload, which raises the readiness signal.
         BlockingQueue<FDv2SourceResult> fdv1SyncResults = new LinkedBlockingQueue<>();
-        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+        fdv1SyncResults.add(FDv2SourceResult.changeSet(makeChangeSet(true), null));
 
         BlockingQueue<Boolean> fdv1CalledQueue = new LinkedBlockingQueue<>();
         FDv2DataSource.DataSourceFactory<Synchronizer> fdv1Fallback = () -> {
@@ -4119,7 +4149,7 @@ public class FDv2DataSourceTest extends BaseTest {
         CompletableFuture<FDv2SourceResult> first = new CompletableFuture<>();
         first.completeExceptionally(new RuntimeException("first-init-failure"));
         CompletableFuture<FDv2SourceResult> second = CompletableFuture.completedFuture(
-            FDv2SourceResult.changeSet(makeChangeSet(true), false)
+            FDv2SourceResult.changeSet(makeChangeSet(true), null)
         );
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
             () -> new MockInitializer(first, "first-init"),
@@ -4158,7 +4188,7 @@ public class FDv2DataSourceTest extends BaseTest {
                     "bootstrap read failed",
                     Instant.now()
                 ),
-                false
+                null
             )
         );
         ImmutableList<FDv2DataSource.DataSourceFactory<Initializer>> initializers = ImmutableList.of(
@@ -4196,7 +4226,7 @@ public class FDv2DataSourceTest extends BaseTest {
                 "temp outage",
                 Instant.now()
             ),
-            false
+            null
         ));
         q.put(FDv2SourceResult.shutdown());
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
@@ -4272,7 +4302,7 @@ public class FDv2DataSourceTest extends BaseTest {
         MockDataSourceUpdateSink sink = new MockDataSourceUpdateSink();
         // The second synchronizer delivers data, so start() completes.
         IterableAsyncQueue<FDv2SourceResult> followUpQueue = new IterableAsyncQueue<>();
-        followUpQueue.put(FDv2SourceResult.changeSet(makeChangeSet(true), false));
+        followUpQueue.put(FDv2SourceResult.changeSet(makeChangeSet(true), null));
         ImmutableList<FDv2DataSource.DataSourceFactory<Synchronizer>> synchronizers = ImmutableList.of(
             // The first synchronizer fails from next().
             () -> new MockSynchronizer(() -> {
