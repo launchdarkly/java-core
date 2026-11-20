@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -78,6 +79,58 @@ public class PollingSynchronizerImplTest extends BaseTest {
             );
         } catch (Exception e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    @Test
+    public void fallbackTTLFromHeaders() throws Exception {
+        String[] values = {"30", "invalid", "1.5"};
+        Duration[] expected = {Duration.ofSeconds(30), null, null};
+        for (int i = 0; i < values.length; i++) {
+            FDv2Requestor requestor = mockRequestor();
+            okhttp3.Headers headers = new okhttp3.Headers.Builder()
+                    .add("x-ld-fd-fallback", "true")
+                    .add("x-ld-fd-fallback-ttl", values[i]).build();
+            when(requestor.Poll(any(Selector.class))).thenReturn(CompletableFuture.completedFuture(
+                    FDv2Requestor.FDv2PayloadResponse.success(makeSuccessResponse().getEvents(), headers, 200)));
+            ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+            try (PollingSynchronizerImpl synchronizer = new PollingSynchronizerImpl(
+                    requestor, testLogger, mockSelectorSource(), executor, Duration.ofHours(1))) {
+                FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
+                assertTrue(result.isFdv1Fallback());
+                assertEquals(expected[i], result.getFdv1Fallback().getTtl());
+                assertEquals(expected[i], result.withResetThresholdMet().withCompletion(v -> null).getFdv1Fallback().getTtl());
+            } finally {
+                executor.shutdownNow();
+            }
+        }
+    }
+
+    @Test
+    public void goodbyeFallbackTTL() throws Exception {
+        String[] fields = {"", ",\"protocolFallbackTTL\":0.05", ",\"protocolFallbackTTL\":\"invalid\"", ",\"protocolFallbackTTL\":null"};
+        Duration[] expected = {null, Duration.ofMillis(50), Duration.ZERO, null};
+        for (int i = 0; i < fields.length; i++) {
+            FDv2Requestor requestor = mockRequestor();
+            String json = "{\"events\":[{\"event\":\"goodbye\",\"data\":{\"reason\":\"fallback\"" + fields[i] + "}}]}";
+            when(requestor.Poll(any(Selector.class))).thenReturn(CompletableFuture.completedFuture(
+                    FDv2Requestor.FDv2PayloadResponse.success(
+                            com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event.parseEventsArray(json),
+                            okhttp3.Headers.of(), 200)));
+            ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+            try (PollingSynchronizerImpl synchronizer = new PollingSynchronizerImpl(
+                    requestor, testLogger, mockSelectorSource(), executor, Duration.ofHours(1))) {
+                FDv2SourceResult result = synchronizer.next().get(5, TimeUnit.SECONDS);
+                assertEquals(SourceSignal.GOODBYE, result.getStatus().getState());
+                assertEquals(expected[i] != null, result.isFdv1Fallback());
+                if (expected[i] == null) {
+                    assertNull(result.getFdv1Fallback());
+                } else {
+                    assertEquals(expected[i], result.getFdv1Fallback().getTtl());
+                }
+            } finally {
+                executor.shutdownNow();
+            }
         }
     }
 

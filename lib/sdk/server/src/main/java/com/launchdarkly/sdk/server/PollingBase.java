@@ -6,6 +6,7 @@ import com.launchdarkly.sdk.internal.fdv2.payloads.FDv2Event;
 import com.launchdarkly.sdk.internal.fdv2.sources.FDv2ProtocolHandler;
 import com.launchdarkly.sdk.fdv2.Selector;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
+import com.launchdarkly.sdk.server.datasources.FDv1Fallback;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
 import com.launchdarkly.sdk.fdv2.ChangeSet;
 import com.launchdarkly.sdk.fdv2.ChangeSetType;
@@ -16,6 +17,7 @@ import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 import com.launchdarkly.sdk.json.SerializationException;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Date;
@@ -36,13 +38,14 @@ class PollingBase {
         requestor.close();
     }
 
-    private static boolean getFallback(FDv2Requestor.FDv2PayloadResponse response) {
+    private static FDv1Fallback getFallback(FDv2Requestor.FDv2PayloadResponse response) {
         if (response != null && response.getHeaders() != null) {
-            String headerValue = response.getHeaders().get(HeaderConstants.FDV1_FALLBACK.getHeaderName());
-            return headerValue != null && headerValue.equalsIgnoreCase("true");
+            return HeaderConstants.getFallback(
+                    response.getHeaders().get(HeaderConstants.FDV1_FALLBACK.getHeaderName()),
+                    response.getHeaders().get(HeaderConstants.FDV1_FALLBACK_TTL.getHeaderName()));
         }
 
-        return false;
+        return null;
     }
 
     private static String getEnvironmentId(FDv2Requestor.FDv2PayloadResponse response) {
@@ -54,7 +57,7 @@ class PollingBase {
 
     protected CompletableFuture<FDv2SourceResult> poll(Selector selector, boolean oneShot) {
         return requestor.Poll(selector).handle(((pollingResponse, ex) -> {
-            boolean fdv1Fallback = getFallback(pollingResponse);
+            FDv1Fallback fdv1Fallback = getFallback(pollingResponse);
             String environmentId = getEnvironmentId(pollingResponse);
             if (ex != null) {
                 if (ex instanceof IOException) {
@@ -101,7 +104,7 @@ class PollingBase {
                                 true // Polling data from LaunchDarkly should be persisted
                         ),
                         // Headers would have been processed from the initial response.
-                        false);
+                        null);
             }
             if(!pollingResponse.isSuccess()) {
                     int statusCode = pollingResponse.getStatusCode();
@@ -150,9 +153,12 @@ class PollingBase {
                         return oneShot ? FDv2SourceResult.terminalError(info, fdv1Fallback) : FDv2SourceResult.interrupted(info, fdv1Fallback);
                     }
                     case GOODBYE:
-                        String reason = ((FDv2ProtocolHandler.FDv2ActionGoodbye) res).getReason();
+                        FDv2ProtocolHandler.FDv2ActionGoodbye goodbye = (FDv2ProtocolHandler.FDv2ActionGoodbye) res;
+                        String reason = goodbye.getReason();
+                        Long ttlMillis = goodbye.getProtocolFallbackTTLMillis();
                         logger.info("Goodbye was received from the LaunchDarkly connection with reason: '{}'.", reason);
-                        return FDv2SourceResult.goodbye(reason, fdv1Fallback);
+                        return FDv2SourceResult.goodbye(reason,
+                                ttlMillis == null ? fdv1Fallback : new FDv1Fallback(Duration.ofMillis(ttlMillis)));
                     case NONE:
                         break;
                     case INTERNAL_ERROR: {

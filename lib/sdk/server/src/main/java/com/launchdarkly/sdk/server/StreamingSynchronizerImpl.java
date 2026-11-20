@@ -7,6 +7,7 @@ import com.launchdarkly.eventsource.FaultEvent;
 import com.launchdarkly.eventsource.HttpConnectStrategy;
 import com.launchdarkly.eventsource.MessageEvent;
 import com.launchdarkly.eventsource.RetryDelayStrategy;
+import com.launchdarkly.eventsource.ResponseHeaders;
 import com.launchdarkly.eventsource.StreamClosedByCallerException;
 import com.launchdarkly.eventsource.StreamEvent;
 import com.launchdarkly.eventsource.StreamException;
@@ -23,6 +24,7 @@ import com.launchdarkly.sdk.internal.http.HttpErrors;
 import com.launchdarkly.sdk.internal.http.HttpHelpers;
 import com.launchdarkly.sdk.internal.http.HttpProperties;
 import com.launchdarkly.sdk.server.datasources.FDv2SourceResult;
+import com.launchdarkly.sdk.server.datasources.FDv1Fallback;
 import com.launchdarkly.sdk.server.datasources.SelectorSource;
 import com.launchdarkly.sdk.server.datasources.Synchronizer;
 import com.launchdarkly.sdk.server.interfaces.DataSourceStatusProvider;
@@ -312,7 +314,7 @@ class StreamingSynchronizerImpl implements Synchronizer {
                     Collections.emptyList(),
                     /* environmentId= */ null,
                     /* shouldPersist= */ true);
-            resultQueue.put(FDv2SourceResult.changeSet(noChanges, /* fdv1Fallback= */ false).withResetThresholdMet());
+            resultQueue.put(FDv2SourceResult.changeSet(noChanges, /* fdv1Fallback= */ null).withResetThresholdMet());
         }
     }
 
@@ -393,9 +395,12 @@ class StreamingSynchronizerImpl implements Synchronizer {
                 break;
 
             case GOODBYE:
-                String reason = ((FDv2ProtocolHandler.FDv2ActionGoodbye) action).getReason();
+                FDv2ProtocolHandler.FDv2ActionGoodbye goodbye = (FDv2ProtocolHandler.FDv2ActionGoodbye) action;
+                String reason = goodbye.getReason();
+                Long ttlMillis = goodbye.getProtocolFallbackTTLMillis();
                 logger.info("Goodbye was received from the LaunchDarkly connection with reason: '{}'.", reason);
-                result = FDv2SourceResult.goodbye(reason, getFallback(event));
+                result = FDv2SourceResult.goodbye(reason,
+                        ttlMillis == null ? getFallback(event) : new FDv1Fallback(Duration.ofMillis(ttlMillis)));
                 // We drop this current connection and attempt to restart the stream.
                 restartStream(false);  // Not a failure - deliberate server-initiated restart
                 break;
@@ -537,23 +542,21 @@ class StreamingSynchronizerImpl implements Synchronizer {
         }
     }
 
-    private static boolean getFallback(Exception ex) {
-        if(ex instanceof StreamHttpErrorException) {
-            String headerValue = ((StreamHttpErrorException) ex).getHeaders()
-              .value(HeaderConstants.FDV1_FALLBACK.getHeaderName());
-            return headerValue != null && headerValue.equalsIgnoreCase("true");
-        }
-        return false;
+    private static FDv1Fallback getFallback(Exception ex) {
+        return ex instanceof StreamHttpErrorException
+                ? getFallback(((StreamHttpErrorException) ex).getHeaders()) : null;
     }
 
-    private static boolean getFallback(StreamEvent event) {
-        String headerName = HeaderConstants.FDV1_FALLBACK.getHeaderName();
-        String headerValue = null;
-        if(event instanceof FaultEvent) {
-            headerValue = ((FaultEvent) event).getHeaders().value(headerName);
-        } else if (event instanceof MessageEvent) {
-            headerValue = ((MessageEvent) event).getHeaders().value(headerName);
+    private static FDv1Fallback getFallback(StreamEvent event) {
+        if (event instanceof FaultEvent) {
+            return getFallback(((FaultEvent) event).getHeaders());
         }
-        return headerValue != null && headerValue.equalsIgnoreCase("true");
+        return event instanceof MessageEvent ? getFallback(((MessageEvent) event).getHeaders()) : null;
+    }
+
+    private static FDv1Fallback getFallback(ResponseHeaders headers) {
+        return HeaderConstants.getFallback(
+                headers.value(HeaderConstants.FDV1_FALLBACK.getHeaderName()),
+                headers.value(HeaderConstants.FDV1_FALLBACK_TTL.getHeaderName()));
     }
 }

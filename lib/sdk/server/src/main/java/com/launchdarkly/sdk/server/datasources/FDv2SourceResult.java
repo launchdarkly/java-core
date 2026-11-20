@@ -71,14 +71,14 @@ public class FDv2SourceResult implements Closeable {
     private final ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet;
     private final Status status;
     private final SourceResultType resultType;
-    private final boolean fdv1Fallback;
+    private final FDv1Fallback fdv1Fallback;
     private final boolean resetThresholdMet;
     private final Function<Void, Void> completionCallback;
 
     private FDv2SourceResult(
         ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet,
         Status status, SourceResultType resultType,
-        boolean fdv1Fallback,
+        FDv1Fallback fdv1Fallback,
         boolean resetThresholdMet,
         Function<Void, Void> completionCallback
     ) {
@@ -90,11 +90,11 @@ public class FDv2SourceResult implements Closeable {
         this.completionCallback = completionCallback;
     }
 
-    public static FDv2SourceResult interrupted(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback) {
+    public static FDv2SourceResult interrupted(DataSourceStatusProvider.ErrorInfo errorInfo, FDv1Fallback fdv1Fallback) {
         return interrupted(errorInfo, fdv1Fallback, null);
     }
 
-    public static FDv2SourceResult interrupted(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
+    public static FDv2SourceResult interrupted(DataSourceStatusProvider.ErrorInfo errorInfo, FDv1Fallback fdv1Fallback, Function<Void, Void> completionCallback) {
         return new FDv2SourceResult(
             /* changeSet= */ null,
             Status.interrupted(errorInfo),
@@ -113,16 +113,16 @@ public class FDv2SourceResult implements Closeable {
             /* changeSet= */ null,
             Status.shutdown(),
             SourceResultType.STATUS,
-            /* fdv1Fallback= */ false,
+            /* fdv1Fallback= */ null,
             /* resetThresholdMet= */ false,
             completionCallback);
     }
 
-    public static FDv2SourceResult terminalError(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback) {
+    public static FDv2SourceResult terminalError(DataSourceStatusProvider.ErrorInfo errorInfo, FDv1Fallback fdv1Fallback) {
         return terminalError(errorInfo, fdv1Fallback, null);
     }
 
-    public static FDv2SourceResult terminalError(DataSourceStatusProvider.ErrorInfo errorInfo, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
+    public static FDv2SourceResult terminalError(DataSourceStatusProvider.ErrorInfo errorInfo, FDv1Fallback fdv1Fallback, Function<Void, Void> completionCallback) {
         return new FDv2SourceResult(
             /* changeSet= */ null,
             Status.terminalError(errorInfo),
@@ -132,11 +132,11 @@ public class FDv2SourceResult implements Closeable {
             completionCallback);
     }
 
-    public static FDv2SourceResult changeSet(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet, boolean fdv1Fallback) {
+    public static FDv2SourceResult changeSet(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet, FDv1Fallback fdv1Fallback) {
         return changeSet(changeSet, fdv1Fallback, null);
     }
 
-    public static FDv2SourceResult changeSet(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
+    public static FDv2SourceResult changeSet(ChangeSet<Iterable<Map.Entry<DataKind, KeyedItems<ItemDescriptor>>>> changeSet, FDv1Fallback fdv1Fallback, Function<Void, Void> completionCallback) {
         return new FDv2SourceResult(
             changeSet,
             /* status= */ null,
@@ -146,11 +146,11 @@ public class FDv2SourceResult implements Closeable {
             completionCallback);
     }
 
-    public static FDv2SourceResult goodbye(String reason, boolean fdv1Fallback) {
+    public static FDv2SourceResult goodbye(String reason, FDv1Fallback fdv1Fallback) {
         return goodbye(reason, fdv1Fallback, null);
     }
 
-    public static FDv2SourceResult goodbye(String reason, boolean fdv1Fallback, Function<Void, Void> completionCallback) {
+    public static FDv2SourceResult goodbye(String reason, FDv1Fallback fdv1Fallback, Function<Void, Void> completionCallback) {
         return new FDv2SourceResult(
             /* changeSet= */ null,
             Status.goodbye(reason),
@@ -172,8 +172,12 @@ public class FDv2SourceResult implements Closeable {
         return changeSet;
     }
 
-    public boolean isFdv1Fallback() {
+    public FDv1Fallback getFdv1Fallback() {
         return fdv1Fallback;
+    }
+
+    public boolean isFdv1Fallback() {
+        return fdv1Fallback != null;
     }
 
     /**
