@@ -33,6 +33,7 @@ public class TestService {
     "context-comparison",
     "context-type",
     "evaluation-hooks",
+    "event-delivery-cooldown",
     "event-gzip",
     "event-sampling",
     "filtering",
