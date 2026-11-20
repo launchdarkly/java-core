@@ -2,6 +2,16 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.18.2](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.18.1...launchdarkly-java-server-sdk-7.18.2) (2026-11-20)
+
+
+### Bug Fixes
+
+* Clear empty FDv2 selectors in shared protocol handling ([#261](https://github.com/launchdarkly/java-core/issues/261)) ([576b081](https://github.com/launchdarkly/java-core/commit/576b0814c84190b94252cb1b2c82d3a09ce5b8b3))
+* Prevent flags in a persistent store from becoming available to mobile keys ([#275](https://github.com/launchdarkly/java-core/issues/275)) ([32c8676](https://github.com/launchdarkly/java-core/commit/32c86765334397c41b5e37b09c2d3aa82b13dd0f))
+* Treat a null optional property in flag data as omitted ([#268](https://github.com/launchdarkly/java-core/issues/268)) ([3af465d](https://github.com/launchdarkly/java-core/commit/3af465d9ae85b969c927ce8654b96b897400c13e))
+* Update launchdarkly-java-sdk-internal to 1.13.0 ([#272](https://github.com/launchdarkly/java-core/issues/272)) ([9cc5885](https://github.com/launchdarkly/java-core/commit/9cc5885999920d79f16b648ae0ebfb062f56eab7))
+
 ## [7.18.1](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.18.0...launchdarkly-java-server-sdk-7.18.1) (2026-11-16)
 
 
