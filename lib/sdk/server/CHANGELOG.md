@@ -2,6 +2,13 @@
 
 All notable changes to the LaunchDarkly Java SDK will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [7.19.0](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.18.2...launchdarkly-java-server-sdk-7.19.0) (2026-11-20)
+
+
+### Features
+
+* adopt the event-delivery cooldown from java-sdk-internal ([#257](https://github.com/launchdarkly/java-core/issues/257)) ([e21c23b](https://github.com/launchdarkly/java-core/commit/e21c23b902c8696c592821d937bc0d62825cc604))
+
 ## [7.18.2](https://github.com/launchdarkly/java-core/compare/launchdarkly-java-server-sdk-7.18.1...launchdarkly-java-server-sdk-7.18.2) (2026-11-20)
 
 
