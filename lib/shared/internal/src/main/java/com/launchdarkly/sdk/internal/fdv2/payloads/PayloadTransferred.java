@@ -19,7 +19,7 @@ public final class PayloadTransferred {
    * Constructs a new PayloadTransferred.
    *
    * @param state the unique string representing the payload state
-   * @param version the version of the payload that was transferred to the client
+   * @param version the payload version; deprecated and without meaning (see {@link #getVersion()})
    */
   public PayloadTransferred(String state, int version) {
     this.state = Objects.requireNonNull(state, "state");
@@ -36,9 +36,12 @@ public final class PayloadTransferred {
   }
 
   /**
-   * Returns the version of the payload that was transferred.
+   * Returns the payload's {@code version} field, or 0 if it was absent or not an integer.
+   * <p>
+   * The field is deprecated and has no meaning: SDKs must not use it, and must treat it as absent
+   * (FDV2PL 3.4). LaunchDarkly sends 0 only for older SDKs that require it.
    *
-   * @return the version
+   * @return the version, or 0
    */
   public int getVersion() {
     return version;
@@ -53,7 +56,7 @@ public final class PayloadTransferred {
    */
   public static PayloadTransferred parse(JsonReader reader) throws SerializationException {
     String state = null;
-    Integer version = null;
+    int version = 0; // optional and deprecated: absent means 0
 
     try {
       if (reader.peek() != JsonToken.BEGIN_OBJECT) {
@@ -68,7 +71,7 @@ public final class PayloadTransferred {
           state = reader.nextString();
           break;
         case "version":
-          version = reader.nextInt();
+          version = readOptionalInt(reader);
           break;
         default:
           reader.skipValue();
@@ -80,14 +83,20 @@ public final class PayloadTransferred {
       if (state == null) {
         throw new SerializationException("payload-transferred missing required property 'state'");
       }
-      if (version == null) {
-        throw new SerializationException("payload-transferred missing required property 'version'");
-      }
 
       return new PayloadTransferred(state, version);
     } catch (IOException | RuntimeException e) {
       throw new SerializationException(e);
     }
   }
-}
 
+  /** Reads a whole number that fits in an int; any other value is skipped and read as 0. */
+  private static int readOptionalInt(JsonReader reader) throws IOException {
+    if (reader.peek() != JsonToken.NUMBER) {
+      reader.skipValue();
+      return 0;
+    }
+    double d = reader.nextDouble();
+    return d == Math.rint(d) && d >= Integer.MIN_VALUE && d <= Integer.MAX_VALUE ? (int) d : 0;
+  }
+}

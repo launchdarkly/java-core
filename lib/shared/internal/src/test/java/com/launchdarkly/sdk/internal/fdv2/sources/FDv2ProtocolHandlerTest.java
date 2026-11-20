@@ -695,6 +695,27 @@ public class FDv2ProtocolHandlerTest extends BaseInternalTest {
     assertEquals(42, changeset.getSelector().getVersion());
   }
 
+  /**
+   * Tests that a payload-transferred event without the deprecated version field completes the
+   * transfer (FDV2PL 3.4).
+   */
+  @Test
+  public void payloadTransferred_WithoutVersionCompletesTheTransfer() {
+    FDv2ProtocolHandler handler = new FDv2ProtocolHandler();
+
+    handler.handleEvent(createServerIntentEvent(IntentCode.TRANSFER_FULL, "test-payload-id", 42, "missing"));
+    handler.handleEvent(createPutObjectEvent("flag", "f1", 1));
+    JsonElement data = gsonInstance().fromJson("{\"state\":\"(p:test-payload-id:42)\"}", JsonElement.class);
+    FDv2ProtocolHandler.IFDv2ProtocolAction action =
+        handler.handleEvent(new FDv2Event(FDv2EventTypes.PAYLOAD_TRANSFERRED, data));
+
+    assertEquals(FDv2ProtocolHandler.FDv2ProtocolActionType.CHANGESET, action.getAction());
+    FDv2ChangeSet changeset = ((FDv2ProtocolHandler.FDv2ActionChangeset) action).getChangeset();
+    assertEquals(FDv2ChangeSet.FDv2ChangeSetType.FULL, changeset.getType());
+    assertEquals(1, changeset.getChanges().size());
+    assertEquals("(p:test-payload-id:42)", changeset.getSelector().getState());
+  }
+
   @Test
   public void selectorlessFullTransfer_EmitsEmptySelector() {
     for (boolean withObject : new boolean[] {false, true}) {
