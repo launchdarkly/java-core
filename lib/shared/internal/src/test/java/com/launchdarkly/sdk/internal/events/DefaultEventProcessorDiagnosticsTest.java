@@ -181,22 +181,21 @@ public class DefaultEventProcessorDiagnosticsTest extends BaseEventTest {
   }
 
   @Test
-  public void diagnosticEventsStopAfter401Error() throws Exception {
-    // This is easier to test with a mock component than it would be in LDClientEndToEndTest, because
-    // we don't have to worry about the latency of a real HTTP request which could allow the periodic
-    // task to fire again before we received a response. In real life, that wouldn't matter because
-    // the minimum diagnostic interval is so long, but in a test we need to be able to use a short
-    // interval.
+  public void diagnosticEventsContinueAfter401Error() throws Exception {
+    // Diagnostic event delivery is not governed by the delivery cooldown: the unexpected error
+    // opens a cooldown window, which suppresses analytics payloads, but periodic diagnostic
+    // events keep being sent.
     MockEventSender es = new MockEventSender();
-    es.result = new EventSender.Result(false, true, null); // mustShutdown=true; this is what would be returned for a 401 error
+    es.result = EventSender.Result.unexpectedFailure(); // what would be returned for a 401 error
 
     EventsConfigurationBuilder eventsConfig = makeEventsConfigurationWithBriefDiagnosticInterval(es);
-    
+
     try (DefaultEventProcessor ep = makeEventProcessor(eventsConfig.diagnosticStore(diagnosticStore))) {
-      // Ignore the initial diagnostic event
+      // The initial diagnostic event fails with the 401...
       es.awaitDiagnostic();
 
-      es.expectNoRequests(100);
+      // ...and the periodic diagnostic task keeps firing anyway.
+      es.awaitDiagnostic();
     }
   }
   

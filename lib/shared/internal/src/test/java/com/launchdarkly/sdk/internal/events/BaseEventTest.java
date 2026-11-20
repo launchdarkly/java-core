@@ -116,7 +116,7 @@ public abstract class BaseEventTest extends BaseTest {
 
   public final class MockEventSender implements EventSender {
     volatile boolean closed;
-    volatile Result result = new Result(true, false, null);
+    volatile Result result = Result.success(null);
     volatile RuntimeException fakeError = null;
     volatile IOException fakeErrorOnClose = null;
     volatile CountDownLatch receivedCounter = null;
