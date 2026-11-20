@@ -1,3 +1,22 @@
 streaming/fdv2/recoverable fallback to secondary synchronizer
 streaming/fdv2/recoverable fallback with recovery
 streaming/fdv2/permanent fallback with recovery
+persistent data store/consul/collection cardinality
+persistent data store/consul/store mode read - no data source
+persistent data store/consul/store mode read-write - no data source
+persistent data store/consul/tombstones
+persistent data store/consul/uses custom prefix
+persistent data store/consul/uses default prefix
+persistent data store/dynamodb/collection cardinality
+persistent data store/dynamodb/read-write/data source deletions respect versioning
+persistent data store/dynamodb/store mode read - no data source
+persistent data store/dynamodb/store mode read-write - no data source
+persistent data store/dynamodb/tombstones
+persistent data store/dynamodb/uses custom prefix
+persistent data store/dynamodb/uses default prefix
+persistent data store/redis/collection cardinality
+persistent data store/redis/store mode read - no data source
+persistent data store/redis/store mode read-write - no data source
+persistent data store/redis/tombstones
+persistent data store/redis/uses custom prefix
+persistent data store/redis/uses default prefix

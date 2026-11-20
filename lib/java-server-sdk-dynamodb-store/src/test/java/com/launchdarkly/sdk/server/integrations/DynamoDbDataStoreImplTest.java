@@ -9,6 +9,7 @@ import com.launchdarkly.sdk.server.subsystems.ClientContext;
 import com.launchdarkly.sdk.server.subsystems.ComponentConfigurer;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.DataKind;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.FullDataSet;
+import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.ItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.KeyedItems;
 import com.launchdarkly.sdk.server.subsystems.DataStoreTypes.SerializedItemDescriptor;
 import com.launchdarkly.sdk.server.subsystems.PersistentDataStore;
@@ -24,9 +25,19 @@ import java.util.Map;
 import static com.launchdarkly.sdk.server.TestComponents.clientContext;
 import static com.launchdarkly.sdk.server.integrations.TestUtils.baseDataStoreBuilder;
 import static com.launchdarkly.sdk.server.integrations.TestUtils.clearEverything;
+import static com.launchdarkly.sdk.server.integrations.CollectionHelpers.mapOf;
+import static com.launchdarkly.sdk.server.integrations.DynamoDbStoreImplBase.PARTITION_KEY;
+import static com.launchdarkly.sdk.server.integrations.DynamoDbStoreImplBase.SORT_KEY;
+import static com.launchdarkly.sdk.server.integrations.TestUtils.TABLE_NAME;
+import static com.launchdarkly.sdk.server.integrations.TestUtils.createTestClient;
 import static com.launchdarkly.sdk.server.integrations.TestUtils.createTableIfNecessary;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.greaterThan;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 /**
  * Runs the standard database data store test suite that's defined in the Java SDK.
@@ -40,6 +51,8 @@ import static org.hamcrest.Matchers.greaterThan;
 @SuppressWarnings("javadoc")
 public class DynamoDbDataStoreImplTest extends PersistentDataStoreTestBase<DynamoDbDataStoreImpl> {
   private static final String BAD_ITEM_KEY = "baditem";
+  private static final String TOMBSTONE_PREFIX = "tombstonetest";
+  private static final String TOMBSTONE_KEY = "deleted-flag";
   
   @BeforeClass
   public static void setUpAll() {
@@ -80,6 +93,81 @@ public class DynamoDbDataStoreImplTest extends PersistentDataStoreTestBase<Dynam
   @Test
   public void dataStoreSkipsAndLogsTooLargeItemOnUpsertForSegment() throws Exception {
     dataStoreSkipsAndLogsTooLargeItemOnUpsert(DataModel.SEGMENTS);
+  }
+
+  @Test
+  public void upsertOfDeletedItemStoresTombstoneJson() throws Exception {
+    clearAllData();
+    try (PersistentDataStore store = buildStore(TOMBSTONE_PREFIX).build(makeClientContext())) {
+      store.init(new FullDataSet<>(ImmutableList.of()));
+      ItemDescriptor deleted = ItemDescriptor.deletedItem(7);
+      store.upsert(DataModel.FEATURES, TOMBSTONE_KEY,
+          new SerializedItemDescriptor(7, true, DataModel.FEATURES.serialize(deleted)));
+
+      assertEquals("{\"version\":7,\"deleted\":true}", getRawItemJson(DataModel.FEATURES, TOMBSTONE_KEY));
+      assertReadsAsDeleted(DataModel.FEATURES, store.get(DataModel.FEATURES, TOMBSTONE_KEY), 7);
+      assertReadsAsDeleted(DataModel.FEATURES, store.getAll(DataModel.FEATURES).getItems().iterator().next().getValue(), 7);
+    }
+  }
+
+  @Test
+  public void initWithDeletedItemStoresTombstoneJson() throws Exception {
+    clearAllData();
+    try (PersistentDataStore store = buildStore(TOMBSTONE_PREFIX).build(makeClientContext())) {
+      ItemDescriptor deleted = ItemDescriptor.deletedItem(3);
+      store.init(new FullDataSet<>(ImmutableList.of(
+          new SimpleEntry<>(DataModel.SEGMENTS, new KeyedItems<>(ImmutableList.of(
+              new SimpleEntry<>(TOMBSTONE_KEY,
+                  new SerializedItemDescriptor(3, true, DataModel.SEGMENTS.serialize(deleted)))))))));
+
+      assertEquals("{\"version\":3,\"deleted\":true}", getRawItemJson(DataModel.SEGMENTS, TOMBSTONE_KEY));
+      assertReadsAsDeleted(DataModel.SEGMENTS, store.get(DataModel.SEGMENTS, TOMBSTONE_KEY), 3);
+    }
+  }
+
+  @Test
+  public void deletedItemWithoutSerializedFormStoresTombstoneJson() throws Exception {
+    clearAllData();
+    try (PersistentDataStore store = buildStore(TOMBSTONE_PREFIX).build(makeClientContext())) {
+      store.init(new FullDataSet<>(ImmutableList.of()));
+      store.upsert(DataModel.FEATURES, TOMBSTONE_KEY, new SerializedItemDescriptor(4, true, null));
+
+      assertEquals("{\"version\":4,\"deleted\":true}", getRawItemJson(DataModel.FEATURES, TOMBSTONE_KEY));
+    }
+  }
+
+  @Test
+  public void legacyNullPlaceholderReadsAsDeleted() throws Exception {
+    clearAllData();
+    try (PersistentDataStore store = buildStore(TOMBSTONE_PREFIX).build(makeClientContext())) {
+      store.init(new FullDataSet<>(ImmutableList.of()));
+      createTestClient().putItem(builder -> builder.tableName(TABLE_NAME).item(mapOf(
+          PARTITION_KEY, AttributeValue.builder().s(TOMBSTONE_PREFIX + ":" + DataModel.FEATURES.getName()).build(),
+          SORT_KEY, AttributeValue.builder().s(TOMBSTONE_KEY).build(),
+          "version", AttributeValue.builder().n("5").build(),
+          "item", AttributeValue.builder().s("null").build())));
+
+      SerializedItemDescriptor item = store.get(DataModel.FEATURES, TOMBSTONE_KEY);
+      assertTrue(item.isDeleted());
+      assertEquals(5, item.getVersion());
+      assertNull(item.getSerializedItem());
+
+      SerializedItemDescriptor fromAll = store.getAll(DataModel.FEATURES).getItems().iterator().next().getValue();
+      assertTrue(fromAll.isDeleted());
+      assertEquals(5, fromAll.getVersion());
+    }
+  }
+
+  private static String getRawItemJson(DataKind kind, String key) {
+    Map<String, AttributeValue> item = createTestClient().getItem(builder -> builder.tableName(TABLE_NAME).key(mapOf(
+        PARTITION_KEY, AttributeValue.builder().s(TOMBSTONE_PREFIX + ":" + kind.getName()).build(),
+        SORT_KEY, AttributeValue.builder().s(key).build()))).item();
+    return item.get("item").s();
+  }
+
+  private static void assertReadsAsDeleted(DataKind kind, SerializedItemDescriptor item, int version) {
+    assertEquals(version, item.getVersion());
+    assertEquals(ItemDescriptor.deletedItem(version), kind.deserialize(item.getSerializedItem()));
   }
 
   private void dataStoreSkipsAndLogsTooLargeItemOnInit(

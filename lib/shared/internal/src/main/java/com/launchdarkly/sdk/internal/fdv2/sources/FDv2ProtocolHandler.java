@@ -136,9 +136,15 @@ public final class FDv2ProtocolHandler {
 
   public static final class FDv2ActionGoodbye implements IFDv2ProtocolAction {
     private final String reason;
+    private final Long protocolFallbackTTLMillis;
 
     public FDv2ActionGoodbye(String reason) {
+      this(reason, null);
+    }
+
+    public FDv2ActionGoodbye(String reason, Long protocolFallbackTTLMillis) {
       this.reason = reason;
+      this.protocolFallbackTTLMillis = protocolFallbackTTLMillis;
     }
 
     @Override
@@ -148,6 +154,15 @@ public final class FDv2ProtocolHandler {
 
     public String getReason() {
       return reason;
+    }
+
+    /**
+     * Returns the fallback TTL in milliseconds, or null if absent. 0 requests the default TTL.
+     *
+     * @return the fallback TTL in milliseconds
+     */
+    public Long getProtocolFallbackTTLMillis() {
+      return protocolFallbackTTLMillis;
     }
   }
 
@@ -252,7 +267,7 @@ public final class FDv2ProtocolHandler {
     FDv2ChangeSet changeset = new FDv2ChangeSet(
         changeSetType,
         new ArrayList<>(changes),
-        Selector.make(payload.getVersion(), payload.getState()));
+        payload.getState().isEmpty() ? Selector.EMPTY : Selector.make(payload.getVersion(), payload.getState()));
     state = FDv2ProtocolState.CHANGES;
     changes.clear();
     return new FDv2ActionChangeset(changeset);
@@ -264,7 +279,7 @@ public final class FDv2ProtocolHandler {
   }
 
   private IFDv2ProtocolAction goodbye(Goodbye intent) {
-    return new FDv2ActionGoodbye(intent.getReason());
+    return new FDv2ActionGoodbye(intent.getReason(), intent.getProtocolFallbackTTLMillis());
   }
 
   /**
@@ -340,5 +355,3 @@ public final class FDv2ProtocolHandler {
     state = FDv2ProtocolState.INACTIVE;
   }
 }
-
-

@@ -248,7 +248,7 @@ public class DefaultEventProcessorOutputTest extends BaseEventTest {
 
     // Pick a server time that is somewhat behind the client time
     long serverTime = System.currentTimeMillis() - 20000;
-    es.result = new EventSender.Result(true, false, new Date(serverTime));
+    es.result = EventSender.Result.success(new Date(serverTime));
 
     long debugUntil = serverTime + 1000;
     Event.FeatureRequest fe = featureEvent(user, FLAG_KEY).debugEventsUntilDate(debugUntil).build();
@@ -261,7 +261,7 @@ public class DefaultEventProcessorOutputTest extends BaseEventTest {
       ep.waitUntilInactive(); // ensure the flush worker has finished processing the response (setting lastKnownPastTime)
 
       es.receivedParams.clear();
-      es.result = new EventSender.Result(true, false, null);
+      es.result = EventSender.Result.success(null);
 
       // Now send an event with debug mode on, with a "debug until" time that is further in
       // the future than the server time, but in the past compared to the client.
@@ -280,7 +280,7 @@ public class DefaultEventProcessorOutputTest extends BaseEventTest {
 
     // Pick a server time that is somewhat ahead of the client time
     long serverTime = System.currentTimeMillis() + 20000;
-    es.result = new EventSender.Result(true, false, new Date(serverTime));
+    es.result = EventSender.Result.success(new Date(serverTime));
 
     long debugUntil = serverTime - 1000;
     Event.FeatureRequest fe = featureEvent(user, FLAG_KEY).debugEventsUntilDate(debugUntil).build();
@@ -293,7 +293,7 @@ public class DefaultEventProcessorOutputTest extends BaseEventTest {
       ep.waitUntilInactive(); // ensure the flush worker has finished processing the response (setting lastKnownPastTime)
 
       es.receivedParams.clear();
-      es.result = new EventSender.Result(true, false, null);
+      es.result = EventSender.Result.success(null);
 
       // Now send an event with debug mode on, with a "debug until" time that is further in
       // the future than the client time, but in the past compared to the server.

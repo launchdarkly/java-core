@@ -28,6 +28,33 @@ import static org.junit.Assert.assertTrue;
 public class FDv2PayloadsTest extends BaseInternalTest {
 
   @Test
+  public void goodbye_ParsesProtocolFallbackTTL() throws Exception {
+    String[] values = {"60", "1.25", "0", "-1", "3601", "\"invalid\"", "true", "{}", "[]", "null"};
+    Long[] expected = {60000L, 1250L, 0L, -1000L, 3601000L, 0L, 0L, 0L, 0L, null};
+    for (int i = 0; i < values.length; i++) {
+      String json = "{\"reason\":\"fallback\",\"protocolFallbackTTL\":" + values[i] + "}";
+      Goodbye goodbye = Goodbye.parse(new JsonReader(new StringReader(json)));
+      assertEquals(values[i], expected[i], goodbye.getProtocolFallbackTTLMillis());
+      assertEquals("fallback", goodbye.getReason());
+      Goodbye reserialized = Goodbye.parse(new JsonReader(new StringReader(gsonInstance().toJson(goodbye))));
+      assertEquals(expected[i], reserialized.getProtocolFallbackTTLMillis());
+    }
+  }
+
+  @Test
+  public void goodbye_WithoutProtocolFallbackTTL() throws Exception {
+    assertNull(Goodbye.parse(new JsonReader(new StringReader("{}"))).getProtocolFallbackTTLMillis());
+    assertNull(new Goodbye("reason").getProtocolFallbackTTLMillis());
+    assertEquals(Long.valueOf(5000), new Goodbye("reason", 5000L).getProtocolFallbackTTLMillis());
+  }
+
+  @Test
+  public void goodbye_SerializesProtocolFallbackTTLInSeconds() {
+    JsonElement json = gsonInstance().toJsonTree(new Goodbye("reason", 1250L));
+    assertEquals(1.25, json.getAsJsonObject().get("protocolFallbackTTL").getAsDouble(), 0.0);
+  }
+
+  @Test
   public void serverIntent_CanDeserializeAndReserialize() throws Exception {
     String json = "{\n" +
         "  \"payloads\": [\n" +
@@ -874,4 +901,3 @@ public class FDv2PayloadsTest extends BaseInternalTest {
     assertEquals(100, transferred.getVersion());
   }
 }
-

@@ -163,7 +163,14 @@ class Evaluator {
       return result;
     } catch (EvaluationException e) {
       logger.error("Could not evaluate flag \"{}\": {}", flag.getKey(), e.getMessage());
-      return EvalResult.error(e.errorKind);
+      EvalResult result = EvalResult.error(e.errorKind);
+      // A big segment query can run before the error occurs. Keep its status on the error reason.
+      if (state.bigSegmentsStatus != null) {
+        result = result.withReason(
+            result.getReason().withBigSegmentsStatus(state.bigSegmentsStatus)
+        );
+      }
+      return result;
     }
   }
 

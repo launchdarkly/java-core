@@ -22,7 +22,7 @@ jobs:
           - java-version: 19
             os: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
 
       - name: Shared CI Steps
         uses: ./.github/actions/ci

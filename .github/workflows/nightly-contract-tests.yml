@@ -24,9 +24,16 @@ jobs:
     # staying well under the 6-hour default that would otherwise apply.
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.branch || github.ref }}
+
+      # Start the stores first. They are ready by the time the build finishes.
+      - uses: launchdarkly/gh-actions/actions/persistent-stores@persistent-stores-v0
+        with:
+          redis: true
+          dynamodb: true
+          consul: true
 
       - name: Shared CI Steps
         uses: ./.github/actions/ci
@@ -40,7 +47,8 @@ jobs:
 
       - name: Start Contract Test Service
         shell: bash
-        run: make start-contract-test-service-bg -C lib/sdk/server
+        # The harness expects DynamoDB on port 8000, so the test service uses port 9000.
+        run: make start-contract-test-service-bg -C lib/sdk/server TEST_SERVICE_PORT=9000
 
       - name: Create JUnit output directory
         shell: bash
@@ -49,26 +57,26 @@ jobs:
       - name: Contract Tests (v2)
         uses: launchdarkly/gh-actions/actions/contract-tests@contract-tests-v1
         with:
-          test_service_port: '8000'
+          test_service_port: '9000'
           token: ${{ secrets.GITHUB_TOKEN }}
           debug_logging: 'true'
           stop_service: 'false'
-          enable_persistence_tests: 'false'
+          enable_persistence_tests: 'true'
           extra_params: '-skip-from=lib/sdk/server/contract-tests/test-suppressions.txt -enable-long-running-tests -junit junit/contract-tests-v2.xml'
 
       - name: Contract Tests v3 (with long-running tests)
         uses: launchdarkly/gh-actions/actions/contract-tests@contract-tests-v1
         with:
-          test_service_port: '8000'
+          test_service_port: '9000'
           version: 'v3'
           token: ${{ secrets.GITHUB_TOKEN }}
           debug_logging: 'true'
-          enable_persistence_tests: 'false'
+          enable_persistence_tests: 'true'
           extra_params: '-skip-from=lib/sdk/server/contract-tests/test-suppressions-fdv2.txt -enable-long-running-tests -junit junit/contract-tests-v3.xml'
 
       - name: Upload contract test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: contract-test-results
           path: junit/
@@ -76,7 +84,7 @@ jobs:
 
       - name: Upload contract test service log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: contract-test-service-log
           path: /tmp/sdk-test-service.log
@@ -91,7 +99,7 @@ jobs:
       - nightly-contract-tests
     steps:
       - name: Send Slack notification
-        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
+        uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v4.0.0
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           webhook-type: incoming-webhook
@@ -121,7 +129,7 @@ jobs:
     if: ${{ inputs.test_slack_notification == true || inputs.test_slack_notification == 'true' }}
     steps:
       - name: Send test Slack notification
-        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
+        uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v4.0.0
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           webhook-type: incoming-webhook

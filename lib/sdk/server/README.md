@@ -11,7 +11,7 @@
 
 ## Supported Java versions
 
-This version of the LaunchDarkly SDK works with Java 8 and above.
+While this version of the LaunchDarkly SDK requires Java 8 or later, you should use the latest patched version of a supported Java release.
 
 ## Distributions
 

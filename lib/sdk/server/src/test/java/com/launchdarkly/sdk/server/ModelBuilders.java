@@ -145,6 +145,7 @@ public abstract class ModelBuilders {
     private Integer offVariation;
     private List<LDValue> variations = new ArrayList<>();
     private boolean clientSide;
+    private FeatureFlag.ClientSideAvailability clientSideAvailability;
     private boolean trackEvents;
     private boolean trackEventsFallthrough;
     private Long debugEventsUntilDate;
@@ -173,6 +174,7 @@ public abstract class ModelBuilders {
         this.offVariation = f.getOffVariation();
         this.variations = f.getVariations();
         this.clientSide = f.isClientSide();
+        this.clientSideAvailability = f.getClientSideAvailability();
         this.trackEvents = f.isTrackEvents();
         this.trackEventsFallthrough = f.isTrackEventsFallthrough();
         this.debugEventsUntilDate = f.getDebugEventsUntilDate();
@@ -297,6 +299,11 @@ public abstract class ModelBuilders {
       return this;
     }
     
+    public FlagBuilder clientSideAvailability(boolean usingMobileKey, boolean usingEnvironmentId) {
+      this.clientSideAvailability = new FeatureFlag.ClientSideAvailability(usingMobileKey, usingEnvironmentId);
+      return this;
+    }
+
     public FlagBuilder trackEvents(boolean trackEvents) {
       this.trackEvents = trackEvents;
       return this;
@@ -335,7 +342,7 @@ public abstract class ModelBuilders {
     public FeatureFlag build() {
       FeatureFlag flag = new DataModel.FeatureFlag(key, version, on, prerequisites, salt, targets,
           contextTargets, rules, fallthrough, offVariation, variations,
-          clientSide, trackEvents, trackEventsFallthrough, debugEventsUntilDate, deleted,
+          clientSide, clientSideAvailability, trackEvents, trackEventsFallthrough, debugEventsUntilDate, deleted,
           samplingRatio, migration, excludeFromSummaries);
       if (!disablePreprocessing) {
         flag.afterDeserialized();
