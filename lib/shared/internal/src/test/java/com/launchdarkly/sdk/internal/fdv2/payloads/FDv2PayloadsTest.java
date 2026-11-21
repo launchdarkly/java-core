@@ -596,12 +596,35 @@ public class FDv2PayloadsTest extends BaseInternalTest {
     PayloadTransferred.parse(new JsonReader(new StringReader(json)));
   }
 
-  @Test(expected = SerializationException.class)
-  public void payloadTransferred_ThrowsWhenVersionFieldMissing() throws Exception {
+  @Test
+  public void payloadTransferred_TreatsMissingVersionAsZero() throws Exception {
+    // version is optional and deprecated (FDV2PL 3.4)
     String json = "{\n" +
         "  \"state\": \"(p:ABC123:42)\"\n" +
         "}";
-    PayloadTransferred.parse(new JsonReader(new StringReader(json)));
+    PayloadTransferred payloadTransferred = PayloadTransferred.parse(new JsonReader(new StringReader(json)));
+    assertEquals("(p:ABC123:42)", payloadTransferred.getState());
+    assertEquals(0, payloadTransferred.getVersion());
+  }
+
+  @Test
+  public void payloadTransferred_TreatsNonIntegerVersionAsZero() throws Exception {
+    String[] versions = {"null", "\"42\"", "1.5", "1e20", "{}", "[1]", "true"};
+    for (String version : versions) {
+      String json = "{\"state\": \"s\", \"version\": " + version + ", \"after\": 1}";
+      PayloadTransferred payloadTransferred = PayloadTransferred.parse(new JsonReader(new StringReader(json)));
+      assertEquals(version, "s", payloadTransferred.getState());
+      assertEquals(version, 0, payloadTransferred.getVersion());
+    }
+  }
+
+  @Test
+  public void payloadTransferred_KeepsAnIntegerVersion() throws Exception {
+    for (String version : new String[] {"0", "42", "-1", "2147483647", "7.0"}) {
+      String json = "{\"version\": " + version + ", \"state\": \"s\"}";
+      PayloadTransferred payloadTransferred = PayloadTransferred.parse(new JsonReader(new StringReader(json)));
+      assertEquals(version, (int) Double.parseDouble(version), payloadTransferred.getVersion());
+    }
   }
 
   @Test(expected = SerializationException.class)
