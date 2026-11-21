@@ -21,6 +21,24 @@ public interface EventProcessor {
    * Flushes and blocks until the flush is done.
    */
   void flushBlocking();
+
+  /**
+   * Flushes and blocks until the events buffered before this call have been delivered, or until the
+   * timeout elapses. Unlike {@link #flushBlocking()}, which returns once the flush has been handed to
+   * a delivery thread, this waits for every delivery in progress to finish, so it suits an
+   * application that is about to exit.
+   * <p>
+   * The default implementation calls {@link #flushBlocking()} and returns true, for implementations
+   * that predate this method.
+   *
+   * @param timeoutMillis the longest time to wait, in milliseconds; zero or less means don't wait
+   * @return true if delivery finished in time, false if the timeout elapsed first or the event
+   *   processor was closed
+   */
+  default boolean flushBlocking(long timeoutMillis) {
+    flushBlocking();
+    return true;
+  }
   
   /**
    * Tells the event processor whether we should be in background mode. This is only applicable in the client-side

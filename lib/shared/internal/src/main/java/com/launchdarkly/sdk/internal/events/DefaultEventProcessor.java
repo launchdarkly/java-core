@@ -62,6 +62,7 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
   private ScheduledFuture<?> periodicDiagnosticEventTask;
   private volatile boolean inputCapacityExceeded = false;
   private final LDLogger logger;
+  private final EventDispatcher dispatcher;
 
   /**
    * Creates an instance.
@@ -86,7 +87,7 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
     inBackground = new AtomicBoolean(eventsConfig.initiallyInBackground);
     offline = new AtomicBoolean(eventsConfig.initiallyOffline);
     
-    new EventDispatcher(
+    dispatcher = new EventDispatcher(
         eventsConfig,
         sharedExecutor,
         threadPriority,
@@ -96,7 +97,8 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
         closed,
         logger
         );
-    // we don't need to save a reference to this - we communicate with it entirely through the inbox queue.
+    // We communicate with the dispatcher through the inbox queue; the reference is kept only so that
+    // flushBlocking(long) can wait for its delivery threads.
 
     // Decide whether to start scheduled tasks that depend on the background/offline state.
     updateScheduledTasks(eventsConfig.initiallyInBackground, eventsConfig.initiallyOffline);
@@ -127,6 +129,26 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
     if (!closed.get()) {
       postMessageAndWait(MessageType.FLUSH, null);
     }
+  }
+
+  @Override
+  public boolean flushBlocking(long timeoutMillis) {
+    if (closed.get()) {
+      return false;
+    }
+    long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.max(0, timeoutMillis));
+    // First let any delivery in progress finish, so the flush below finds a free worker instead of
+    // being skipped because they are all busy.
+    if (!dispatcher.waitUntilAllFlushWorkersInactive(deadline)) {
+      return false;
+    }
+    // The dispatcher counts the payload as busy before it completes the FLUSH message, so once the
+    // message is done the wait below cannot miss the delivery it started.
+    // COVERAGE: the inbox being full, or the dispatcher not reaching the message in time, can't be
+    // caused reliably in tests.
+    EventProcessorMessage message = new EventProcessorMessage(MessageType.FLUSH, null, true);
+    boolean flushed = postToChannel(message) && message.waitForCompletion(deadline);
+    return flushed && dispatcher.waitUntilAllFlushWorkersInactive(deadline);
   }
 
   @Override
@@ -278,6 +300,16 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
     void completed() {
       if (reply != null) {
         reply.release();
+      }
+    }
+
+    // Returns false if the deadline (a System.nanoTime value) passes first.
+    boolean waitForCompletion(long deadlineNanos) {
+      while (true) {
+        try {
+          return reply.tryAcquire(Math.max(0, deadlineNanos - System.nanoTime()), TimeUnit.NANOSECONDS);
+        } catch (InterruptedException ex) { // COVERAGE: there is no way to make this happen from test code.
+        }
       }
     }
 
@@ -515,6 +547,22 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
       }
     }
 
+    // Returns false if the deadline (a System.nanoTime value) passes before the workers are idle.
+    boolean waitUntilAllFlushWorkersInactive(long deadlineNanos) {
+      synchronized(busyFlushWorkersCount) {
+        while (busyFlushWorkersCount.get() != 0) {
+          long remaining = deadlineNanos - System.nanoTime();
+          if (remaining <= 0) {
+            return false;
+          }
+          try {
+            TimeUnit.NANOSECONDS.timedWait(busyFlushWorkersCount, remaining);
+          } catch (InterruptedException e) {} // COVERAGE: there is no way to cause this condition in tests
+        }
+        return true;
+      }
+    }
+
     private void processEvent(Event e, EventBuffer outbox) {
       if (disabled.get()) {
         return;
@@ -640,7 +688,7 @@ public final class DefaultEventProcessor implements Closeable, EventProcessor {
         outbox.summarizer.restoreTo(payload.summaries);
         synchronized(busyFlushWorkersCount) {
           busyFlushWorkersCount.decrementAndGet();
-          busyFlushWorkersCount.notify();
+          busyFlushWorkersCount.notifyAll(); // there can be more than one waiter
         }
       }
     }

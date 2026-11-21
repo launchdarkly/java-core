@@ -20,6 +20,7 @@ import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -393,5 +394,109 @@ public class DefaultEventProcessorTest extends BaseEventTest {
           isIdentifyEvent(event2, testUserJson2),
           isIdentifyEvent(event3, testUserJson3)));
     }
+  }
+
+  // An event sender that blocks each delivery until the test releases it.
+  private static final class GatedEventSender implements EventSender {
+    final CountDownLatch entered = new CountDownLatch(1);
+    final CountDownLatch release = new CountDownLatch(1);
+    final AtomicInteger delivered = new AtomicInteger();
+
+    @Override
+    public Result sendAnalyticsEvents(byte[] data, int eventCount, URI eventsBaseUri) {
+      entered.countDown();
+      try {
+        release.await();
+      } catch (InterruptedException e) {}
+      delivered.incrementAndGet();
+      return Result.success(null);
+    }
+
+    @Override
+    public Result sendDiagnosticEvent(byte[] data, URI eventsBaseUri) {
+      return Result.success(null);
+    }
+
+    @Override
+    public void close() throws IOException {
+      release.countDown();
+    }
+  }
+
+  @Test
+  public void flushBlockingWithTimeoutWaitsForDelivery() throws Exception {
+    GatedEventSender es = new GatedEventSender();
+    try (DefaultEventProcessor ep = makeEventProcessor(baseConfig(es))) {
+      ep.sendEvent(identifyEvent(user));
+      new Thread(() -> {
+        try {
+          es.entered.await();
+          Thread.sleep(100);
+        } catch (InterruptedException e) {}
+        es.release.countDown();
+      }).start();
+      assertTrue(ep.flushBlocking(5000));
+      assertEquals(1, es.delivered.get()); // the delivery had finished when flushBlocking returned
+    }
+  }
+
+  @Test
+  public void flushBlockingWithTimeoutReturnsFalseIfDeliveryDoesNotFinishInTime() throws Exception {
+    GatedEventSender es = new GatedEventSender();
+    try (DefaultEventProcessor ep = makeEventProcessor(baseConfig(es))) {
+      ep.sendEvent(identifyEvent(user));
+      assertFalse(ep.flushBlocking(100));
+      assertTrue(es.entered.await(5, TimeUnit.SECONDS)); // the delivery started but was still going
+      assertEquals(0, es.delivered.get());
+      es.release.countDown();
+    }
+  }
+
+  @Test
+  public void flushBlockingWithTimeoutReturnsFalseIfEarlierDeliveryDoesNotFinishInTime() throws Exception {
+    GatedEventSender es = new GatedEventSender();
+    try (DefaultEventProcessor ep = makeEventProcessor(baseConfig(es))) {
+      ep.sendEvent(identifyEvent(user));
+      ep.flushAsync();
+      assertTrue(es.entered.await(5, TimeUnit.SECONDS));
+      ep.sendEvent(identifyEvent(user));
+      assertFalse(ep.flushBlocking(50)); // still waiting for the first delivery
+      es.release.countDown();
+      assertTrue(ep.flushBlocking(5000)); // now the second batch goes too
+      assertEquals(2, es.delivered.get());
+    }
+  }
+
+  @Test
+  public void flushBlockingWithTimeoutSucceedsWithNothingToSend() throws Exception {
+    MockEventSender es = new MockEventSender();
+    try (DefaultEventProcessor ep = makeEventProcessor(baseConfig(es))) {
+      assertTrue(ep.flushBlocking(5000));
+      es.expectNoRequests(50);
+    }
+  }
+
+  @Test
+  public void flushBlockingWithTimeoutReturnsFalseAfterClose() throws Exception {
+    MockEventSender es = new MockEventSender();
+    DefaultEventProcessor ep = makeEventProcessor(baseConfig(es));
+    ep.close();
+    assertFalse(ep.flushBlocking(1000));
+  }
+
+  @Test
+  public void defaultFlushBlockingWithTimeoutCallsFlushBlocking() {
+    AtomicInteger calls = new AtomicInteger();
+    EventProcessor ep = new EventProcessor() {
+      public void sendEvent(Event e) {}
+      public void flushAsync() {}
+      public void flushBlocking() {
+        calls.incrementAndGet();
+      }
+      public void setInBackground(boolean inBackground) {}
+      public void setOffline(boolean offline) {}
+    };
+    assertTrue(ep.flushBlocking(10));
+    assertEquals(1, calls.get());
   }
 }
