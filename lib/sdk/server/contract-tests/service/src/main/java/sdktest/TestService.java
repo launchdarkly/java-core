@@ -58,7 +58,8 @@ public class TestService {
     "fdv1-fallback",
     "instance-id",
     "retry-conformance-fdv1-streaming",
-    "retry-conformance-fdv1-polling"
+    "retry-conformance-fdv1-polling",
+    "diagnostic-events"
   };
 
   static final Gson gson = new GsonBuilder().serializeNulls().create();
