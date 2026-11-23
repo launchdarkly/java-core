@@ -29,7 +29,7 @@ jobs:
           ref: ${{ inputs.branch || github.ref }}
 
       # Start the stores first. They are ready by the time the build finishes.
-      - uses: launchdarkly/gh-actions/actions/persistent-stores@persistent-stores-v0
+      - uses: launchdarkly/gh-actions/actions/persistent-stores@persistent-stores/v0
         with:
           redis: true
           dynamodb: true
@@ -55,7 +55,7 @@ jobs:
         run: mkdir -p junit
 
       - name: Contract Tests (v2)
-        uses: launchdarkly/gh-actions/actions/contract-tests@contract-tests-v1
+        uses: launchdarkly/gh-actions/actions/contract-tests@contract-tests/v1
         with:
           test_service_port: '9000'
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -65,7 +65,7 @@ jobs:
           extra_params: '-skip-from=lib/sdk/server/contract-tests/test-suppressions.txt -enable-long-running-tests -junit junit/contract-tests-v2.xml'
 
       - name: Contract Tests v3 (with long-running tests)
-        uses: launchdarkly/gh-actions/actions/contract-tests@contract-tests-v1
+        uses: launchdarkly/gh-actions/actions/contract-tests@contract-tests/v1
         with:
           test_service_port: '9000'
           version: 'v3'
