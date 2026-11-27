@@ -137,6 +137,14 @@ public class LDClientEventTest extends BaseTest {
   }
 
   @Test
+  public void trackMetricWithNonFiniteValueDoesNotSendEvent() {
+    client.trackMetric("eventkey", context, LDValue.of(1), Double.NaN);
+    client.trackMetric("eventkey", context, LDValue.of(1), Double.POSITIVE_INFINITY);
+    client.trackMetric("eventkey", context, LDValue.of(1), Double.NEGATIVE_INFINITY);
+    assertEquals(0, eventSink.events.size());
+  }
+
+  @Test
   public void boolVariationSendsEvent() throws Exception {
     DataModel.FeatureFlag flag = flagWithValue("key", LDValue.of(true));
     upsertFlag(dataStore, flag);

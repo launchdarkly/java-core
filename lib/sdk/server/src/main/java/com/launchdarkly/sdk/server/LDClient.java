@@ -328,6 +328,9 @@ public final class LDClient implements LDClientInterface {
       baseLogger.warn("Track called with null context!");
     } else if (!context.isValid()) {
       baseLogger.warn("Track called with invalid context: " + context.getError());
+    } else if (Double.isNaN(metricValue) || Double.isInfinite(metricValue)) {
+      baseLogger.warn("trackMetric called with non-finite metric value for event \"{}\"; event not recorded",
+          eventName);
     } else {
       eventProcessor.recordCustomEvent(context, eventName, data, metricValue);
     }
